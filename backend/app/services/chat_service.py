@@ -40,10 +40,11 @@ def verify_connection_access(
             detail="You are not a participant in this connection.",
         )
 
-    if connection.status != ConnectionStatus.ACCEPTED.value:
+    allowed_statuses = [ConnectionStatus.ACCEPTED.value, ConnectionStatus.COMPLETED.value]
+    if connection.status not in allowed_statuses:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Messaging is only allowed for active accepted connections. Current status: {connection.status}.",
+            detail=f"Messaging is only allowed for active accepted or completed connections. Current status: {connection.status}.",
         )
 
     return connection
@@ -246,7 +247,10 @@ def list_conversations(
                 Connection.requester_id == user_id,
                 Connection.helper_id == user_id,
             ),
-            Connection.status == ConnectionStatus.ACCEPTED.value,
+            Connection.status.in_([
+                ConnectionStatus.ACCEPTED.value,
+                ConnectionStatus.COMPLETED.value,
+            ]),
         )
         .order_by(desc(Conversation.updated_at))
         .all()
@@ -319,7 +323,13 @@ def send_message(
     Persist a new message from authenticated user to PostgreSQL.
     Verifies user is participant and connection is ACCEPTED.
     """
-    conversation, _ = verify_conversation_access(db, conversation_id, user_id)
+    conversation, connection = verify_conversation_access(db, conversation_id, user_id)
+
+    if connection.status == ConnectionStatus.COMPLETED.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This interaction is completed. New messages cannot be sent.",
+        )
 
     now = datetime.now(timezone.utc)
     message = Message(

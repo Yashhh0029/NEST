@@ -5,7 +5,13 @@ import {
   listConnections,
   updateConnectionStatus,
 } from "@/services/connections";
+import {
+  completeConnection,
+  getConnectionReviews,
+} from "@/services/reviews";
 import type { ConnectionItem } from "@/types/connection";
+import type { ReviewItem } from "@/types/review";
+import { ReviewModal } from "@/components/review/ReviewModal";
 import { useToast } from "@/hooks/useToast";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -23,6 +29,8 @@ import {
   FileText,
   Calendar,
   MessageSquare,
+  Star,
+  Check,
 } from "lucide-react";
 
 type TabType = "incoming" | "sent" | "active";
@@ -33,24 +41,67 @@ export function ConnectionsPage() {
 
   const [activeTab, setActiveTab] = useState<TabType>("incoming");
   const [connections, setConnections] = useState<ConnectionItem[]>([]);
+  const [reviewsMap, setReviewsMap] = useState<Record<string, ReviewItem[]>>({});
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState<boolean>(false);
+  const [selectedConnection, setSelectedConnection] = useState<ConnectionItem | null>(null);
+
+  const fetchReviewsForCompleted = useCallback(async (conns: ConnectionItem[]) => {
+    const completedConns = conns.filter((c) => c.status === "COMPLETED");
+    const reviewsEntries = await Promise.all(
+      completedConns.map(async (c) => {
+        try {
+          const res = await getConnectionReviews(c.id);
+          const list = Array.isArray(res) ? res : ((res as unknown as { reviews?: ReviewItem[] })?.reviews || []);
+          return [c.id, list] as const;
+        } catch {
+          return [c.id, []] as const;
+        }
+      })
+    );
+    setReviewsMap(Object.fromEntries(reviewsEntries));
+  }, []);
 
   const fetchConnections = useCallback(async () => {
     setIsLoading(true);
     try {
       const data = await listConnections();
-      setConnections(data.connections || []);
+      const list = data.connections || [];
+      setConnections(list);
+      await fetchReviewsForCompleted(list);
     } catch {
       toastError("Failed to load connections. Please refresh.");
     } finally {
       setIsLoading(false);
     }
-  }, [toastError]);
+  }, [toastError, fetchReviewsForCompleted]);
 
   useEffect(() => {
     fetchConnections();
   }, [fetchConnections]);
+
+  const handleComplete = async (connectionId: string) => {
+    setActionLoadingId(connectionId);
+    try {
+      const updated = await completeConnection(connectionId);
+      setConnections((prev) =>
+        prev.map((c) => (c.id === connectionId ? updated : c))
+      );
+      toastSuccess("Interaction completed! You can now leave a review.");
+      setSelectedConnection(updated);
+      setIsReviewModalOpen(true);
+    } catch (err: unknown) {
+      const msg =
+        err && typeof err === "object" && "response" in err
+          ? (err as { response?: { data?: { detail?: string } } }).response
+              ?.data?.detail
+          : null;
+      toastError(msg || "Failed to complete connection.");
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
 
   const handleAction = async (
     connectionId: string,
@@ -87,7 +138,9 @@ export function ConnectionsPage() {
   const sentPending = connections.filter(
     (c) => c.requester_id === user?.id && c.status === "PENDING"
   );
-  const activeConnections = connections.filter((c) => c.status === "ACCEPTED");
+  const activeConnections = connections.filter(
+    (c) => c.status === "ACCEPTED" || c.status === "COMPLETED"
+  );
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto py-2 sm:py-6">
@@ -386,10 +439,17 @@ export function ConnectionsPage() {
                     </div>
                   </div>
 
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200/50">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    Connected
-                  </span>
+                  {conn.status === "COMPLETED" ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200/50">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                      Completed
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200/50">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                      Connected
+                    </span>
+                  )}
                 </div>
 
                 {conn.request && (
@@ -406,24 +466,103 @@ export function ConnectionsPage() {
                 <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-gray-100 dark:border-brand-dark-border">
                   <span className="text-[11px] text-gray-400 flex items-center gap-1">
                     <Calendar className="w-3 h-3" />
-                    Connected since{" "}
-                    {conn.accepted_at
-                      ? new Date(conn.accepted_at).toLocaleDateString()
-                      : new Date(conn.updated_at).toLocaleDateString()}
+                    {conn.status === "COMPLETED"
+                      ? `Completed on ${new Date(conn.completed_at || conn.updated_at).toLocaleDateString()}`
+                      : `Connected since ${
+                          conn.accepted_at
+                            ? new Date(conn.accepted_at).toLocaleDateString()
+                            : new Date(conn.updated_at).toLocaleDateString()
+                        }`}
                   </span>
                   <div className="flex items-center gap-2">
-                    <Link to={`/chat/${conn.id}`}>
-                      <Button variant="primary" size="sm">
-                        <MessageSquare className="w-4 h-4 mr-1.5" />
-                        Message
-                      </Button>
-                    </Link>
+                    {conn.status === "COMPLETED" ? (
+                      <>
+                        <Link to={`/chat/${conn.id}`}>
+                          <Button variant="outline" size="sm">
+                            <MessageSquare className="w-4 h-4 mr-1.5" />
+                            Chat History
+                          </Button>
+                        </Link>
+                        {(() => {
+                          const raw = reviewsMap[conn.id];
+                          const connRevs = Array.isArray(raw)
+                            ? raw
+                            : ((raw as unknown as { reviews?: ReviewItem[] })?.reviews || []);
+                          const hasReviewed = connRevs.some((r) => r.reviewer_id === user?.id);
+                          return hasReviewed ? (
+                            <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-full border border-emerald-200/50">
+                              <Check className="w-3.5 h-3.5" />
+                              Review Submitted
+                            </span>
+                          ) : (
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedConnection(conn);
+                                setIsReviewModalOpen(true);
+                              }}
+                            >
+                              <Star className="w-4 h-4 mr-1.5 text-amber-300 fill-amber-300" />
+                              Review {roleLabel}
+                            </Button>
+                          );
+                        })()}
+                      </>
+                    ) : (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleComplete(conn.id)}
+                          disabled={actionLoadingId === conn.id}
+                          isLoading={actionLoadingId === conn.id}
+                        >
+                          <CheckCircle2 className="w-4 h-4 mr-1.5 text-emerald-600" />
+                          Complete Interaction
+                        </Button>
+                        <Link to={`/chat/${conn.id}`}>
+                          <Button variant="primary" size="sm">
+                            <MessageSquare className="w-4 h-4 mr-1.5" />
+                            Message
+                          </Button>
+                        </Link>
+                      </>
+                    )}
                   </div>
                 </div>
               </Card>
             );
           })}
         </div>
+      )}
+
+      {isReviewModalOpen && selectedConnection && (
+        <ReviewModal
+          isOpen={isReviewModalOpen}
+          onClose={() => {
+            setIsReviewModalOpen(false);
+            setSelectedConnection(null);
+          }}
+          connectionId={selectedConnection.id}
+          partnerName={
+            (selectedConnection.requester_id === user?.id
+              ? selectedConnection.helper?.name
+              : selectedConnection.requester?.name) || "Partner"
+          }
+          onSuccess={async () => {
+            try {
+              const res = await getConnectionReviews(selectedConnection.id);
+              const list = Array.isArray(res) ? res : ((res as unknown as { reviews?: ReviewItem[] })?.reviews || []);
+              setReviewsMap((prev) => ({
+                ...prev,
+                [selectedConnection.id]: list,
+              }));
+            } catch {
+              // Ignore
+            }
+          }}
+        />
       )}
     </div>
   );

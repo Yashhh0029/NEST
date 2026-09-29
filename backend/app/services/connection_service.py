@@ -59,6 +59,7 @@ def _hydrate_connection_response(db: Session, conn: Connection) -> ConnectionRes
         updated_at=conn.updated_at,
         accepted_at=conn.accepted_at,
         declined_at=conn.declined_at,
+        completed_at=conn.completed_at,
         requester=requester_summary,
         helper=helper_summary,
         request=request_summary,
@@ -221,6 +222,14 @@ def update_connection_status(
     clean_action = action.strip().lower()
     now = datetime.now(timezone.utc)
 
+    if conn.status == ConnectionStatus.COMPLETED.value:
+        if clean_action == "complete":
+            return _hydrate_connection_response(db, conn)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Completed connections cannot be modified.",
+        )
+
     if clean_action == "accept":
         if conn.helper_id != current_user.id:
             raise HTTPException(
@@ -232,6 +241,11 @@ def update_connection_status(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Connection is already accepted.",
             )
+        if conn.status != ConnectionStatus.PENDING.value:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot accept connection with status '{conn.status}'. Only pending connections can be accepted.",
+            )
         conn.status = ConnectionStatus.ACCEPTED.value
         conn.accepted_at = now
         conn.updated_at = now
@@ -241,6 +255,11 @@ def update_connection_status(
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Only the designated helper can decline this connection request.",
+            )
+        if conn.status != ConnectionStatus.PENDING.value:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot decline connection with status '{conn.status}'. Only pending connections can be declined.",
             )
         conn.status = ConnectionStatus.DECLINED.value
         conn.declined_at = now
@@ -252,13 +271,33 @@ def update_connection_status(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Only the requester can cancel this connection request.",
             )
+        if conn.status != ConnectionStatus.PENDING.value:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot cancel connection with status '{conn.status}'. Only pending connections can be cancelled.",
+            )
         conn.status = ConnectionStatus.CANCELLED.value
+        conn.updated_at = now
+
+    elif clean_action == "complete":
+        if conn.requester_id != current_user.id and conn.helper_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only participants in this connection can mark it as completed.",
+            )
+        if conn.status != ConnectionStatus.ACCEPTED.value:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Only accepted connections can be completed. Current status: {conn.status}.",
+            )
+        conn.status = ConnectionStatus.COMPLETED.value
+        conn.completed_at = now
         conn.updated_at = now
 
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid action '{action}'. Valid actions are 'accept', 'decline', 'cancel'.",
+            detail=f"Invalid action '{action}'. Valid actions are 'accept', 'decline', 'cancel', 'complete'.",
         )
 
     db.commit()

@@ -446,15 +446,40 @@ def find_candidate_matches(
             request_keywords=req_keywords,
         )
 
-        # Calculate mathematically justified composite score
-        if active_weight_sum > 0:
-            final_score = (
-                w_input.semantic * semantic_score
-                + w_input.location * location_score
-                + w_input.experience * experience_score
-            ) / active_weight_sum
+        # Real Reputation evaluation (Phase 9)
+        from app.services.review_service import get_user_reputation
+        rep_summary = get_user_reputation(db, cand_user_id)
+        has_reputation = rep_summary.review_count > 0 and rep_summary.average_rating is not None
+
+        if has_reputation:
+            # Normalized score: 1.0 -> 0.0, 5.0 -> 1.0
+            reputation_score = max(0.0, min(1.0, (rep_summary.average_rating - 1.0) / 4.0))
+            reputation_status = DimensionStatusEnum.ACTIVE
+            active_weights_cand = (
+                w_input.semantic + w_input.location + w_input.experience + w_input.reputation
+            )
+            if active_weights_cand > 0:
+                final_score = (
+                    w_input.semantic * semantic_score
+                    + w_input.location * location_score
+                    + w_input.experience * experience_score
+                    + w_input.reputation * reputation_score
+                ) / active_weights_cand
+            else:
+                final_score = 0.0
         else:
-            final_score = 0.0
+            # Cold-start behavior: honest UNAVAILABLE status, zero reviews not penalized or fabricated
+            reputation_score = None
+            reputation_status = DimensionStatusEnum.UNAVAILABLE
+            active_weights_cand = w_input.semantic + w_input.location + w_input.experience
+            if active_weights_cand > 0:
+                final_score = (
+                    w_input.semantic * semantic_score
+                    + w_input.location * location_score
+                    + w_input.experience * experience_score
+                ) / active_weights_cand
+            else:
+                final_score = 0.0
 
         if final_score < min_score:
             continue
@@ -471,6 +496,15 @@ def find_candidate_matches(
             years_experience=years_exp,
             skills=cand_skills_list,
         )
+
+        if has_reputation:
+            reasons.append(
+                MatchReason(
+                    category="reputation",
+                    title="Community Endorsement",
+                    explanation=f"Rated {rep_summary.average_rating:.1f} stars across {rep_summary.review_count} verified reviews.",
+                )
+            )
 
         # Candidate name without exposing private email or phone
         display_name = user.name or user.email.split("@")[0].capitalize()
@@ -496,7 +530,7 @@ def find_candidate_matches(
                 semantic_score=round(semantic_score, 4),
                 location_score=round(location_score, 4),
                 experience_score=round(experience_score, 4),
-                reputation_score=None,
+                reputation_score=round(reputation_score, 4) if reputation_score is not None else None,
                 availability_score=None,
                 final_score=round(final_score, 4),
             ),
@@ -504,7 +538,7 @@ def find_candidate_matches(
                 semantic=DimensionStatusEnum.ACTIVE,
                 location=DimensionStatusEnum.ACTIVE,
                 experience=DimensionStatusEnum.ACTIVE,
-                reputation=DimensionStatusEnum.UNAVAILABLE,
+                reputation=reputation_status,
                 availability=DimensionStatusEnum.UNAVAILABLE,
             ),
             reasons=reasons,

@@ -10,6 +10,7 @@ class ConnectionStatusEnum(str, Enum):
     ACCEPTED = "ACCEPTED"
     DECLINED = "DECLINED"
     CANCELLED = "CANCELLED"
+    COMPLETED = "COMPLETED"
 
 
 class ConnectionCreate(BaseModel):
@@ -19,7 +20,7 @@ class ConnectionCreate(BaseModel):
 
 
 class ConnectionStatusUpdate(BaseModel):
-    action: str = Field(..., description="Action to take: 'accept', 'decline', or 'cancel'")
+    action: str = Field(..., description="Action to take: 'accept', 'decline', 'cancel', or 'complete'")
 
 
 class ConnectionUserSummary(BaseModel):
@@ -53,6 +54,7 @@ class ConnectionResponse(BaseModel):
     updated_at: datetime
     accepted_at: Optional[datetime] = None
     declined_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
     requester: Optional[ConnectionUserSummary] = None
     helper: Optional[ConnectionUserSummary] = None
     request: Optional[ConnectionRequestSummary] = None

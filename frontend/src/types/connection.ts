@@ -1,4 +1,4 @@
-export type ConnectionStatus = "PENDING" | "ACCEPTED" | "DECLINED" | "CANCELLED";
+export type ConnectionStatus = "PENDING" | "ACCEPTED" | "DECLINED" | "CANCELLED" | "COMPLETED";
 
 export interface ConnectionUserSummary {
   id: string;
@@ -27,6 +27,7 @@ export interface ConnectionItem {
   updated_at: string;
   accepted_at?: string | null;
   declined_at?: string | null;
+  completed_at?: string | null;
   requester?: ConnectionUserSummary | null;
   helper?: ConnectionUserSummary | null;
   request?: ConnectionRequestSummary | null;

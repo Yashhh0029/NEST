@@ -48,6 +48,12 @@ from app.schemas.request import (
     RequestResponse,
     RequestUpdate,
 )
+from app.schemas.review import (
+    ReputationSummary,
+    ReviewCreate,
+    ReviewListResponse,
+    ReviewResponse,
+)
 from app.schemas.skill import (
     SkillCreate,
     SkillResponse,
@@ -76,11 +82,15 @@ __all__ = [
     "ProfilePatch",
     "ProfileResponse",
     "ProfileUpdate",
+    "ReputationSummary",
     "RequestCreate",
     "RequestParse",
     "RequestParseResponse",
     "RequestResponse",
     "RequestUpdate",
+    "ReviewCreate",
+    "ReviewListResponse",
+    "ReviewResponse",
     "SemanticSearchQuery",
     "SemanticSearchResponse",
     "SemanticSearchResultItem",

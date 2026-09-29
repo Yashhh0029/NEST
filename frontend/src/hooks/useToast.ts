@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import { create } from "zustand";
 import type { ToastMessage, ToastType } from "@/types/common";
 
@@ -31,24 +32,50 @@ export const useToastStore = create<ToastStore>((set) => ({
 }));
 
 export function useToast() {
-  const { addToast, removeToast } = useToastStore();
+  const addToast = useToastStore((state) => state.addToast);
+  const removeToast = useToastStore((state) => state.removeToast);
 
-  return {
-    toast: (message: string, type: ToastType = "info", title?: string, duration?: number) => {
+  const toast = useCallback(
+    (message: string, type: ToastType = "info", title?: string, duration?: number) => {
       addToast({ message, type, title, duration });
     },
-    success: (message: string, title?: string, duration?: number) => {
+    [addToast]
+  );
+
+  const success = useCallback(
+    (message: string, title?: string, duration?: number) => {
       addToast({ message, type: "success", title, duration });
     },
-    error: (message: string, title?: string, duration?: number) => {
+    [addToast]
+  );
+
+  const error = useCallback(
+    (message: string, title?: string, duration?: number) => {
       addToast({ message, type: "error", title, duration });
     },
-    warning: (message: string, title?: string, duration?: number) => {
+    [addToast]
+  );
+
+  const warning = useCallback(
+    (message: string, title?: string, duration?: number) => {
       addToast({ message, type: "warning", title, duration });
     },
-    info: (message: string, title?: string, duration?: number) => {
+    [addToast]
+  );
+
+  const info = useCallback(
+    (message: string, title?: string, duration?: number) => {
       addToast({ message, type: "info", title, duration });
     },
+    [addToast]
+  );
+
+  return {
+    toast,
+    success,
+    error,
+    warning,
+    info,
     removeToast,
   };
 }

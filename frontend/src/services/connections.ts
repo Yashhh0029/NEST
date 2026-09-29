@@ -29,10 +29,15 @@ export async function getConnectionById(id: string): Promise<ConnectionItem> {
 
 export async function updateConnectionStatus(
   id: string,
-  action: "accept" | "decline" | "cancel"
+  action: "accept" | "decline" | "cancel" | "complete"
 ): Promise<ConnectionItem> {
   const resp = await api.patch<ConnectionItem>(`/api/connections/${id}`, {
     action,
   });
+  return resp.data;
+}
+
+export async function completeConnection(id: string): Promise<ConnectionItem> {
+  const resp = await api.post<ConnectionItem>(`/api/connections/${id}/complete`);
   return resp.data;
 }

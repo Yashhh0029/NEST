@@ -2,7 +2,7 @@ import type { HelperMatchItem } from "@/types/match";
 import { Card } from "../ui/Card";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
-import { MapPin, Sparkles, UserPlus, CheckCircle2, Clock, XCircle, Loader2 } from "lucide-react";
+import { MapPin, Sparkles, UserPlus, CheckCircle2, Clock, XCircle, Loader2, Star } from "lucide-react";
 
 export interface HelperCardProps {
   helper?: HelperMatchItem;
@@ -51,6 +51,20 @@ export function HelperCard({
               {helper.is_available_for_help === false && (
                 <span className="text-[10px] bg-gray-100 dark:bg-brand-dark-muted px-1.5 py-0.5 rounded text-gray-500 font-medium">
                   Not accepting requests
+                </span>
+              )}
+            </div>
+            <div className="mt-1 flex items-center gap-1.5 text-xs">
+              {helper.dimension_statuses?.reputation === "ACTIVE" &&
+              helper.scores?.reputation_score != null ? (
+                <span className="inline-flex items-center gap-1 font-semibold text-amber-600 dark:text-amber-400">
+                  <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                  {(1.0 + helper.scores.reputation_score * 4.0).toFixed(1)}
+                  <span className="text-gray-400 font-normal">rating</span>
+                </span>
+              ) : (
+                <span className="text-gray-400 text-[11px]">
+                  No reviews yet
                 </span>
               )}
             </div>

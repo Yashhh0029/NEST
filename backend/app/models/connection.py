@@ -12,6 +12,7 @@ class ConnectionStatus(str, Enum):
     ACCEPTED = "ACCEPTED"
     DECLINED = "DECLINED"
     CANCELLED = "CANCELLED"
+    COMPLETED = "COMPLETED"
 
 
 class Connection(Base):
@@ -56,6 +57,7 @@ class Connection(Base):
     )
     accepted_at = Column(DateTime(timezone=True), nullable=True)
     declined_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         UniqueConstraint(
