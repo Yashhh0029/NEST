@@ -50,6 +50,29 @@ def get_current_user(
     return user
 
 
+def get_optional_current_user(
+    auth: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+) -> Optional[User]:
+    """Extract and validate JWT token if present, otherwise return None."""
+    if not auth or not auth.credentials:
+        return None
+    payload = decode_access_token(auth.credentials)
+    if not payload:
+        return None
+    user_id_str: Optional[str] = payload.get("sub")
+    if not user_id_str:
+        return None
+    try:
+        user_uuid = uuid.UUID(user_id_str)
+    except (ValueError, TypeError):
+        return None
+    user = db.query(User).filter(User.id == user_uuid).first()
+    if not user or not user.is_active:
+        return None
+    return user
+
+
 def get_current_active_user(
     current_user: User = Depends(get_current_user),
 ) -> User:

@@ -10,6 +10,7 @@ import {
   Users,
   MapPin,
   ShieldAlert,
+  MessageSquare,
 } from "lucide-react";
 
 export function Navbar() {
@@ -74,6 +75,13 @@ export function Navbar() {
                 >
                   <MapPin className="w-4 h-4 text-brand-primary" />
                   Resources
+                </Link>
+                <Link
+                  to="/community"
+                  className="px-3.5 py-2 text-sm font-medium rounded-xl text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-brand-dark-card transition-colors flex items-center gap-1.5"
+                >
+                  <MessageSquare className="w-4 h-4 text-brand-primary" />
+                  Community
                 </Link>
                 <Link
                   to="/profile"

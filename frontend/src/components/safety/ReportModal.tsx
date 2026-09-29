@@ -15,6 +15,9 @@ export interface ReportModalProps {
   messageId?: string;
   targetMessageId?: string;
   messageSnippet?: string;
+  questionId?: string;
+  answerId?: string;
+  questionTitle?: string;
   onSuccess?: () => void;
 }
 
@@ -40,6 +43,9 @@ export const ReportModal: React.FC<ReportModalProps> = ({
   messageId,
   targetMessageId,
   messageSnippet,
+  questionId,
+  answerId,
+  questionTitle,
   onSuccess,
 }) => {
   const [selectedReason, setSelectedReason] = useState<ReportReason>("HARASSMENT");
@@ -64,6 +70,8 @@ export const ReportModal: React.FC<ReportModalProps> = ({
         reported_user_id: targetId,
         connection_id: connectionId,
         message_id: activeMessageId,
+        question_id: questionId,
+        answer_id: answerId,
         reason: selectedReason,
         description: description.trim() || undefined,
       });
@@ -91,7 +99,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({
           </div>
           <div>
             <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 font-heading">
-              Report {activeMessageId ? "Message" : displayName}
+              Report {questionTitle ? "Question" : activeMessageId ? "Message" : displayName}
             </h3>
             <p className="text-xs text-gray-500 dark:text-gray-400">
               Submitted confidentially for administrator review

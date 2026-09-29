@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Textarea";
 import { Modal } from "@/components/ui/Modal";
 import { AreaMap } from "@/components/map/AreaMap";
+import { RequestCommunityKnowledge } from "@/components/community/RequestCommunityKnowledge";
 import { formatDate } from "@/lib/utils";
 import type { NewcomerRequest } from "@/types/request";
 import {
@@ -307,6 +308,12 @@ export function RequestDetailPage() {
               This request is vectorized into 384 dimensions on PostgreSQL 16 using all-MiniLM-L6-v2 and ready for Phase 5 hybrid cosine scoring.
             </p>
           </Card>
+
+          <RequestCommunityKnowledge
+            requestId={request.id}
+            city={request.city}
+            area={request.area}
+          />
         </div>
       </div>
 

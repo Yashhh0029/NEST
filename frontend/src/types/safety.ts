@@ -46,6 +46,8 @@ export interface ReportCreatePayload {
   reported_user_id: string;
   connection_id?: string;
   message_id?: string;
+  question_id?: string;
+  answer_id?: string;
   reason: ReportReason;
   description?: string;
 }
@@ -56,6 +58,8 @@ export interface ReportItem {
   reported_user_id: string;
   connection_id?: string | null;
   message_id?: string | null;
+  question_id?: string | null;
+  answer_id?: string | null;
   reason: ReportReason;
   description?: string | null;
   status: ReportStatus;
@@ -67,6 +71,8 @@ export interface ReportItem {
   resolved_by_user?: ReportUserSummary | null;
   message_snippet?: string | null;
   connection_summary?: string | null;
+  question_title?: string | null;
+  answer_snippet?: string | null;
 }
 
 export interface ReportListResponse {

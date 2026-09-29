@@ -60,6 +60,8 @@ class ReportCreate(BaseModel):
     reported_user_id: uuid.UUID
     connection_id: Optional[uuid.UUID] = None
     message_id: Optional[uuid.UUID] = None
+    question_id: Optional[uuid.UUID] = None
+    answer_id: Optional[uuid.UUID] = None
     reason: ReportReasonEnum
     description: Optional[str] = Field(None, max_length=2000)
 
@@ -78,6 +80,8 @@ class ReportResponse(BaseModel):
     reported_user_id: uuid.UUID
     connection_id: Optional[uuid.UUID] = None
     message_id: Optional[uuid.UUID] = None
+    question_id: Optional[uuid.UUID] = None
+    answer_id: Optional[uuid.UUID] = None
     reason: ReportReasonEnum
     description: Optional[str] = None
     status: ReportStatusEnum
@@ -94,6 +98,8 @@ class ReportDetailResponse(ReportResponse):
     resolved_by_user: Optional[ReportUserSummary] = None
     message_snippet: Optional[str] = None
     connection_summary: Optional[str] = None
+    question_title: Optional[str] = None
+    answer_snippet: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

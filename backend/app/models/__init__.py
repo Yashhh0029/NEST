@@ -1,3 +1,11 @@
+from app.models.community import (
+    CommunityAnswer,
+    CommunityAnswerVote,
+    CommunityQuestion,
+    QuestionCategory,
+    QuestionStatus,
+    VoteType,
+)
 from app.models.connection import Connection, ConnectionStatus
 from app.models.conversation import Conversation, Message
 from app.models.embedding import Embedding
@@ -19,6 +27,9 @@ from app.models.user import User, UserRole
 
 __all__ = [
     "Block",
+    "CommunityAnswer",
+    "CommunityAnswerVote",
+    "CommunityQuestion",
     "Connection",
     "ConnectionStatus",
     "Conversation",
@@ -28,6 +39,8 @@ __all__ = [
     "ModerationAction",
     "ModerationActionType",
     "Profile",
+    "QuestionCategory",
+    "QuestionStatus",
     "Report",
     "ReportReason",
     "ReportStatus",
@@ -38,5 +51,6 @@ __all__ = [
     "User",
     "UserRole",
     "UserSkill",
+    "VoteType",
 ]
 

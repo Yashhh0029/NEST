@@ -114,6 +114,18 @@ class Report(Base):
         nullable=True,
         index=True,
     )
+    question_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("community_questions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    answer_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("community_answers.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     reason = Column(
         Enum(
             ReportReason,

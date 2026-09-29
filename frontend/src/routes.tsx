@@ -14,7 +14,8 @@ import { ProfileEditPage } from "@/pages/ProfileEditPage";
 import { ConnectionsPage } from "@/pages/ConnectionsPage";
 import { FutureMatchingPage } from "@/pages/FutureMatchingPage";
 import { ChatPage } from "@/pages/ChatPage";
-import { FutureCommunityPage } from "@/pages/FutureCommunityPage";
+import { CommunityPage } from "@/pages/CommunityPage";
+import { QuestionDetailPage } from "@/pages/QuestionDetailPage";
 import { ResourcesPage } from "@/pages/ResourcesPage";
 import { AdminReportsPage } from "@/pages/AdminReportsPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
@@ -189,7 +190,15 @@ export function AppRoutes() {
           path="/community"
           element={
             <ProtectedRoute>
-              <FutureCommunityPage />
+              <CommunityPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/community/:questionId"
+          element={
+            <ProtectedRoute>
+              <QuestionDetailPage />
             </ProtectedRoute>
           }
         />

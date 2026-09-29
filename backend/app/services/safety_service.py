@@ -5,6 +5,7 @@ import uuid
 from fastapi import HTTPException, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
+from app.models.community import CommunityAnswer, CommunityQuestion
 from app.models.connection import Connection
 from app.models.conversation import Conversation, Message
 from app.models.safety import (
@@ -224,12 +225,26 @@ def _hydrate_report_detail(db: Session, report: Report) -> ReportDetailResponse:
         if conn and conn.request:
             connection_summary = f"Request: {conn.request.raw_text[:60]}... Status: {conn.status}"
 
+    question_title = None
+    if report.question_id:
+        q = db.query(CommunityQuestion).filter(CommunityQuestion.id == report.question_id).first()
+        if q:
+            question_title = q.title
+
+    answer_snippet = None
+    if report.answer_id:
+        ans = db.query(CommunityAnswer).filter(CommunityAnswer.id == report.answer_id).first()
+        if ans:
+            answer_snippet = ans.body[:100] + "..." if len(ans.body) > 100 else ans.body
+
     return ReportDetailResponse(
         id=report.id,
         reporter_id=report.reporter_id,
         reported_user_id=report.reported_user_id,
         connection_id=report.connection_id,
         message_id=report.message_id,
+        question_id=report.question_id,
+        answer_id=report.answer_id,
         reason=ReportReasonEnum(report.reason),
         description=report.description,
         status=ReportStatusEnum(report.status),
@@ -241,12 +256,14 @@ def _hydrate_report_detail(db: Session, report: Report) -> ReportDetailResponse:
         resolved_by_user=_hydrate_user_summary(resolver),
         message_snippet=message_snippet,
         connection_summary=connection_summary,
+        question_title=question_title,
+        answer_snippet=answer_snippet,
     )
 
 
 def create_report(db: Session, reporter: User, payload: ReportCreate) -> ReportDetailResponse:
     """
-    Submit a report against a user or specific message.
+    Submit a report against a user, message, or community content.
     Validates reporter != reported user, reported user exists,
     and reporter is authorized for any message_id/connection_id supplied.
     Throttles duplicate active reports for the same incident.
@@ -286,7 +303,6 @@ def create_report(db: Session, reporter: User, payload: ReportCreate) -> ReportD
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Message record not found.",
             )
-        # Verify message belongs to a conversation where reporter is participant
         conv = (
             db.query(Conversation)
             .filter(Conversation.id == msg.conversation_id)
@@ -303,9 +319,38 @@ def create_report(db: Session, reporter: User, payload: ReportCreate) -> ReportD
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You cannot report a message from a conversation you were not part of.",
             )
-        # Ensure connection_id is populated from message conversation if not provided
         if not payload.connection_id:
             payload.connection_id = conn.id
+
+    # Validate question if supplied (and no answer_id)
+    if payload.question_id and not payload.answer_id:
+        q = db.query(CommunityQuestion).filter(CommunityQuestion.id == payload.question_id).first()
+        if not q:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Community question not found.",
+            )
+        if payload.reported_user_id != q.author_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Reported user does not match question author.",
+            )
+
+    # Validate answer if supplied
+    if payload.answer_id:
+        ans = db.query(CommunityAnswer).filter(CommunityAnswer.id == payload.answer_id).first()
+        if not ans:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Community answer not found.",
+            )
+        if payload.reported_user_id != ans.author_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Reported user does not match answer author.",
+            )
+        if not payload.question_id:
+            payload.question_id = ans.question_id
 
     # Anti-spam: check for existing active duplicate report
     dup_query = db.query(Report).filter(
@@ -316,6 +361,10 @@ def create_report(db: Session, reporter: User, payload: ReportCreate) -> ReportD
     )
     if payload.message_id:
         dup_query = dup_query.filter(Report.message_id == payload.message_id)
+    if payload.question_id:
+        dup_query = dup_query.filter(Report.question_id == payload.question_id)
+    if payload.answer_id:
+        dup_query = dup_query.filter(Report.answer_id == payload.answer_id)
 
     if dup_query.first():
         raise HTTPException(
@@ -330,6 +379,8 @@ def create_report(db: Session, reporter: User, payload: ReportCreate) -> ReportD
         reported_user_id=payload.reported_user_id,
         connection_id=payload.connection_id,
         message_id=payload.message_id,
+        question_id=payload.question_id,
+        answer_id=payload.answer_id,
         reason=payload.reason.value,
         description=payload.description.strip() if payload.description else None,
         status=ReportStatus.OPEN.value,
