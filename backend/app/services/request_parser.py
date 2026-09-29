@@ -1,0 +1,490 @@
+import re
+from typing import Any, Dict, List, Optional, Tuple
+from pydantic import BaseModel, Field
+
+# ==========================================
+# Domain Dictionaries & Normalized Mappings
+# ==========================================
+
+CITY_MAPPINGS: Dict[str, Dict[str, str]] = {
+    "bengaluru": {
+        "city": "Bengaluru",
+        "state": "Karnataka",
+        "country": "India",
+        "aliases": ["bengaluru", "bangalore", "bengalooru", "blr"],
+    },
+    "pune": {
+        "city": "Pune",
+        "state": "Maharashtra",
+        "country": "India",
+        "aliases": ["pune", "poona", "puney"],
+    },
+    "mumbai": {
+        "city": "Mumbai",
+        "state": "Maharashtra",
+        "country": "India",
+        "aliases": ["mumbai", "bombay"],
+    },
+    "hyderabad": {
+        "city": "Hyderabad",
+        "state": "Telangana",
+        "country": "India",
+        "aliases": ["hyderabad", "cyberabad", "hyd"],
+    },
+    "delhi": {
+        "city": "Delhi",
+        "state": "Delhi",
+        "country": "India",
+        "aliases": ["delhi", "new delhi", "ncr"],
+    },
+    "chennai": {
+        "city": "Chennai",
+        "state": "Tamil Nadu",
+        "country": "India",
+        "aliases": ["chennai", "madras"],
+    },
+}
+
+AREA_TO_CITY: Dict[str, str] = {
+    # Bengaluru
+    "whitefield": "bengaluru",
+    "marathahalli": "bengaluru",
+    "koramangala": "bengaluru",
+    "hsr layout": "bengaluru",
+    "hsr": "bengaluru",
+    "electronic city": "bengaluru",
+    "ecity": "bengaluru",
+    "indiranagar": "bengaluru",
+    "jayanagar": "bengaluru",
+    "bellandur": "bengaluru",
+    "btm layout": "bengaluru",
+    "btm": "bengaluru",
+    "sarjapur": "bengaluru",
+    "hebbal": "bengaluru",
+    "yelahanka": "bengaluru",
+    "rajajinagar": "bengaluru",
+    "malleshwaram": "bengaluru",
+    # Pune
+    "hinjewadi": "pune",
+    "hinjawadi": "pune",
+    "wakad": "pune",
+    "baner": "pune",
+    "balewadi": "pune",
+    "kothrud": "pune",
+    "viman nagar": "pune",
+    "aundh": "pune",
+    "magarpatta": "pune",
+    "kharadi": "pune",
+    "hadapsar": "pune",
+    "shivaji nagar": "pune",
+    "koregaon park": "pune",
+    "kalyani nagar": "pune",
+}
+
+AREA_CANONICAL_NAMES: Dict[str, str] = {
+    "whitefield": "Whitefield",
+    "marathahalli": "Marathahalli",
+    "koramangala": "Koramangala",
+    "hsr layout": "HSR Layout",
+    "hsr": "HSR Layout",
+    "electronic city": "Electronic City",
+    "ecity": "Electronic City",
+    "indiranagar": "Indiranagar",
+    "jayanagar": "Jayanagar",
+    "bellandur": "Bellandur",
+    "btm layout": "BTM Layout",
+    "btm": "BTM Layout",
+    "sarjapur": "Sarjapur",
+    "hebbal": "Hebbal",
+    "yelahanka": "Yelahanka",
+    "rajajinagar": "Rajajinagar",
+    "malleshwaram": "Malleshwaram",
+    "hinjewadi": "Hinjewadi",
+    "hinjawadi": "Hinjewadi",
+    "wakad": "Wakad",
+    "baner": "Baner",
+    "balewadi": "Balewadi",
+    "kothrud": "Kothrud",
+    "viman nagar": "Viman Nagar",
+    "aundh": "Aundh",
+    "magarpatta": "Magarpatta",
+    "kharadi": "Kharadi",
+    "hadapsar": "Hadapsar",
+    "shivaji nagar": "Shivaji Nagar",
+    "koregaon park": "Koregaon Park",
+    "kalyani nagar": "Kalyani Nagar",
+}
+
+NEEDS_CATEGORIES: Dict[str, List[Tuple[str, str]]] = {
+    "accommodation": [
+        (r"\bpg\b", "PG accommodation"),
+        (r"\bpaying\s+guest\b", "PG accommodation"),
+        (r"\bhostel\b", "hostel accommodation"),
+        (r"\b(1\s*bhk|2\s*bhk|3\s*bhk)\b", "apartment / flat"),
+        (r"\b(flat|apartment|flatmate|room)\b", "flat / room rental"),
+        (r"\bco-?living\b", "co-living space"),
+        (r"\baccommodation\b", "general accommodation"),
+    ],
+    "food": [
+        (r"\bvegetarian\s+food\b", "vegetarian food"),
+        (r"\bveg\s+food\b", "vegetarian food"),
+        (r"\bnon-?veg(etarian)?\s+food\b", "non-vegetarian food"),
+        (r"\btiffin(\s+services?)?\b", "tiffin service"),
+        (r"\bmess(\s+food)?\b", "mess food"),
+        (r"\b(cook|dabba)\b", "home cooking / dabba service"),
+        (r"\b(meals?|food)\b", "food & meals"),
+    ],
+    "transport": [
+        (r"\bmetro(\s+station|\s+route)?\b", "metro navigation"),
+        (r"\bbus(\s+route|\s+passes)?\b", "bus transit"),
+        (r"\b(commute|cab|auto|rickshaw)\b", "local commute"),
+        (r"\bpublic\s+transport\b", "public transportation"),
+    ],
+    "jobs": [
+        (r"\b(first\s+job|tech\s+job|it\s+job|developer\s+job)\b", "tech / IT jobs"),
+        (r"\b(internship|intern)\b", "internship"),
+        (r"\b(jobs?|hiring|careers?)\b", "employment"),
+    ],
+    "healthcare": [
+        (r"\b(doctor|clinic|hospital|pharmacy|chemist)\b", "healthcare / medical"),
+    ],
+    "education": [
+        (r"\b(college|university|school|coaching|tuition)\b", "education / training"),
+    ],
+    "local guidance": [
+        (r"\b(local\s+guid(e|ance)|local\s+tips|settling\s+in|neighborhood\s+guide)\b", "local guidance"),
+    ],
+    "documentation": [
+        (r"\b(rental?\s+agreement|police\s+verification|aadhaar|gas\s+connection|bank\s+account)\b", "legal & documentation"),
+    ],
+}
+
+PREFERENCE_PATTERNS: List[Tuple[str, str]] = [
+    (r"\b(pure\s+veg|vegetarian|veg)\b", "vegetarian"),
+    (r"\bnon-?veg(etarian)?\b", "non-vegetarian"),
+    (r"\b(affordable|cheap|budget-?friendly|economical|low-?cost)\b", "affordable"),
+    (r"\bnear\s+(the\s+)?metro\b", "near metro"),
+    (r"\bnear\s+(my\s+)?(office|company|workplace|tech\s+park|itpl)\b", "near office"),
+    (r"\b(fully\s+furnished|furnished)\b", "furnished"),
+    (r"\bsemi-?furnished\b", "semi-furnished"),
+    (r"\b(girls|women|female)-?friendly\b", "female-friendly"),
+    (r"\b(bachelor|student)-?friendly\b", "bachelor-friendly"),
+    (r"\b(family|kids)-?friendly\b", "family-friendly"),
+    (r"\b(quiet|peaceful)\b", "quiet environment"),
+    (r"\b(single\s+room|private\s+room)\b", "private room"),
+    (r"\b(sharing|shared\s+room)\b", "shared room"),
+    (r"\bpet-?friendly\b", "pet-friendly"),
+]
+
+CONTEXT_PATTERNS: List[Tuple[str, str]] = [
+    (r"\b(first\s+job|first\s+it\s+job)\b", "first job"),
+    (r"\b(fresher|new\s+graduate|recent\s+grad)\b", "fresher / new graduate"),
+    (r"\b(intern|internship)\b", "intern"),
+    (r"\b(college\s+student|student)\b", "student"),
+    (r"\b(working\s+professional|software\s+engineer|tech\s+worker)\b", "working professional"),
+    (r"\b(new\s+to\s+(the\s+)?city|moving\s+to|relocating)\b", "relocating newcomer"),
+    (r"\b(moving\s+next\s+month|next\s+week)\b", "moving soon"),
+]
+
+
+# ==========================================
+# Extraction Result Schema
+# ==========================================
+
+class BudgetInfo(BaseModel):
+    amount: Optional[float] = None
+    currency: Optional[str] = "INR"
+    operator: Optional[str] = None  # "<=", ">=", "==", "~="
+    period: Optional[str] = None  # "monthly", "weekly", "daily", "yearly", None
+    raw_text: Optional[str] = None
+
+
+class ExtractedNeed(BaseModel):
+    category: str
+    item: str
+    matched_text: str
+    source: str = "explicit_text"
+
+
+class ExtractedLocation(BaseModel):
+    city: Optional[str] = None
+    area: Optional[str] = None
+    state: Optional[str] = None
+    country: Optional[str] = "India"
+    city_source: Optional[str] = None
+    area_source: Optional[str] = None
+
+
+class ExtractedRequest(BaseModel):
+    raw_text: str
+    intent: str = "newcomer_assistance"
+    location: ExtractedLocation
+    needs: List[ExtractedNeed] = Field(default_factory=list)
+    budget: Optional[BudgetInfo] = None
+    preferences: List[str] = Field(default_factory=list)
+    user_context: List[str] = Field(default_factory=list)
+    explanations: Dict[str, Any] = Field(default_factory=dict)
+    extraction_method: str = "deterministic_nlp_rule_based_v1"
+
+
+# ==========================================
+# Parser Implementation
+# ==========================================
+
+def _extract_location(text: str) -> ExtractedLocation:
+    """Extract and normalize city, area, state, and country from natural text."""
+    lower_text = text.lower()
+    loc = ExtractedLocation()
+
+    # 1. Detect explicit area
+    detected_area_key: Optional[str] = None
+    for area_key in sorted(AREA_TO_CITY.keys(), key=len, reverse=True):
+        # Match whole words for area
+        pattern = rf"\b{re.escape(area_key)}\b"
+        if re.search(pattern, lower_text):
+            detected_area_key = area_key
+            loc.area = AREA_CANONICAL_NAMES[area_key]
+            loc.area_source = "explicit_text"
+            break
+
+    # 2. Detect explicit city
+    detected_city_key: Optional[str] = None
+    for city_key, city_meta in CITY_MAPPINGS.items():
+        for alias in city_meta["aliases"]:
+            if re.search(rf"\b{re.escape(alias)}\b", lower_text):
+                detected_city_key = city_key
+                loc.city = city_meta["city"]
+                loc.state = city_meta["state"]
+                loc.country = city_meta["country"]
+                loc.city_source = "explicit_text"
+                break
+        if detected_city_key:
+            break
+
+    # 3. If area was detected but city was not explicitly stated, infer city
+    if detected_area_key and not loc.city:
+        inferred_city_key = AREA_TO_CITY[detected_area_key]
+        city_meta = CITY_MAPPINGS[inferred_city_key]
+        loc.city = city_meta["city"]
+        loc.state = city_meta["state"]
+        loc.country = city_meta["country"]
+        loc.city_source = "inferred_from_area"
+
+    return loc
+
+
+def _extract_budget(text: str) -> Optional[BudgetInfo]:
+    """
+    Extract budget amount, currency, comparison operator, and period.
+    Handles ₹, Rs, Rs., 10k, 10,000, 'under 10k', 'below ₹12,000/month', etc.
+    """
+    lower_text = text.lower()
+
+    # Pattern for budget:
+    # Optional operator: under, below, less than, up to, max, min, above
+    # Optional symbol: ₹, rs, rs., inr, rupees
+    # Amount: 10,000 | 10000 | 10k | 8.5k | 8k
+    # Optional suffix: rupees, bucks, /-
+    # Optional period: /month, per month, /mo, monthly, weekly, yearly, daily
+    budget_regex = re.compile(
+        r"(?P<operator>under|below|less\s+than|up\s+to|max|maximum|at\s+most|above|more\s+than|min|minimum|around|about|approx)?\s*"
+        r"(?:₹|rs\.?|inr)?\s*"
+        r"(?P<amount>\d+(?:,\d+)*(?:\.\d+)?\s*k|\d+(?:,\d+)*(?:\.\d+)?)\s*"
+        r"(?:rupees?|rs\.?|bucks|/-)?\s*"
+        r"(?P<period>/month|per\s+month|/mo|monthly|a\s+month|/week|per\s+week|/wk|weekly|a\s+week|/day|per\s+day|daily|/year|per\s+year|/yr|yearly|annually)?",
+        re.IGNORECASE,
+    )
+
+    matches = list(budget_regex.finditer(text))
+    # Filter for matches that genuinely look like a budget (have symbol, keyword, or suffix)
+    for m in matches:
+        raw_match = m.group(0).strip()
+        op_raw = m.group("operator")
+        amount_raw = m.group("amount")
+        period_raw = m.group("period")
+
+        # Discard standalone numbers that lack budget context unless marked by ₹/Rs/k/under
+        has_currency_hint = any(sym in raw_match.lower() for sym in ["₹", "rs", "inr", "rupee", "k", "under", "below", "budget", "cost", "/mo", "month"])
+        if not has_currency_hint and not op_raw and not period_raw:
+            continue
+
+        # Parse amount (handling 'k' multiplier and commas)
+        amount_clean = amount_raw.lower().replace(",", "").strip()
+        try:
+            if amount_clean.endswith("k"):
+                multiplier = 1000.0
+                num_val = float(amount_clean[:-1]) * multiplier
+            else:
+                num_val = float(amount_clean)
+        except ValueError:
+            continue
+
+        # Ignore tiny numbers like "1 job", "2 BHK" accidentally matched
+        if num_val < 50 and not any(sym in raw_match.lower() for sym in ["₹", "rs", "inr"]):
+            continue
+
+        # Determine operator
+        op: Optional[str] = None
+        if op_raw:
+            op_lower = op_raw.lower()
+            if any(w in op_lower for w in ["under", "below", "less than", "up to", "max", "at most"]):
+                op = "<="
+            elif any(w in op_lower for w in ["above", "more than", "min", "minimum"]):
+                op = ">="
+            elif any(w in op_lower for w in ["around", "about", "approx"]):
+                op = "~="
+        else:
+            # Check context before match for "under" or "below"
+            prefix = lower_text[: m.start()]
+            if re.search(r"\b(under|below|less than|up to|max)\b\s*$", prefix):
+                op = "<="
+
+        # Determine period
+        period: Optional[str] = None
+        if period_raw:
+            p_lower = period_raw.lower()
+            if any(w in p_lower for w in ["month", "mo"]):
+                period = "monthly"
+            elif any(w in p_lower for w in ["week", "wk"]):
+                period = "weekly"
+            elif any(w in p_lower for w in ["day"]):
+                period = "daily"
+            elif any(w in p_lower for w in ["year", "yr", "annually"]):
+                period = "yearly"
+        else:
+            # Lookahead for period in following words
+            suffix = lower_text[m.end() : m.end() + 25]
+            if re.search(r"\b(per\s+month|monthly|a\s+month|/mo)\b", suffix):
+                period = "monthly"
+            elif re.search(r"\b(per\s+week|weekly|a\s+week)\b", suffix):
+                period = "weekly"
+            elif re.search(r"\b(per\s+day|daily)\b", suffix):
+                period = "daily"
+            elif re.search(r"\b(per\s+year|yearly|annually)\b", suffix):
+                period = "yearly"
+
+        return BudgetInfo(
+            amount=num_val,
+            currency="INR",
+            operator=op or "<=" if op_raw else op,
+            period=period,
+            raw_text=raw_match,
+        )
+
+    return None
+
+
+def _extract_needs(text: str) -> List[ExtractedNeed]:
+    """Extract category and specific items requested."""
+    lower_text = text.lower()
+    needs: List[ExtractedNeed] = []
+    seen_categories = set()
+
+    for category, pattern_list in NEEDS_CATEGORIES.items():
+        for pattern, item_name in pattern_list:
+            match = re.search(pattern, lower_text)
+            if match:
+                needs.append(
+                    ExtractedNeed(
+                        category=category,
+                        item=item_name,
+                        matched_text=match.group(0),
+                        source="explicit_text",
+                    )
+                )
+                seen_categories.add(category)
+                # Found the most specific item for this category in this sentence
+                break
+
+    return needs
+
+
+def _extract_preferences(text: str) -> List[str]:
+    """Extract normalized user preferences (e.g. vegetarian, affordable, near metro)."""
+    lower_text = text.lower()
+    prefs: List[str] = []
+    seen = set()
+
+    for pattern, pref_name in PREFERENCE_PATTERNS:
+        if re.search(pattern, lower_text):
+            if pref_name not in seen:
+                # Handle mutually exclusive vegetarian vs non-vegetarian
+                if pref_name == "vegetarian" and "non-vegetarian" in seen:
+                    continue
+                if pref_name == "non-vegetarian" and "vegetarian" in seen:
+                    prefs.remove("vegetarian")
+                    seen.remove("vegetarian")
+                prefs.append(pref_name)
+                seen.add(pref_name)
+
+    return prefs
+
+
+def _extract_context(text: str) -> List[str]:
+    """Extract user background or stage (e.g. first job, fresher, student, moving soon)."""
+    lower_text = text.lower()
+    contexts: List[str] = []
+    seen = set()
+
+    for pattern, ctx_name in CONTEXT_PATTERNS:
+        if re.search(pattern, lower_text):
+            if ctx_name not in seen:
+                contexts.append(ctx_name)
+                seen.add(ctx_name)
+
+    return contexts
+
+
+def parse_request(text: str) -> ExtractedRequest:
+    """
+    Main deterministic NLP requirement parser.
+    Converts natural-language newcomer text into structured requirements,
+    preserving raw text and providing transparent rule-based explanations.
+    """
+    clean_text = text.strip()
+    if not clean_text:
+        return ExtractedRequest(
+            raw_text="",
+            location=ExtractedLocation(),
+            needs=[],
+            budget=None,
+            preferences=[],
+            user_context=[],
+            explanations={"status": "empty_input"},
+        )
+
+    location = _extract_location(clean_text)
+    needs = _extract_needs(clean_text)
+    budget = _extract_budget(clean_text)
+    preferences = _extract_preferences(clean_text)
+    user_context = _extract_context(clean_text)
+
+    # Compile explainable metadata
+    explanations = {
+        "city_extracted": location.city,
+        "city_source": location.city_source,
+        "area_extracted": location.area,
+        "area_source": location.area_source,
+        "needs_count": len(needs),
+        "needs_categories": [n.category for n in needs],
+        "budget_detected": budget is not None,
+        "budget_amount": budget.amount if budget else None,
+        "budget_operator": budget.operator if budget else None,
+        "budget_period": budget.period if budget else None,
+        "preferences_count": len(preferences),
+        "user_context_items": user_context,
+        "rule_engine": "deterministic_nlp_rule_based_v1",
+        "confidence_level": "deterministic_rule_match",
+    }
+
+    return ExtractedRequest(
+        raw_text=clean_text,
+        intent="newcomer_assistance",
+        location=location,
+        needs=needs,
+        budget=budget,
+        preferences=preferences,
+        user_context=user_context,
+        explanations=explanations,
+        extraction_method="deterministic_nlp_rule_based_v1",
+    )
