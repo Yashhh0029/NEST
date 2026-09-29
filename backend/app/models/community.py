@@ -8,6 +8,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -153,6 +154,15 @@ class CommunityAnswer(Base):
         "CommunityAnswerVote",
         back_populates="answer",
         cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        Index(
+            "uq_question_accepted_answer",
+            "question_id",
+            unique=True,
+            postgresql_where=(is_accepted == True),
+        ),
     )
 
 

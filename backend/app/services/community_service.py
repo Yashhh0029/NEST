@@ -710,6 +710,18 @@ def vote_answer(
             detail="You cannot vote on content by this user due to safety blocking.",
         )
 
+    # Check bidirectional block on question author as well
+    question = (
+        db.query(CommunityQuestion)
+        .filter(CommunityQuestion.id == answer.question_id)
+        .first()
+    )
+    if question and question.author_id in blocked_ids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You cannot vote on content for this question due to safety blocking.",
+        )
+
     now = datetime.now(timezone.utc)
     existing_vote = (
         db.query(CommunityAnswerVote)
@@ -781,6 +793,14 @@ def remove_vote(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Community answer not found.",
+        )
+
+    # Check bidirectional block
+    blocked_ids = get_blocked_user_ids(db, voter.id)
+    if answer.author_id in blocked_ids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You cannot interact with content by this user due to safety blocking.",
         )
 
     db.query(CommunityAnswerVote).filter(
@@ -875,6 +895,8 @@ def search_community(
     for q, dist in results_raw:
         # Distance range for cosine is [0, 2], where 0 is identical
         sim = max(0.0, round(1.0 - float(dist), 4))
+        if sim < 0.25:
+            continue
         q_resp = _hydrate_question_response(db, q)
 
         # Get top or accepted answer
@@ -918,6 +940,13 @@ def get_community_knowledge_for_request(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Request not found.",
+        )
+
+    # Ownership check: prevent IDOR access to private requests
+    if req.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to access community knowledge for this request.",
         )
 
     # 2. Extract text and location

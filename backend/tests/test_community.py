@@ -559,3 +559,187 @@ def test_community_content_reporting(client: TestClient):
     assert rep_data["question_id"] == q_id
     assert rep_data["reason"] == "SCAM"
     assert rep_data["question_title"] == "Cheap cryptocurrency investment scheme call this number"
+
+
+# ============================================================================
+# 10. Hardening Audit: IDOR, DB Invariant, Search Threshold, Suspension Lifecycle
+# ============================================================================
+
+def test_hardening_audit_suite(client: TestClient):
+    alice = create_authenticated_user(client, "Alice Hard", f"alice_hard_{uuid.uuid4().hex[:6]}@example.test")
+    bob = create_authenticated_user(client, "Bob Hard", f"bob_hard_{uuid.uuid4().hex[:6]}@example.test")
+    carol = create_authenticated_user(client, "Carol Hard", f"carol_hard_{uuid.uuid4().hex[:6]}@example.test")
+    admin = create_authenticated_user(client, "Admin Hard", f"admin_hard_{uuid.uuid4().hex[:6]}@example.test")
+
+    # Promote admin
+    db = SessionLocal()
+    try:
+        admin_u = db.query(User).filter(User.id == uuid.UUID(admin["user"]["id"])).first()
+        admin_u.role = UserRole.ADMIN
+        db.commit()
+    finally:
+        db.close()
+
+    # 1. IDOR Prevention: Bob cannot access Alice's request community knowledge
+    alice_req = client.post("/api/requests", headers=alice["headers"], json={
+        "text": "Looking for 2BHK flat near Hinjewadi Phase 1 IT Park with parking.",
+    })
+    alice_req_id = alice_req.json()["id"]
+
+    res_idor = client.get(f"/api/community/for-request/{alice_req_id}", headers=bob["headers"])
+    assert res_idor.status_code == 403
+    assert "permission" in res_idor.json()["detail"].lower()
+
+    # Alice herself can access it
+    res_owner = client.get(f"/api/community/for-request/{alice_req_id}", headers=alice["headers"])
+    assert res_owner.status_code == 200
+
+    # 2. Semantic Search Honesty & Thresholding: Unrelated query returns 0 results
+    # Create an accommodation question
+    client.post("/api/community/questions", headers=alice["headers"], json={
+        "title": "Best society for families in Wakad Pune",
+        "body": "Looking for gated communities with children play area near Bhumkar Chowk.",
+        "category": "ACCOMMODATION",
+        "city": "Pune",
+        "area": "Wakad",
+    })
+    # Search for completely unrelated query
+    res_unrel = client.get("/api/community/search?q=quantum physics satellite trajectory")
+    assert res_unrel.status_code == 200
+    assert res_unrel.json()["total"] == 0
+
+    # 3. Database Invariant: Partial Unique Index enforces at most one accepted answer
+    q_res = client.post("/api/community/questions", headers=alice["headers"], json={
+        "title": "Need reliable plumber in Kothrud Pune",
+        "body": "Need emergency plumbing service near MIT college.",
+        "category": "LOCAL_SERVICES",
+        "city": "Pune",
+        "area": "Kothrud",
+    })
+    qid = uuid.UUID(q_res.json()["id"])
+
+    ans1_res = client.post(f"/api/community/questions/{qid}/answers", headers=bob["headers"], json={
+        "body": "Call Ramesh Plumbing at 9876543210.",
+    })
+    a1_id = uuid.UUID(ans1_res.json()["id"])
+
+    ans2_res = client.post(f"/api/community/questions/{qid}/answers", headers=carol["headers"], json={
+        "body": "Local UrbanClap plumbers are fast in Kothrud.",
+    })
+    a2_id = uuid.UUID(ans2_res.json()["id"])
+
+    # Accept answer 1 via API
+    client.post(f"/api/community/questions/{qid}/accept/{a1_id}", headers=alice["headers"])
+
+    # Directly in DB, attempting to force answer 2 as accepted without unaccepting answer 1
+    # MUST raise IntegrityError due to uq_question_accepted_answer partial unique index
+    db = SessionLocal()
+    from sqlalchemy.exc import IntegrityError
+    try:
+        a2_db = db.query(CommunityAnswer).filter(CommunityAnswer.id == a2_id).first()
+        a2_db.is_accepted = True
+        with pytest.raises(IntegrityError):
+            db.commit()
+    finally:
+        db.rollback()
+        db.close()
+
+    # 4. Closed Question Invariant: Cannot answer closed question
+    client.patch(f"/api/community/questions/{qid}", headers=alice["headers"], json={
+        "status": "CLOSED",
+    })
+    res_closed_ans = client.post(f"/api/community/questions/{qid}/answers", headers=bob["headers"], json={
+        "body": "Attempting to answer a closed question.",
+    })
+    assert res_closed_ans.status_code == 400
+    assert "closed" in res_closed_ans.json()["detail"].lower()
+
+    # Reopen question
+    client.patch(f"/api/community/questions/{qid}", headers=alice["headers"], json={
+        "status": "OPEN",
+    })
+
+    # 5. Suspension Full Lifecycle: Suspend Bob, verify blocked, reactivate, verify restored
+    client.post(
+        f"/api/admin/users/{bob['user']['id']}/suspend",
+        headers=admin["headers"],
+        json={"reason": "Audit suspension test"},
+    )
+
+    # Bob cannot post question (403)
+    res_sq = client.post("/api/community/questions", headers=bob["headers"], json={
+        "title": "Suspended question attempt",
+        "body": "Should be rejected because user is suspended.",
+        "category": "OTHER",
+    })
+    assert res_sq.status_code == 403
+
+    # Bob cannot post answer (403)
+    res_sa = client.post(f"/api/community/questions/{qid}/answers", headers=bob["headers"], json={
+        "body": "Suspended answer attempt.",
+    })
+    assert res_sa.status_code == 403
+
+    # Bob cannot vote (403)
+    res_sv = client.post(f"/api/community/answers/{a2_id}/vote", headers=bob["headers"], json={
+        "vote": "HELPFUL",
+    })
+    assert res_sv.status_code == 403
+
+    # Reactivate Bob
+    res_react = client.post(
+        f"/api/admin/users/{bob['user']['id']}/reactivate",
+        headers=admin["headers"],
+        json={"reason": "Audit reactivation"},
+    )
+    assert res_react.status_code == 200
+
+    # Bob can now vote
+    res_rv = client.post(f"/api/community/answers/{a2_id}/vote", headers=bob["headers"], json={
+        "vote": "HELPFUL",
+    })
+    assert res_rv.status_code == 200
+
+    # 6. Reporting Honesty: Self report -> 400, duplicate report -> 409, mismatch -> 400, unauthorized -> 403
+    # Self-report rejected
+    res_self_rep = client.post("/api/reports", headers=alice["headers"], json={
+        "reported_user_id": alice["user"]["id"],
+        "reason": "HARASSMENT",
+    })
+    assert res_self_rep.status_code == 400
+
+    # Mismatch author on question report rejected
+    res_mismatch = client.post("/api/reports", headers=alice["headers"], json={
+        "reported_user_id": carol["user"]["id"],  # Carol didn't author the question
+        "question_id": str(qid),
+        "reason": "SPAM",
+    })
+    assert res_mismatch.status_code == 400
+
+    # Valid report on Bob's answer
+    res_rep_ans = client.post("/api/reports", headers=alice["headers"], json={
+        "reported_user_id": bob["user"]["id"],
+        "answer_id": str(a1_id),
+        "reason": "SPAM",
+        "description": "Suspicious phone number advertising.",
+    })
+    assert res_rep_ans.status_code == 201
+    rep_id = res_rep_ans.json()["id"]
+
+    # Duplicate active report rejected with 409 Conflict
+    res_dup = client.post("/api/reports", headers=alice["headers"], json={
+        "reported_user_id": bob["user"]["id"],
+        "answer_id": str(a1_id),
+        "reason": "SPAM",
+        "description": "Second identical report attempt.",
+    })
+    assert res_dup.status_code == 409
+
+    # Unauthorized user (Carol) cannot view Alice's report
+    res_unauth_view = client.get(f"/api/reports/{rep_id}", headers=carol["headers"])
+    assert res_unauth_view.status_code == 403
+
+    # Admin CAN view report
+    res_admin_view = client.get(f"/api/reports/{rep_id}", headers=admin["headers"])
+    assert res_admin_view.status_code == 200
+
