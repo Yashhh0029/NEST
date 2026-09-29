@@ -15,7 +15,7 @@ import { ConnectionsPage } from "@/pages/ConnectionsPage";
 import { FutureMatchingPage } from "@/pages/FutureMatchingPage";
 import { ChatPage } from "@/pages/ChatPage";
 import { FutureCommunityPage } from "@/pages/FutureCommunityPage";
-import { FutureResourcesPage } from "@/pages/FutureResourcesPage";
+import { ResourcesPage } from "@/pages/ResourcesPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { Loader2 } from "lucide-react";
 
@@ -173,7 +173,7 @@ export function AppRoutes() {
           path="/resources"
           element={
             <ProtectedRoute>
-              <FutureResourcesPage />
+              <ResourcesPage />
             </ProtectedRoute>
           }
         />

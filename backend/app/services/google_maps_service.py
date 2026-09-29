@@ -364,6 +364,85 @@ class GoogleMapsService:
         )
         return fallback
 
+    def search_places_text(
+        self,
+        text_query: str,
+        latitude: Optional[float] = None,
+        longitude: Optional[float] = None,
+        radius_meters: float = 5000.0,
+        included_type: Optional[str] = None,
+        open_now: Optional[bool] = None,
+        max_result_count: int = 10,
+    ) -> List[Dict[str, Any]]:
+        """
+        Search for real places using Google Places API (New) Text Search.
+        Endpoint: https://places.googleapis.com/v1/places:searchText
+        Uses locationBias circle when coordinates are provided.
+        Returns a list of raw place dictionaries matching field mask.
+        """
+        clean_query = text_query.strip()
+        if not clean_query or not self.is_configured:
+            return []
+
+        coord_key = (
+            f"{round(latitude, 3)},{round(longitude, 3)}"
+            if latitude is not None and longitude is not None
+            else "no_coords"
+        )
+        cache_key = f"places_search:{clean_query.lower()}:{coord_key}:{round(radius_meters)}:{included_type}:{open_now}:{max_result_count}"
+        cached = self._get_from_cache(cache_key)
+        if cached is not None:
+            return cached
+
+        url = "https://places.googleapis.com/v1/places:searchText"
+        headers = {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": self.api_key,
+            "X-Goog-FieldMask": (
+                "places.id,places.displayName,places.formattedAddress,"
+                "places.location,places.rating,places.userRatingCount,"
+                "places.priceLevel,places.primaryType,places.types,"
+                "places.regularOpeningHours,places.googleMapsUri,places.websiteUri,"
+                "places.nationalPhoneNumber"
+            ),
+        }
+        payload: Dict[str, Any] = {
+            "textQuery": clean_query,
+            "maxResultCount": min(max(max_result_count, 1), 20),
+        }
+        if latitude is not None and longitude is not None:
+            payload["locationBias"] = {
+                "circle": {
+                    "center": {
+                        "latitude": latitude,
+                        "longitude": longitude,
+                    },
+                    "radius": float(radius_meters),
+                }
+            }
+        if included_type:
+            payload["includedType"] = included_type
+        if open_now is True:
+            payload["openNow"] = True
+
+        try:
+            resp = requests.post(url, json=payload, headers=headers, timeout=6.0)
+            if resp.status_code != 200:
+                logger.warning(
+                    "Google Places searchText returned status %d: %s",
+                    resp.status_code,
+                    resp.text[:200],
+                )
+                return []
+
+            data = resp.json()
+            places = data.get("places", [])
+            self._set_in_cache(cache_key, places)
+            return places
+        except Exception as exc:
+            logger.warning("Google Places searchText call failed gracefully: %s", exc)
+            return []
+
     @staticmethod
     def _extract_address_components(
         components: List[Dict[str, Any]],

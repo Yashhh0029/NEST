@@ -15,7 +15,7 @@ import { HelperCard } from "@/components/match/HelperCard";
 import { GoogleMap } from "@/components/location/GoogleMap";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { ArrowLeft, Sparkles, Loader2, Users, Sliders } from "lucide-react";
+import { ArrowLeft, Sparkles, Loader2, Users, Sliders, Compass } from "lucide-react";
 
 const DEFAULT_WEIGHTS: MatchScoreWeights = {
   semantic: 0.40,
@@ -151,6 +151,32 @@ export function FutureMatchingPage() {
           Ranked using PostgreSQL pgvector cosine similarity, real GPS coordinates, and profile tenure.
         </p>
       </div>
+
+      {/* Local Resources Discovery Banner */}
+      {requestId && (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-xl border border-teal-200 dark:border-teal-900/60 bg-teal-50/50 dark:bg-teal-950/20">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="p-2 rounded-lg bg-teal-100 dark:bg-teal-900/50 text-brand-primary dark:text-teal-400 shrink-0">
+              <Compass className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                Looking for nearby places & services?
+              </h4>
+              <p className="text-xs text-gray-600 dark:text-gray-400">
+                Discover real PGs, food, healthcare, transit, and more around this request&apos;s destination.
+              </p>
+            </div>
+          </div>
+          <Link
+            to={`/resources?request_id=${requestId}`}
+            className="shrink-0 px-4 py-2 text-xs font-semibold rounded-lg bg-brand-primary text-white hover:bg-brand-primary/90 transition shadow-sm inline-flex items-center gap-1.5 min-h-[36px]"
+          >
+            <Compass className="w-3.5 h-3.5" />
+            Discover Local Resources
+          </Link>
+        </div>
+      )}
 
       {loading ? (
         <Card className="p-12 text-center space-y-4">

@@ -16,5 +16,6 @@ Object.defineProperty(window, "matchMedia", {
   })),
 });
 
-// Mock scrollTo
+// Mock scrollTo and scrollIntoView
 window.scrollTo = vi.fn();
+Element.prototype.scrollIntoView = vi.fn();

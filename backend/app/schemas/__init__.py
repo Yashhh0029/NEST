@@ -54,6 +54,13 @@ from app.schemas.review import (
     ReviewListResponse,
     ReviewResponse,
 )
+from app.schemas.resource import (
+    ResourceCategoriesResponse,
+    ResourceCategory,
+    ResourceItem,
+    ResourceSearchResponse,
+    SearchCenter,
+)
 from app.schemas.skill import (
     SkillCreate,
     SkillResponse,
