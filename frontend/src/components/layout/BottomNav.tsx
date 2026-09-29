@@ -1,11 +1,12 @@
 import { NavLink } from "react-router-dom";
-import { Compass, FileText, User } from "lucide-react";
+import { Compass, FileText, User, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function BottomNav() {
   const navItems = [
     { to: "/home", label: "Home", icon: Compass },
     { to: "/requests", label: "Requests", icon: FileText },
+    { to: "/connections", label: "Connections", icon: Users },
     { to: "/profile", label: "Profile", icon: User },
   ];
 

@@ -7,6 +7,13 @@ from app.schemas.auth import (
     UserRegister,
     UserResponse,
 )
+from app.schemas.connection import (
+    ConnectionCreate,
+    ConnectionListResponse,
+    ConnectionResponse,
+    ConnectionStatusEnum,
+    ConnectionStatusUpdate,
+)
 from app.schemas.embedding import (
     EmbeddingResponse,
     SemanticSearchQuery,

@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import { matchingService } from "@/services/matching";
+import { listConnections, createConnection } from "@/services/connections";
+import type { ConnectionItem } from "@/types/connection";
+import { useToast } from "@/hooks/useToast";
 import type {
   HelperMatchItem,
   MatchingResultResponse,
@@ -24,6 +27,7 @@ const DEFAULT_WEIGHTS: MatchScoreWeights = {
 
 export function FutureMatchingPage() {
   const { requestId } = useParams<{ requestId: string }>();
+  const { success: toastSuccess, error: toastError } = useToast();
 
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +35,43 @@ export function FutureMatchingPage() {
   const [selectedHelper, setSelectedHelper] = useState<HelperMatchItem | null>(null);
   const [weights, setWeights] = useState<MatchScoreWeights>(DEFAULT_WEIGHTS);
   const [isRecalculating, setIsRecalculating] = useState<boolean>(false);
+  const [connections, setConnections] = useState<ConnectionItem[]>([]);
+  const [connectingHelperId, setConnectingHelperId] = useState<string | null>(null);
+
+  const fetchConnections = useCallback(async () => {
+    try {
+      const res = await listConnections({ role: "requester" });
+      setConnections(res.connections || []);
+    } catch {
+      // Non-critical background fetch failure
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchConnections();
+  }, [fetchConnections]);
+
+  const handleConnect = async (helperId: string) => {
+    if (!requestId) return;
+    setConnectingHelperId(helperId);
+    try {
+      const newConn = await createConnection({
+        request_id: requestId,
+        helper_id: helperId,
+      });
+      setConnections((prev) => [...prev, newConn]);
+      toastSuccess("Connection request sent to helper!");
+    } catch (err: unknown) {
+      const msg =
+        err && typeof err === "object" && "response" in err
+          ? (err as { response?: { data?: { detail?: string } } }).response
+              ?.data?.detail
+          : null;
+      toastError(msg || "Failed to send connection request.");
+    } finally {
+      setConnectingHelperId(null);
+    }
+  };
 
   const fetchMatches = useCallback(
     async (weightsToUse: MatchScoreWeights, isInitial = false) => {
@@ -198,6 +239,14 @@ export function FutureMatchingPage() {
               <div className="grid grid-cols-1 gap-4">
                 {data?.matches.map((helper) => {
                   const isSelected = selectedHelper?.user_id === helper.user_id;
+                  const existingConn = connections.find(
+                    (c) =>
+                      c.helper_id === helper.user_id &&
+                      (c.request_id === requestId ||
+                        c.status === "ACCEPTED" ||
+                        c.status === "PENDING")
+                  );
+                  const connStatus = existingConn?.status || "IDLE";
 
                   return (
                     <div
@@ -209,7 +258,13 @@ export function FutureMatchingPage() {
                           : "hover:opacity-90"
                       }`}
                     >
-                      <HelperCard helper={helper} />
+                      <HelperCard
+                        helper={helper}
+                        requestId={requestId}
+                        connectionStatus={connStatus}
+                        onConnect={handleConnect}
+                        isConnecting={connectingHelperId === helper.user_id}
+                      />
                     </div>
                   );
                 })}

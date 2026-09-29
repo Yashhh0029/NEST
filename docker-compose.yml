@@ -4,9 +4,9 @@ services:
     container_name: nest_pgvector_db
     restart: always
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgrespassword}
-      POSTGRES_DB: ${POSTGRES_DB:-nest_db}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: nest_db
     ports:
       # If running locally alongside an existing PostgreSQL 16 service,
       # port 5433 avoids port collisions with local 5432.
@@ -14,7 +14,7 @@ services:
     volumes:
       - nest_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-nest_db}"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d nest_db"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -26,8 +26,8 @@ services:
     container_name: nest_fastapi_backend
     restart: always
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgrespassword}@db:5432/${POSTGRES_DB:-nest_db}
-      JWT_SECRET: ${JWT_SECRET:-generate_a_secure_jwt_secret}
+      DATABASE_URL: postgresql://postgres:postgrespassword@db:5432/nest_db
+      JWT_SECRET: nest_super_secret_docker_key_9988776655
       JWT_ALGORITHM: HS256
       ACCESS_TOKEN_EXPIRE_MINUTES: 1440
       ENVIRONMENT: production

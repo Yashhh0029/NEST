@@ -2,13 +2,22 @@ import type { HelperMatchItem } from "@/types/match";
 import { Card } from "../ui/Card";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
-import { MapPin, Sparkles, MessageSquare } from "lucide-react";
+import { MapPin, Sparkles, UserPlus, CheckCircle2, Clock, XCircle, Loader2 } from "lucide-react";
 
 export interface HelperCardProps {
   helper?: HelperMatchItem;
+  requestId?: string;
+  connectionStatus?: "IDLE" | "PENDING" | "ACCEPTED" | "DECLINED" | "CANCELLED" | string;
+  onConnect?: (helperId: string) => Promise<void>;
+  isConnecting?: boolean;
 }
 
-export function HelperCard({ helper }: HelperCardProps) {
+export function HelperCard({
+  helper,
+  connectionStatus = "IDLE",
+  onConnect,
+  isConnecting = false,
+}: HelperCardProps) {
   if (!helper) {
     return (
       <Card className="p-6 border-dashed text-center text-sm text-gray-500 dark:text-gray-400">
@@ -16,6 +25,13 @@ export function HelperCard({ helper }: HelperCardProps) {
       </Card>
     );
   }
+
+  const handleConnectClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onConnect && !isConnecting && connectionStatus === "IDLE") {
+      await onConnect(helper.user_id);
+    }
+  };
 
   return (
     <Card hover className="space-y-4">
@@ -101,10 +117,49 @@ export function HelperCard({ helper }: HelperCardProps) {
         </div>
       )}
 
-      <div className="pt-2 flex justify-end">
-        <Button variant="outline" size="sm" leftIcon={<MessageSquare className="w-3.5 h-3.5" />}>
-          Connect
-        </Button>
+      {/* Connection Action */}
+      <div className="pt-2 flex items-center justify-between">
+        <span className="text-[11px] text-gray-400">
+          {connectionStatus === "ACCEPTED"
+            ? "Connection active"
+            : connectionStatus === "PENDING"
+            ? "Request pending helper review"
+            : "Connect to initiate direct assistance"}
+        </span>
+
+        {connectionStatus === "ACCEPTED" ? (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 text-xs font-semibold border border-emerald-200/60 dark:border-emerald-800/40">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            Connected
+          </span>
+        ) : connectionStatus === "PENDING" ? (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 text-xs font-semibold border border-amber-200/60 dark:border-amber-800/40">
+            <Clock className="w-3.5 h-3.5" />
+            Requested
+          </span>
+        ) : connectionStatus === "DECLINED" ? (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-100 dark:bg-brand-dark-muted text-gray-500 text-xs font-medium">
+            <XCircle className="w-3.5 h-3.5" />
+            Declined
+          </span>
+        ) : (
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={handleConnectClick}
+            disabled={isConnecting || helper.is_available_for_help === false}
+            isLoading={isConnecting}
+            leftIcon={
+              isConnecting ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <UserPlus className="w-3.5 h-3.5" />
+              )
+            }
+          >
+            {isConnecting ? "Sending..." : "Connect"}
+          </Button>
+        )}
       </div>
     </Card>
   );

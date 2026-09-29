@@ -15,7 +15,7 @@ NEST is an AI-powered local community problem-solving platform designed to help 
   - **Experience & Skills** (15%): Local community tenure and tagged skill proficiencies.
   - **Reputation & Availability** (10% each): Tracked transparently with explicit active/unavailable indicators.
 - **India-Wide Location Intelligence (Google Maps Platform)**:
-  - Supports all Indian localities, neighborhoods, and cities via Google Places API (New).
+  - Google Maps-backed location discovery across supported locations in India via Google Places API (New).
   - Forward address geocoding and reverse GPS coordinate resolution.
   - Estimated travel times and driving distances for Top-K candidate helpers via Google Routes API (`computeRoutes`).
   - **Strict Scope Isolation**: Isolates user home location (`locations` table), request destination (`request_locations` table), and browser device coordinates (`navigator.geolocation`).

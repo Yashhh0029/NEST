@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.api.auth import router as auth_router
+from app.api.connections import router as connections_router
 from app.api.embeddings import router as embeddings_router
 from app.api.location import router as location_router
 from app.api.matching import router as matching_router
@@ -37,6 +38,7 @@ app.include_router(requests_router, prefix=settings.API_V1_STR)
 app.include_router(embeddings_router, prefix=settings.API_V1_STR)
 app.include_router(matching_router, prefix=f"{settings.API_V1_STR}/matching")
 app.include_router(location_router, prefix=f"{settings.API_V1_STR}/location", tags=["Location & Google Maps"])
+app.include_router(connections_router, prefix=f"{settings.API_V1_STR}/connections")
 
 
 @app.get("/", tags=["Root"])

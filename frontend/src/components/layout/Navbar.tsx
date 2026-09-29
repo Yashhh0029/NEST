@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/useAuthStore";
 import { ThemeToggle } from "./ThemeToggle";
-import { Compass, LogOut, PlusCircle, User, FileText } from "lucide-react";
+import { Compass, LogOut, PlusCircle, User, FileText, Users } from "lucide-react";
 
 export function Navbar() {
   const { isAuthenticated, logout } = useAuthStore();
@@ -51,6 +51,13 @@ export function Navbar() {
                 >
                   <FileText className="w-4 h-4 text-brand-primary" />
                   Requests
+                </Link>
+                <Link
+                  to="/connections"
+                  className="px-3.5 py-2 text-sm font-medium rounded-xl text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-brand-dark-card transition-colors flex items-center gap-1.5"
+                >
+                  <Users className="w-4 h-4 text-brand-primary" />
+                  Connections
                 </Link>
                 <Link
                   to="/profile"

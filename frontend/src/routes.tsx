@@ -11,6 +11,7 @@ import { RequestsPage } from "@/pages/RequestsPage";
 import { RequestDetailPage } from "@/pages/RequestDetailPage";
 import { ProfilePage } from "@/pages/ProfilePage";
 import { ProfileEditPage } from "@/pages/ProfileEditPage";
+import { ConnectionsPage } from "@/pages/ConnectionsPage";
 import { FutureMatchingPage } from "@/pages/FutureMatchingPage";
 import { FutureChatPage } from "@/pages/FutureChatPage";
 import { FutureCommunityPage } from "@/pages/FutureCommunityPage";
@@ -123,6 +124,14 @@ export function AppRoutes() {
           element={
             <ProtectedRoute>
               <ProfilePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/connections"
+          element={
+            <ProtectedRoute>
+              <ConnectionsPage />
             </ProtectedRoute>
           }
         />
