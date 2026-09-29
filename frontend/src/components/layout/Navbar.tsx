@@ -1,10 +1,19 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/useAuthStore";
 import { ThemeToggle } from "./ThemeToggle";
-import { Compass, LogOut, PlusCircle, User, FileText, Users, MapPin } from "lucide-react";
+import {
+  Compass,
+  LogOut,
+  PlusCircle,
+  User,
+  FileText,
+  Users,
+  MapPin,
+  ShieldAlert,
+} from "lucide-react";
 
 export function Navbar() {
-  const { isAuthenticated, logout } = useAuthStore();
+  const { user, isAuthenticated, logout } = useAuthStore();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -73,6 +82,15 @@ export function Navbar() {
                   <User className="w-4 h-4 text-brand-primary" />
                   Profile
                 </Link>
+                {user?.role === "admin" && (
+                  <Link
+                    to="/admin/reports"
+                    className="px-3.5 py-2 text-sm font-semibold rounded-xl text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors flex items-center gap-1.5"
+                  >
+                    <ShieldAlert className="w-4 h-4" />
+                    Admin
+                  </Link>
+                )}
               </nav>
 
               <div className="flex items-center gap-2">

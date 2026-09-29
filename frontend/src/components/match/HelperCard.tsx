@@ -1,8 +1,22 @@
+import { useState } from "react";
 import type { HelperMatchItem } from "@/types/match";
 import { Card } from "../ui/Card";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
-import { MapPin, Sparkles, UserPlus, CheckCircle2, Clock, XCircle, Loader2, Star } from "lucide-react";
+import { BlockConfirmModal } from "../safety/BlockConfirmModal";
+import { ReportModal } from "../safety/ReportModal";
+import {
+  MapPin,
+  Sparkles,
+  UserPlus,
+  CheckCircle2,
+  Clock,
+  XCircle,
+  Loader2,
+  Star,
+  Flag,
+  ShieldAlert,
+} from "lucide-react";
 
 export interface HelperCardProps {
   helper?: HelperMatchItem;
@@ -10,6 +24,7 @@ export interface HelperCardProps {
   connectionStatus?: "IDLE" | "PENDING" | "ACCEPTED" | "DECLINED" | "CANCELLED" | string;
   onConnect?: (helperId: string) => Promise<void>;
   isConnecting?: boolean;
+  onBlocked?: (helperId: string) => void;
 }
 
 export function HelperCard({
@@ -17,11 +32,27 @@ export function HelperCard({
   connectionStatus = "IDLE",
   onConnect,
   isConnecting = false,
+  onBlocked,
 }: HelperCardProps) {
+  const [showBlockModal, setShowBlockModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false);
+
   if (!helper) {
     return (
       <Card className="p-6 border-dashed text-center text-sm text-gray-500 dark:text-gray-400">
         Helper match component will render when real matches are generated.
+      </Card>
+    );
+  }
+
+  if (isBlocked) {
+    return (
+      <Card className="p-4 border-dashed border-gray-300 dark:border-brand-dark-border bg-gray-50 dark:bg-brand-dark-muted/20 text-center text-xs text-gray-500">
+        <span className="font-semibold text-gray-700 dark:text-gray-300">
+          {helper.name}
+        </span>{" "}
+        has been blocked and excluded from future matches.
       </Card>
     );
   }
@@ -175,6 +206,57 @@ export function HelperCard({
           </Button>
         )}
       </div>
+
+      {/* Safety Actions & Modals */}
+      <div className="flex items-center justify-end gap-2 pt-1 border-t border-gray-100 dark:border-brand-dark-border/40 text-xs">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowReportModal(true);
+          }}
+          className="inline-flex items-center gap-1 text-[11px] text-gray-400 hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
+          title="Report user"
+        >
+          <Flag className="w-3 h-3" />
+          <span>Report</span>
+        </button>
+        <span className="text-gray-300 dark:text-gray-700">•</span>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowBlockModal(true);
+          }}
+          className="inline-flex items-center gap-1 text-[11px] text-gray-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
+          title="Block user"
+        >
+          <ShieldAlert className="w-3 h-3" />
+          <span>Block</span>
+        </button>
+      </div>
+
+      {showBlockModal && (
+        <BlockConfirmModal
+          isOpen={showBlockModal}
+          targetUserId={helper.user_id}
+          targetName={helper.name}
+          onClose={() => setShowBlockModal(false)}
+          onSuccess={() => {
+            setIsBlocked(true);
+            onBlocked?.(helper.user_id);
+          }}
+        />
+      )}
+
+      {showReportModal && (
+        <ReportModal
+          isOpen={showReportModal}
+          targetUserId={helper.user_id}
+          targetName={helper.name}
+          onClose={() => setShowReportModal(false)}
+        />
+      )}
     </Card>
   );
 }

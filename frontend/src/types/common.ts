@@ -1,4 +1,4 @@
-export type UserRole = "newcomer" | "helper" | "both";
+export type UserRole = "newcomer" | "helper" | "both" | "admin";
 
 export interface ApiErrorDetail {
   loc?: (string | number)[];

@@ -28,6 +28,7 @@ from app.services.embedding_repository import (
     sync_user_request_embedding,
 )
 from app.services.google_maps_service import google_maps_service
+from app.services.safety_service import get_blocked_user_ids
 
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -379,6 +380,8 @@ def find_candidate_matches(
     # 5. Native PostgreSQL pgvector cosine distance query
     dist_expr = Embedding.embedding.cosine_distance(req_embedding_row.embedding)
 
+    blocked_user_ids = get_blocked_user_ids(db, requesting_user.id)
+
     stmt = (
         select(Embedding.owner_id, dist_expr.label("distance"))
         .join(User, User.id == Embedding.owner_id)
@@ -388,8 +391,11 @@ def find_candidate_matches(
             Embedding.owner_id != requesting_user.id,
             User.is_active == True,
         )
-        .order_by(dist_expr.asc())
     )
+    if blocked_user_ids:
+        stmt = stmt.filter(~Embedding.owner_id.in_(list(blocked_user_ids)))
+
+    stmt = stmt.order_by(dist_expr.asc())
 
     candidate_vector_rows = db.execute(stmt).fetchall()
 
@@ -397,6 +403,8 @@ def find_candidate_matches(
 
     for row in candidate_vector_rows:
         cand_user_id = row[0]
+        if cand_user_id in blocked_user_ids:
+            continue
         cos_dist = float(row[1])
         # Cosine similarity in [0.0, 1.0]
         semantic_score = max(0.0, min(1.0, 1.0 - cos_dist))

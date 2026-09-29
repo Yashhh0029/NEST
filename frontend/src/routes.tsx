@@ -16,6 +16,7 @@ import { FutureMatchingPage } from "@/pages/FutureMatchingPage";
 import { ChatPage } from "@/pages/ChatPage";
 import { FutureCommunityPage } from "@/pages/FutureCommunityPage";
 import { ResourcesPage } from "@/pages/ResourcesPage";
+import { AdminReportsPage } from "@/pages/AdminReportsPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { Loader2 } from "lucide-react";
 
@@ -33,6 +34,29 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  return <>{children}</>;
+}
+
+export function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { user, isAuthenticated, loading } = useAuthStore();
+  const location = useLocation();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-brand-light dark:bg-brand-dark">
+        <Loader2 className="w-8 h-8 text-brand-primary animate-spin" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  if (user?.role !== "admin") {
+    return <Navigate to="/home" replace />;
   }
 
   return <>{children}</>;
@@ -175,6 +199,14 @@ export function AppRoutes() {
             <ProtectedRoute>
               <ResourcesPage />
             </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/reports"
+          element={
+            <AdminRoute>
+              <AdminReportsPage />
+            </AdminRoute>
           }
         />
 

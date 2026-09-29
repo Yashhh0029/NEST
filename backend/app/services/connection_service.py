@@ -15,6 +15,8 @@ from app.schemas.connection import (
     ConnectionStatusEnum,
     ConnectionUserSummary,
 )
+from app.services.safety_service import is_blocked_bidirectional
+
 
 
 def _hydrate_user_summary(db: Session, user: User) -> ConnectionUserSummary:
@@ -102,7 +104,14 @@ def create_connection_request(
             detail="Helper user not found or account is inactive.",
         )
 
-    # 4. Check for existing connection between this requester, helper, and request
+    # 4. Check block relationship
+    if is_blocked_bidirectional(db, current_user.id, payload.helper_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Action not permitted due to safety restrictions.",
+        )
+
+    # 5. Check for existing connection between this requester, helper, and request
     existing_conn = (
         db.query(Connection)
         .filter(

@@ -9,6 +9,7 @@ from app.db.database import get_db
 from app.models.user import User
 from app.schemas.chat import MessageCreate
 from app.services import chat_service
+from app.services.safety_service import is_blocked_bidirectional
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +97,7 @@ async def websocket_chat_endpoint(
 
     # 2. Verify conversation authorization & ACTIVE connection status
     try:
-        conversation, _ = chat_service.verify_conversation_access(
+        conversation, connection = chat_service.verify_conversation_access(
             db,
             conversation_id,
             user_id,
@@ -106,6 +107,14 @@ async def websocket_chat_endpoint(
         await websocket.close(
             code=status.WS_1008_POLICY_VIOLATION,
             reason=err_msg,
+        )
+        return
+
+    # Check bidirectional block at connection time
+    if is_blocked_bidirectional(db, connection.requester_id, connection.helper_id):
+        await websocket.close(
+            code=status.WS_1008_POLICY_VIOLATION,
+            reason="Action not permitted due to safety restrictions.",
         )
         return
 
@@ -156,7 +165,21 @@ async def websocket_chat_endpoint(
                     )
                     continue
 
-                # 4. PERSIST TO DATABASE BEFORE BROADCAST
+                # 4. CHECK BLOCK RELATIONSHIP BEFORE ACCEPTING MESSAGE
+                if is_blocked_bidirectional(db, connection.requester_id, connection.helper_id):
+                    await websocket.send_text(
+                        json.dumps({
+                            "type": "error",
+                            "detail": "Action not permitted due to safety restrictions.",
+                        })
+                    )
+                    await websocket.close(
+                        code=status.WS_1008_POLICY_VIOLATION,
+                        reason="Action not permitted due to safety restrictions.",
+                    )
+                    break
+
+                # 5. PERSIST TO DATABASE BEFORE BROADCAST
                 try:
                     persisted_msg = chat_service.send_message(
                         db,

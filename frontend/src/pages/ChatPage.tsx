@@ -15,6 +15,8 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { BlockConfirmModal } from "@/components/safety/BlockConfirmModal";
+import { ReportModal } from "@/components/safety/ReportModal";
 import {
   ArrowLeft,
   Send,
@@ -28,6 +30,8 @@ import {
   AlertCircle,
   Wifi,
   WifiOff,
+  ShieldAlert,
+  Flag,
 } from "lucide-react";
 
 export function ChatPage() {
@@ -49,6 +53,11 @@ export function ChatPage() {
 
   const [hasMore, setHasMore] = useState<boolean>(false);
   const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
+
+  const [showBlockModal, setShowBlockModal] = useState<boolean>(false);
+  const [showReportModal, setShowReportModal] = useState<boolean>(false);
+  const [reportingMessageId, setReportingMessageId] = useState<string | undefined>(undefined);
+  const [isPartnerBlocked, setIsPartnerBlocked] = useState<boolean>(false);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const messageContainerRef = useRef<HTMLDivElement | null>(null);
@@ -302,22 +311,51 @@ export function ChatPage() {
           </div>
         </div>
 
-        {/* Live status badge */}
-        <div
-          className="flex items-center gap-1.5 text-xs text-gray-400"
-          title={isConnected ? "Real-time socket active" : "REST polling mode"}
-        >
-          {isConnected ? (
-            <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium text-[11px]">
-              <Wifi className="w-3.5 h-3.5" />
-              Live
-            </span>
-          ) : (
-            <span className="flex items-center gap-1 text-gray-400 text-[11px]">
-              <WifiOff className="w-3.5 h-3.5" />
-              REST
-            </span>
+        {/* Safety Actions & Live status */}
+        <div className="flex items-center gap-2">
+          {partner && (
+            <div className="flex items-center gap-1 sm:gap-2 mr-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setReportingMessageId(undefined);
+                  setShowReportModal(true);
+                }}
+                className="px-2 py-1 rounded-lg text-gray-500 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-gray-100 dark:hover:bg-brand-dark-muted transition-colors flex items-center gap-1 text-xs"
+                title="Report user"
+              >
+                <Flag className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Report</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowBlockModal(true)}
+                className="px-2 py-1 rounded-lg text-gray-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-gray-100 dark:hover:bg-brand-dark-muted transition-colors flex items-center gap-1 text-xs"
+                title="Block user"
+              >
+                <ShieldAlert className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Block</span>
+              </button>
+            </div>
           )}
+
+          {/* Live status badge */}
+          <div
+            className="flex items-center gap-1.5 text-xs text-gray-400 border-l border-gray-200 dark:border-brand-dark-border pl-2.5"
+            title={isConnected ? "Real-time socket active" : "REST polling mode"}
+          >
+            {isConnected ? (
+              <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium text-[11px]">
+                <Wifi className="w-3.5 h-3.5" />
+                Live
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-gray-400 text-[11px]">
+                <WifiOff className="w-3.5 h-3.5" />
+                REST
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -455,6 +493,23 @@ export function ChatPage() {
                       </button>
                     </div>
                   )}
+
+                  {/* Actions for recipient: Report */}
+                  {!isMine && !isDeleted && (
+                    <div className="hidden group-hover:flex items-center gap-1 absolute -top-3 right-0 bg-white dark:bg-brand-dark-card border border-gray-200 dark:border-brand-dark-border rounded-lg shadow-sm px-1.5 py-0.5 text-gray-600 dark:text-gray-300">
+                      <button
+                        onClick={() => {
+                          setReportingMessageId(msg.id);
+                          setShowReportModal(true);
+                        }}
+                        title="Report this message"
+                        className="p-0.5 hover:text-amber-600 dark:hover:text-amber-400 transition-colors flex items-center gap-1 text-[11px]"
+                      >
+                        <Flag className="w-3 h-3" />
+                        <span>Report</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -473,31 +528,66 @@ export function ChatPage() {
         </div>
       )}
 
-      {/* Composer */}
-      <form
-        onSubmit={handleSendMessage}
-        className="p-3 border-t border-gray-200 dark:border-brand-dark-border bg-gray-50/50 dark:bg-brand-dark-muted/20 flex items-center gap-2"
-      >
-        <textarea
-          value={inputContent}
-          onChange={(e) => setInputContent(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Type a message... (Press Enter to send)"
-          rows={1}
-          maxLength={2000}
-          className="flex-1 resize-none px-3.5 py-2.5 rounded-xl border border-gray-300 dark:border-brand-dark-border bg-white dark:bg-brand-dark-card text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
-        />
-        <Button
-          type="submit"
-          variant="primary"
-          size="sm"
-          disabled={!inputContent.trim() || isSending}
-          isLoading={isSending}
-          className="min-h-[44px] min-w-[44px] px-3.5 rounded-xl flex items-center justify-center shrink-0"
+      {/* Composer or Blocked Notice */}
+      {isPartnerBlocked ? (
+        <div className="p-4 border-t border-gray-200 dark:border-brand-dark-border bg-gray-50/90 dark:bg-brand-dark-muted/40 text-center text-xs text-gray-500 space-y-1">
+          <p className="font-semibold text-gray-700 dark:text-gray-300">
+            This user is blocked.
+          </p>
+          <p>
+            Historical messages remain readable for your records, but no further messages can be sent or received.
+          </p>
+        </div>
+      ) : (
+        <form
+          onSubmit={handleSendMessage}
+          className="p-3 border-t border-gray-200 dark:border-brand-dark-border bg-gray-50/50 dark:bg-brand-dark-muted/20 flex items-center gap-2"
         >
-          <Send className="w-4 h-4" />
-        </Button>
-      </form>
+          <textarea
+            value={inputContent}
+            onChange={(e) => setInputContent(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Type a message... (Press Enter to send)"
+            rows={1}
+            maxLength={2000}
+            className="flex-1 resize-none px-3.5 py-2.5 rounded-xl border border-gray-300 dark:border-brand-dark-border bg-white dark:bg-brand-dark-card text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
+          />
+          <Button
+            type="submit"
+            variant="primary"
+            size="sm"
+            disabled={!inputContent.trim() || isSending}
+            isLoading={isSending}
+            className="min-h-[44px] min-w-[44px] px-3.5 rounded-xl flex items-center justify-center shrink-0"
+          >
+            <Send className="w-4 h-4" />
+          </Button>
+        </form>
+      )}
+
+      {/* Safety Modals */}
+      {showBlockModal && partner && (
+        <BlockConfirmModal
+          isOpen={showBlockModal}
+          targetUserId={partner.id}
+          targetName={partner.name}
+          onClose={() => setShowBlockModal(false)}
+          onSuccess={() => setIsPartnerBlocked(true)}
+        />
+      )}
+
+      {showReportModal && (
+        <ReportModal
+          isOpen={showReportModal}
+          targetUserId={partner?.id}
+          targetMessageId={reportingMessageId}
+          targetName={reportingMessageId ? `Message by ${partner?.name || "user"}` : partner?.name}
+          onClose={() => {
+            setShowReportModal(false);
+            setReportingMessageId(undefined);
+          }}
+        />
+      )}
     </div>
   );
 }

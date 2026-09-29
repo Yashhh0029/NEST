@@ -15,6 +15,7 @@ from app.schemas.chat import (
     MessageUpdate,
 )
 from app.schemas.connection import ConnectionRequestSummary, ConnectionUserSummary
+from app.services.safety_service import is_blocked_bidirectional
 
 
 def verify_connection_access(
@@ -187,6 +188,12 @@ def create_conversation(
     """
     connection = verify_connection_access(db, connection_id, user_id)
 
+    if is_blocked_bidirectional(db, connection.requester_id, connection.helper_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Action not permitted due to safety restrictions.",
+        )
+
     # Check for existing conversation
     existing = (
         db.query(Conversation)
@@ -324,6 +331,12 @@ def send_message(
     Verifies user is participant and connection is ACCEPTED.
     """
     conversation, connection = verify_conversation_access(db, conversation_id, user_id)
+
+    if is_blocked_bidirectional(db, connection.requester_id, connection.helper_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Action not permitted due to safety restrictions.",
+        )
 
     if connection.status == ConnectionStatus.COMPLETED.value:
         raise HTTPException(
