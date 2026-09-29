@@ -13,7 +13,7 @@ import { ProfilePage } from "@/pages/ProfilePage";
 import { ProfileEditPage } from "@/pages/ProfileEditPage";
 import { ConnectionsPage } from "@/pages/ConnectionsPage";
 import { FutureMatchingPage } from "@/pages/FutureMatchingPage";
-import { FutureChatPage } from "@/pages/FutureChatPage";
+import { ChatPage } from "@/pages/ChatPage";
 import { FutureCommunityPage } from "@/pages/FutureCommunityPage";
 import { FutureResourcesPage } from "@/pages/FutureResourcesPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
@@ -157,7 +157,7 @@ export function AppRoutes() {
           path="/chat/:connectionId"
           element={
             <ProtectedRoute>
-              <FutureChatPage />
+              <ChatPage />
             </ProtectedRoute>
           }
         />

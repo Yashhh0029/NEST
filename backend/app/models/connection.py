@@ -4,7 +4,7 @@ import uuid
 from sqlalchemy import Column, DateTime, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-from app.db.base import Base
+from app.db.database import Base
 
 
 class ConnectionStatus(str, Enum):

@@ -7,6 +7,15 @@ from app.schemas.auth import (
     UserRegister,
     UserResponse,
 )
+from app.schemas.chat import (
+    ConversationCreate,
+    ConversationListResponse,
+    ConversationResponse,
+    MessageCreate,
+    MessageListResponse,
+    MessageResponse,
+    MessageUpdate,
+)
 from app.schemas.connection import (
     ConnectionCreate,
     ConnectionListResponse,
@@ -46,11 +55,23 @@ from app.schemas.skill import (
 )
 
 __all__ = [
+    "ConnectionCreate",
+    "ConnectionListResponse",
+    "ConnectionResponse",
+    "ConnectionStatusEnum",
+    "ConnectionStatusUpdate",
+    "ConversationCreate",
+    "ConversationListResponse",
+    "ConversationResponse",
     "EmbeddingResponse",
     "FullProfileResponse",
     "LocationCreate",
     "LocationResponse",
     "LocationUpdate",
+    "MessageCreate",
+    "MessageListResponse",
+    "MessageResponse",
+    "MessageUpdate",
     "ProfileCreate",
     "ProfilePatch",
     "ProfileResponse",

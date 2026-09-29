@@ -21,8 +21,8 @@ import {
   Clock,
   MapPin,
   FileText,
-  AlertCircle,
   Calendar,
+  MessageSquare,
 } from "lucide-react";
 
 type TabType = "incoming" | "sent" | "active";
@@ -412,10 +412,12 @@ export function ConnectionsPage() {
                       : new Date(conn.updated_at).toLocaleDateString()}
                   </span>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-400 flex items-center gap-1">
-                      <AlertCircle className="w-3.5 h-3.5" />
-                      Direct Chat coming in Phase 8
-                    </span>
+                    <Link to={`/chat/${conn.id}`}>
+                      <Button variant="primary" size="sm">
+                        <MessageSquare className="w-4 h-4 mr-1.5" />
+                        Message
+                      </Button>
+                    </Link>
                   </div>
                 </div>
               </Card>

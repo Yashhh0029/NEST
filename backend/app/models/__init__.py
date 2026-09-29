@@ -1,4 +1,5 @@
 from app.models.connection import Connection, ConnectionStatus
+from app.models.conversation import Conversation, Message
 from app.models.embedding import Embedding
 from app.models.location import Location
 from app.models.profile import Profile
@@ -10,8 +11,10 @@ from app.models.user import User, UserRole
 __all__ = [
     "Connection",
     "ConnectionStatus",
+    "Conversation",
     "Embedding",
     "Location",
+    "Message",
     "Profile",
     "Request",
     "RequestLocation",
