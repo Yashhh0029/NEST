@@ -32,9 +32,10 @@ const sampleSlot: HelperAvailabilitySlot = {
 
 const sampleCapacity: PublicAvailabilityProfile = {
   user_id: "user-helper",
+  helper_timezone: "Asia/Kolkata",
   timezone: "Asia/Kolkata",
-  max_weekly_hours: 10,
-  max_monthly_sessions: 8,
+  max_weekly_sessions: 3,
+  accepting_sessions: true,
   current_status: "AVAILABLE",
   availability_badge: "Available this week",
   available_days: [0, 2, 4],
@@ -174,8 +175,8 @@ describe("Phase 14 — Sessions and Availability Frontend Components", () => {
 
     expect(screen.getByText("Assistance Capacity & Timezone")).toBeInTheDocument();
     expect(screen.getByText("Available this week")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("10")).toBeInTheDocument(); // max weekly hours
-    expect(screen.getByDisplayValue("8")).toBeInTheDocument();  // max monthly sessions
+    expect(screen.getByDisplayValue("3")).toBeInTheDocument(); // max weekly sessions
+    expect(screen.getByText("Max Weekly Sessions")).toBeInTheDocument();
   });
 
   it("5. CapacityControls submits updated capacity configuration", async () => {
@@ -187,18 +188,18 @@ describe("Phase 14 — Sessions and Availability Frontend Components", () => {
       />
     );
 
-    const hoursInput = screen.getByDisplayValue("10");
-    fireEvent.change(hoursInput, { target: { value: "15" } });
+    const sessionsInput = screen.getByDisplayValue("3");
+    fireEvent.change(sessionsInput, { target: { value: "5" } });
 
     const submitBtn = screen.getByText("Save Capacity Preferences");
     fireEvent.click(submitBtn);
 
     await waitFor(() => {
       expect(handleSave).toHaveBeenCalledWith({
+        helper_timezone: "Asia/Kolkata",
         timezone: "Asia/Kolkata",
-        max_weekly_hours: 15,
-        max_monthly_sessions: 8,
-        is_accepting_sessions: true,
+        max_weekly_sessions: 5,
+        accepting_sessions: true,
       });
     });
   });

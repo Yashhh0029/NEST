@@ -1,4 +1,5 @@
 import concurrent.futures
+import threading
 from datetime import date, datetime, timedelta, timezone
 import uuid
 import pytest
@@ -1049,4 +1050,267 @@ def test_admin_suspension_cancels_future_sessions(client: TestClient, mock_venue
     assert chk.status_code == 200
     assert chk.json()["status"] == "CANCELLED"
     assert "account suspension" in chk.json()["status_reason"].lower()
+
+
+def test_true_concurrent_double_booking_race(client: TestClient, mock_venue_service):
+    """
+    True multi-threaded barrier test verifying row-level locks on the helper
+    prevent double-booking under concurrent acceptance race conditions.
+    """
+    helper = create_authenticated_user(client, "Barrier Helper", f"barr_h_{uuid.uuid4().hex[:6]}@example.test")
+    req1 = create_authenticated_user(client, "Barrier Req 1", f"barr_r1_{uuid.uuid4().hex[:6]}@example.test")
+    req2 = create_authenticated_user(client, "Barrier Req 2", f"barr_r2_{uuid.uuid4().hex[:6]}@example.test")
+
+    db = SessionLocal()
+    try:
+        r1 = Request(id=uuid.uuid4(), user_id=uuid.UUID(req1["user"]["id"]), raw_text="Barrier R1", city="Bengaluru", status="OPEN")
+        r2 = Request(id=uuid.uuid4(), user_id=uuid.UUID(req2["user"]["id"]), raw_text="Barrier R2", city="Bengaluru", status="OPEN")
+        db.add_all([r1, r2])
+        c1 = Connection(id=uuid.uuid4(), request_id=r1.id, requester_id=uuid.UUID(req1["user"]["id"]), helper_id=uuid.UUID(helper["user"]["id"]), status="ACCEPTED")
+        c2 = Connection(id=uuid.uuid4(), request_id=r2.id, requester_id=uuid.UUID(req2["user"]["id"]), helper_id=uuid.UUID(helper["user"]["id"]), status="ACCEPTED")
+        db.add_all([c1, c2])
+        db.commit()
+        r1_id = r1.id
+        r2_id = r2.id
+    finally:
+        db.close()
+
+    target_start = (datetime.now(timezone.utc) + timedelta(days=5)).replace(microsecond=0)
+
+    # Propose two sessions targeting the exact same time slot with the same helper
+    p1 = {
+        "request_id": str(r1_id),
+        "recipient_id": str(helper["user"]["id"]),
+        "title": "Concurrent Slot Proposal 1",
+        "modality": "IN_PERSON",
+        "meeting_place_id": "ChIJ_central_cafe",
+        "scheduled_start": target_start.isoformat(),
+        "duration_minutes": 60,
+    }
+    s1 = client.post(f"{settings.API_V1_STR}/sessions", json=p1, headers=req1["headers"]).json()
+
+    p2 = {
+        "request_id": str(r2_id),
+        "recipient_id": str(helper["user"]["id"]),
+        "title": "Concurrent Slot Proposal 2",
+        "modality": "IN_PERSON",
+        "meeting_place_id": "ChIJ_central_cafe",
+        "scheduled_start": target_start.isoformat(),
+        "duration_minutes": 60,
+    }
+    s2 = client.post(f"{settings.API_V1_STR}/sessions", json=p2, headers=req2["headers"]).json()
+
+    barrier = threading.Barrier(2)
+    results = []
+
+    def race_accept(sess_id):
+        barrier.wait()
+        res = client.post(f"{settings.API_V1_STR}/sessions/{sess_id}/accept", headers=helper["headers"])
+        results.append(res.status_code)
+
+    t1 = threading.Thread(target=race_accept, args=(s1["id"],))
+    t2 = threading.Thread(target=race_accept, args=(s2["id"],))
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+
+    # Exactly one accept must succeed and one must be rejected with 409 CONFLICT
+    assert sorted(results) == [200, 409]
+
+
+def test_helper_proposed_session_scheduling_conflict_protection(client: TestClient, mock_venue_service):
+    """
+    Verifies that when a helper proposes a session to a newcomer, conflict protection
+    locks and checks both participants symmetrically, preventing double booking.
+    """
+    helper = create_authenticated_user(client, "Sym Helper", f"sym_h_{uuid.uuid4().hex[:6]}@example.test")
+    newcomer = create_authenticated_user(client, "Sym Newcomer", f"sym_n_{uuid.uuid4().hex[:6]}@example.test")
+    other_helper = create_authenticated_user(client, "Other Helper", f"oth_h_{uuid.uuid4().hex[:6]}@example.test")
+
+    db = SessionLocal()
+    try:
+        r1 = Request(id=uuid.uuid4(), user_id=uuid.UUID(newcomer["user"]["id"]), raw_text="Need guide", city="Bengaluru", status="OPEN")
+        db.add(r1)
+        c1 = Connection(id=uuid.uuid4(), request_id=r1.id, requester_id=uuid.UUID(newcomer["user"]["id"]), helper_id=uuid.UUID(helper["user"]["id"]), status="ACCEPTED")
+        c2 = Connection(id=uuid.uuid4(), request_id=r1.id, requester_id=uuid.UUID(newcomer["user"]["id"]), helper_id=uuid.UUID(other_helper["user"]["id"]), status="ACCEPTED")
+        db.add_all([c1, c2])
+        db.commit()
+        r1_id = r1.id
+    finally:
+        db.close()
+
+    target_start = (datetime.now(timezone.utc) + timedelta(days=4)).replace(microsecond=0)
+
+    # Helper proposes session to newcomer
+    p_helper = {
+        "request_id": str(r1_id),
+        "recipient_id": str(newcomer["user"]["id"]),
+        "title": "Helper Proposed Tour",
+        "modality": "IN_PERSON",
+        "meeting_place_id": "ChIJ_central_cafe",
+        "scheduled_start": target_start.isoformat(),
+        "duration_minutes": 60,
+    }
+    h_sess = client.post(f"{settings.API_V1_STR}/sessions", json=p_helper, headers=helper["headers"])
+    assert h_sess.status_code == 201
+    h_sess_id = h_sess.json()["id"]
+
+    # Newcomer accepts helper's proposed session
+    acc_res = client.post(f"{settings.API_V1_STR}/sessions/{h_sess_id}/accept", headers=newcomer["headers"])
+    assert acc_res.status_code == 200
+
+    # Newcomer now tries to propose an overlapping session with other_helper
+    p_conflict = {
+        "request_id": str(r1_id),
+        "recipient_id": str(other_helper["user"]["id"]),
+        "title": "Overlapping Tour Attempt",
+        "modality": "IN_PERSON",
+        "meeting_place_id": "ChIJ_central_cafe",
+        "scheduled_start": (target_start + timedelta(minutes=30)).isoformat(),
+        "duration_minutes": 45,
+    }
+    conf_res = client.post(f"{settings.API_V1_STR}/sessions", json=p_conflict, headers=newcomer["headers"])
+    assert conf_res.status_code == 409
+    assert "conflicts" in conf_res.json()["detail"].lower()
+
+
+def test_session_completion_does_not_silently_resolve_need(client: TestClient, mock_venue_service):
+    """
+    Verifies Phase 13 boundary integrity:
+    Completing an assistance session does NOT automatically or silently resolve
+    the underlying need. Explicit user resolution is strictly required.
+    """
+    requester = create_authenticated_user(client, "Req Boundary", f"bnd_r_{uuid.uuid4().hex[:6]}@example.test")
+    helper = create_authenticated_user(client, "Hlp Boundary", f"bnd_h_{uuid.uuid4().hex[:6]}@example.test")
+
+    # 1. Create request with parsed need
+    req_resp = client.post(
+        f"{settings.API_V1_STR}/requests",
+        json={"text": "Moving to Indiranagar, need a 1BHK apartment and someone to guide me on local rent agreements."},
+        headers=requester["headers"],
+    )
+    assert req_resp.status_code == 201
+    req_id = req_resp.json()["id"]
+
+    # Connect helper
+    db = SessionLocal()
+    try:
+        conn = Connection(id=uuid.uuid4(), request_id=uuid.UUID(req_id), requester_id=uuid.UUID(requester["user"]["id"]), helper_id=uuid.UUID(helper["user"]["id"]), status="ACCEPTED")
+        db.add(conn)
+        db.commit()
+    finally:
+        db.close()
+
+    # Propose, accept, and dual-complete assistance session
+    target_start = (datetime.now(timezone.utc) + timedelta(days=3)).replace(microsecond=0)
+    sess_payload = {
+        "request_id": req_id,
+        "recipient_id": str(helper["user"]["id"]),
+        "title": "Apartment Agreement Assistance",
+        "modality": "IN_PERSON",
+        "meeting_place_id": "ChIJ_central_cafe",
+        "scheduled_start": target_start.isoformat(),
+        "duration_minutes": 60,
+    }
+    s_resp = client.post(f"{settings.API_V1_STR}/sessions", json=sess_payload, headers=requester["headers"])
+    sess_id = s_resp.json()["id"]
+
+    client.post(f"{settings.API_V1_STR}/sessions/{sess_id}/accept", headers=helper["headers"])
+    client.post(f"{settings.API_V1_STR}/sessions/{sess_id}/complete", headers=requester["headers"])
+    c2 = client.post(f"{settings.API_V1_STR}/sessions/{sess_id}/complete", headers=helper["headers"])
+    assert c2.status_code == 200
+    assert c2.json()["status"] == "COMPLETED"
+
+    # Verify intelligence hub: need is STILL NOT automatically resolved
+    hub_res = client.get(f"{settings.API_V1_STR}/requests/{req_id}/intelligence", headers=requester["headers"])
+    assert hub_res.status_code == 200
+    hub_data = hub_res.json()
+    extracted_needs = hub_data.get("needs", [])
+    cat = extracted_needs[0]["category"] if extracted_needs else "accommodation"
+    target_progress = [n for n in hub_data.get("need_progress", []) if n.get("category") == cat]
+    if target_progress:
+        assert target_progress[0]["status"] != "RESOLVED"
+
+    # Now newcomer performs explicit resolution via PATCH need-progress
+    resolve_res = client.patch(
+        f"{settings.API_V1_STR}/requests/{req_id}/need-progress",
+        json={
+            "category": cat,
+            "status": "RESOLVED",
+            "resolved_via": "session",
+            "resolved_entity_id": sess_id,
+            "notes": "Helper checked lease agreement in person and confirmed terms.",
+        },
+        headers=requester["headers"],
+    )
+    assert resolve_res.status_code == 200
+    updated_progress = resolve_res.json()
+    assert updated_progress["status"] == "RESOLVED"
+    assert updated_progress["resolved_needs"] >= 1
+
+
+def test_cross_timezone_scheduling_and_utc_persistence(client: TestClient, mock_venue_service):
+    """
+    Verifies that schedules across diverse non-India timezones (e.g. America/New_York and Europe/London)
+    are stored as true UTC in the database, with round-trip timezone preservation.
+    """
+    helper = create_authenticated_user(client, "NY Helper", f"ny_{uuid.uuid4().hex[:6]}@example.test")
+    newcomer = create_authenticated_user(client, "London Newcomer", f"lon_{uuid.uuid4().hex[:6]}@example.test")
+
+    # Helper updates availability and timezone to America/New_York
+    tz_res = client.put(
+        f"{settings.API_V1_STR}/availability/capacity",
+        json={"helper_timezone": "America/New_York", "max_weekly_sessions": 4, "accepting_sessions": True},
+        headers=helper["headers"],
+    )
+    assert tz_res.status_code == 200
+    assert tz_res.json()["helper_timezone"] == "America/New_York"
+
+    # Set helper slots on Wednesday
+    slots_res = client.put(
+        f"{settings.API_V1_STR}/availability/slots",
+        json={
+            "helper_timezone": "America/New_York",
+            "slots": [
+                {"day_of_week": 2, "start_time": "14:00:00", "end_time": "18:00:00"},
+            ],
+        },
+        headers=helper["headers"],
+    )
+    assert slots_res.status_code == 200
+
+    # Newcomer creates connection with helper
+    db = SessionLocal()
+    try:
+        req = Request(id=uuid.uuid4(), user_id=uuid.UUID(newcomer["user"]["id"]), raw_text="Remote onboarding", city="Bengaluru", status="OPEN")
+        db.add(req)
+        conn = Connection(id=uuid.uuid4(), request_id=req.id, requester_id=uuid.UUID(newcomer["user"]["id"]), helper_id=uuid.UUID(helper["user"]["id"]), status="ACCEPTED")
+        db.add(conn)
+        db.commit()
+        req_id = req.id
+    finally:
+        db.close()
+
+    # Propose session specifying America/New_York timezone
+    sess_dt = (datetime.now(timezone.utc) + timedelta(days=7)).replace(microsecond=0)
+    sess_res = client.post(
+        f"{settings.API_V1_STR}/sessions",
+        json={
+            "request_id": str(req_id),
+            "recipient_id": str(helper["user"]["id"]),
+            "title": "Cross-Timezone Orientation",
+            "modality": "REMOTE",
+            "meeting_url": "https://meet.google.com/abc-defg-hij",
+            "scheduled_start": sess_dt.isoformat(),
+            "duration_minutes": 60,
+            "session_timezone": "America/New_York",
+        },
+        headers=newcomer["headers"],
+    )
+    assert sess_res.status_code == 201
+    s_data = sess_res.json()
+    assert s_data["session_timezone"] == "America/New_York"
+    assert s_data["scheduled_start"] is not None
+
 

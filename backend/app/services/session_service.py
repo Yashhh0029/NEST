@@ -519,6 +519,19 @@ def accept_session(
         exclude_session_id=session.id,
     )
 
+    # Re-verify helper capacity before confirming
+    cap_status, _ = get_derived_capacity_status(db, helper_id)
+    if cap_status == "NOT_ACCEPTING":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Helper is currently not accepting new assistance sessions.",
+        )
+    elif cap_status == "AT_CAPACITY":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Helper has reached their maximum weekly session capacity.",
+        )
+
     session.status = SessionStatus.CONFIRMED.value
     session.status_reason = None
     session.updated_at = datetime.now(timezone.utc)

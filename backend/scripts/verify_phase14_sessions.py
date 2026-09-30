@@ -21,9 +21,9 @@ def assert_status(resp: requests.Response, expected: int, msg: str = ""):
         sys.exit(1)
     print(f"  PASS: HTTP {resp.status_code} {msg}")
 
-def register_and_login(name: str, email: str, password: str = "Password123!"):
+def register_and_login(name: str, email: str, password: str = "Password123!", role: str = "newcomer"):
     reg = requests.post(f"{BASE_URL}/api/auth/register", json={
-        "name": name, "email": email, "password": password
+        "name": name, "email": email, "password": password, "role": role
     })
     assert_status(reg, 201, f"{name} registered")
     login = requests.post(f"{BASE_URL}/api/auth/login", json={
@@ -353,8 +353,93 @@ def main():
     assert intel_data["status"] == "RESOLVED"
     assert intel_data["resolved_needs"] >= 1
 
+    # SCENARIO 26: Active Session Cancelled upon Blocking
+    log_step(26, "Active Confirmed Session Cancelled Automatically When User Blocks")
+    blk_res = requests.post(f"{BASE_URL}/api/blocks/{helper_id}", headers=newcomer_h)
+    assert_status(blk_res, 201, "Newcomer blocked helper")
+
+    # Verify remote session cancelled automatically
+    chk_blk = requests.get(f"{BASE_URL}/api/sessions/{remote_session_id}", headers=newcomer_h)
+    assert_status(chk_blk, 200, "Remote session retrieved after blocking")
+    assert chk_blk.json()["status"] == "CANCELLED"
+    assert "safety restriction" in chk_blk.json()["status_reason"].lower()
+
+    # SCENARIO 27: Blocked User Cannot Propose Sessions
+    log_step(27, "Blocked Users Denied New Session Proposals")
+    blk_prop = requests.post(f"{BASE_URL}/api/sessions", headers=newcomer_h, json={
+        "request_id": request_id,
+        "recipient_id": helper_id,
+        "title": "Blocked Proposal Attempt",
+        "modality": "REMOTE",
+        "meeting_url": "https://meet.google.com/xyz-nest-demo",
+        "scheduled_start": (datetime.now(timezone.utc) + timedelta(days=8)).isoformat(),
+        "duration_minutes": 30,
+    })
+    assert_status(blk_prop, 403, "Session proposal blocked due to safety restriction")
+
+    # SCENARIO 28: Historical Completed Session Retained
+    log_step(28, "Completed Session Retained in History After Blocking")
+    hist_chk = requests.get(f"{BASE_URL}/api/sessions/{session_id}", headers=newcomer_h)
+    assert_status(hist_chk, 200, "Historical completed session retrieved")
+    assert hist_chk.json()["status"] == "COMPLETED"
+
+    # SCENARIO 29: Admin Suspension Automatically Cancels Active Sessions
+    log_step(29, "Admin Suspension Automatically Cancels Helper's Future Sessions")
+    # Unblock first so new session can be proposed
+    unblk_res = requests.delete(f"{BASE_URL}/api/blocks/{helper_id}", headers=newcomer_h)
+    assert_status(unblk_res, 204, "Helper unblocked")
+
+    admin_id, admin_h = register_and_login("Admin Mod", f"admin_{uid}@example.test", role="admin")
+
+    # Propose and accept a new session
+    susp_start = (datetime.now(timezone.utc) + timedelta(days=9)).isoformat()
+    new_sess_res = requests.post(f"{BASE_URL}/api/sessions", headers=newcomer_h, json={
+        "request_id": request_id,
+        "recipient_id": helper_id,
+        "title": "Session Prior to Suspension",
+        "modality": "REMOTE",
+        "meeting_url": "https://meet.google.com/xyz-nest-demo",
+        "scheduled_start": susp_start,
+        "duration_minutes": 30,
+    })
+    assert_status(new_sess_res, 201, "New session proposed")
+    susp_sess_id = new_sess_res.json()["id"]
+    acc_susp = requests.post(f"{BASE_URL}/api/sessions/{susp_sess_id}/accept", headers=helper_h)
+    assert_status(acc_susp, 200, "Session confirmed before suspension")
+
+    # Admin suspends helper
+    susp_res = requests.post(f"{BASE_URL}/api/admin/users/{helper_id}/suspend", headers=admin_h, json={
+        "reason": "Platform safety audit suspension"
+    })
+    assert_status(susp_res, 200, "Helper suspended by admin")
+
+    # Verify session cancelled
+    susp_chk = requests.get(f"{BASE_URL}/api/sessions/{susp_sess_id}", headers=newcomer_h)
+    assert_status(susp_chk, 200, "Suspended session checked")
+    assert susp_chk.json()["status"] == "CANCELLED"
+    assert "account suspension" in susp_chk.json()["status_reason"].lower()
+
+    # SCENARIO 30: Suspended User Access Denial & Reactivation
+    log_step(30, "Suspended User Denied Session Operations, Restored on Reactivation")
+    denied_prop = requests.post(f"{BASE_URL}/api/sessions", headers=helper_h, json={
+        "request_id": request_id,
+        "recipient_id": newcomer_id,
+        "title": "Suspended Attempt",
+        "modality": "REMOTE",
+        "meeting_url": "https://meet.google.com/xyz-nest-demo",
+        "scheduled_start": (datetime.now(timezone.utc) + timedelta(days=10)).isoformat(),
+        "duration_minutes": 30,
+    })
+    assert_status(denied_prop, 403, "Suspended user denied session proposal")
+
+    # Admin reactivates helper
+    react_res = requests.post(f"{BASE_URL}/api/admin/users/{helper_id}/reactivate", headers=admin_h, json={
+        "reason": "Account restored after review"
+    })
+    assert_status(react_res, 200, "Helper reactivated by admin")
+
     print("\n" + "=" * 80)
-    print("PHASE 14 LIVE END-TO-END VERIFICATION COMPLETED: ALL 25 SCENARIOS PASSED!")
+    print("PHASE 14 LIVE END-TO-END VERIFICATION COMPLETED: ALL 30 SCENARIOS PASSED!")
     print("=" * 80)
 
 if __name__ == "__main__":

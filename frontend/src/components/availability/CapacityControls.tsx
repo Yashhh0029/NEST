@@ -8,15 +8,14 @@ interface Props {
 }
 
 export const CapacityControls: React.FC<Props> = ({ initialCapacity, onSave }) => {
-  const [timezone, setTimezone] = useState(initialCapacity.timezone || "Asia/Kolkata");
-  const [maxWeeklyHours, setMaxWeeklyHours] = useState<number | string>(
-    initialCapacity.max_weekly_hours ?? 10
+  const [timezone, setTimezone] = useState(
+    initialCapacity.helper_timezone || initialCapacity.timezone || "Asia/Kolkata"
   );
-  const [maxMonthlySessions, setMaxMonthlySessions] = useState<number | string>(
-    initialCapacity.max_monthly_sessions ?? 8
+  const [maxWeeklySessions, setMaxWeeklySessions] = useState<number | string>(
+    initialCapacity.max_weekly_sessions ?? 3
   );
   const [isAccepting, setIsAccepting] = useState<boolean>(
-    initialCapacity.current_status !== "NOT_ACCEPTING"
+    initialCapacity.accepting_sessions ?? (initialCapacity.current_status !== "NOT_ACCEPTING")
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,10 +29,10 @@ export const CapacityControls: React.FC<Props> = ({ initialCapacity, onSave }) =
     try {
       setSaving(true);
       const payload: UpdateCapacityPayload = {
+        helper_timezone: timezone,
         timezone,
-        max_weekly_hours: maxWeeklyHours === "" ? null : Number(maxWeeklyHours),
-        max_monthly_sessions: maxMonthlySessions === "" ? null : Number(maxMonthlySessions),
-        is_accepting_sessions: isAccepting,
+        max_weekly_sessions: maxWeeklySessions === "" ? null : Number(maxWeeklySessions),
+        accepting_sessions: isAccepting,
       };
       await onSave(payload);
       setSuccess(true);
@@ -131,35 +130,18 @@ export const CapacityControls: React.FC<Props> = ({ initialCapacity, onSave }) =
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Max Weekly Hours
+              Max Weekly Sessions
             </label>
             <input
               type="number"
               min="1"
-              max="80"
-              value={maxWeeklyHours}
-              onChange={(e) => setMaxWeeklyHours(e.target.value)}
+              max="20"
+              value={maxWeeklySessions}
+              onChange={(e) => setMaxWeeklySessions(e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
             />
             <p className="text-xs text-gray-500 mt-1">
-              Threshold to mark you as 'At Capacity' when confirmed hours exceed this.
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Max Monthly Sessions
-            </label>
-            <input
-              type="number"
-              min="1"
-              max="100"
-              value={maxMonthlySessions}
-              onChange={(e) => setMaxMonthlySessions(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Maximum confirmed or completed sessions per calendar month.
+              Maximum confirmed assistance sessions in any rolling 7-day window (1-20).
             </p>
           </div>
         </div>

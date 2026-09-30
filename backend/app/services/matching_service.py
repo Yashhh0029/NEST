@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import math
 from typing import Any, Dict, List, Optional, Tuple
 import uuid
@@ -273,7 +273,7 @@ def calculate_availability_score(
     # 3. Request-Time Aware matching
     # Scenario A: Newcomer specified a preferred date
     if req.preferred_date:
-        # Check blackout exception
+        # Check blackout exception on exact date
         blackout = (
             db.query(HelperAvailabilityException)
             .filter(
@@ -283,40 +283,103 @@ def calculate_availability_score(
             )
             .first()
         )
-        if blackout:
-            return 0.0, DimensionStatusEnum.ACTIVE, f"Helper has a scheduled blackout date on {req.preferred_date}"
-
         day_of_week = req.preferred_date.weekday()  # 0=Monday, 6=Sunday
         day_slots = [s for s in slots if s.day_of_week == day_of_week]
+
+        exact_match = False
+        exact_score = 0.0
+        exact_reason = ""
+
+        if not blackout and day_slots:
+            if req.preferred_start_time and req.preferred_end_time:
+                req_start_m = req.preferred_start_time.hour * 60 + req.preferred_start_time.minute
+                req_end_m = req.preferred_end_time.hour * 60 + req.preferred_end_time.minute
+                req_duration = max(1, req_end_m - req_start_m)
+
+                total_overlap_m = 0
+                for s in day_slots:
+                    slot_start_m = s.start_time.hour * 60 + s.start_time.minute
+                    slot_end_m = s.end_time.hour * 60 + s.end_time.minute
+                    overlap = max(0, min(slot_end_m, req_end_m) - max(slot_start_m, req_start_m))
+                    total_overlap_m += overlap
+
+                score = min(1.0, total_overlap_m / req_duration)
+                if score > 0:
+                    exact_match = True
+                    exact_score = round(score, 4)
+                    if score >= 0.95:
+                        exact_reason = f"Full schedule match on {req.preferred_date.strftime('%A')} ({req.preferred_start_time.strftime('%H:%M')}-{req.preferred_end_time.strftime('%H:%M')})"
+                    else:
+                        exact_reason = f"Partial schedule overlap ({int(score * 100)}%) on {req.preferred_date.strftime('%A')}"
+            else:
+                exact_match = True
+                exact_score = 1.0
+                day_name = req.preferred_date.strftime("%A")
+                exact_reason = f"Active schedule available on {day_name} ({len(day_slots)} slots)"
+
+        if exact_match:
+            return exact_score, DimensionStatusEnum.ACTIVE, exact_reason
+
+        # If no exact match, check flexible window if requester indicated flexibility
+        is_flexible = getattr(req, "is_time_flexible", False)
+        window_days = getattr(req, "flexibility_window_days", None)
+        if is_flexible or (window_days and window_days > 0):
+            max_window = window_days if (window_days and window_days > 0) else 2
+            offsets = []
+            for d in range(1, max_window + 1):
+                offsets.append(d)
+                offsets.append(-d)
+
+            for offset in offsets:
+                cand_date = req.preferred_date + timedelta(days=offset)
+                cand_blackout = (
+                    db.query(HelperAvailabilityException)
+                    .filter(
+                        HelperAvailabilityException.user_id == helper_id,
+                        HelperAvailabilityException.exception_date == cand_date,
+                        HelperAvailabilityException.is_available == False,
+                    )
+                    .first()
+                )
+                if cand_blackout:
+                    continue
+
+                cand_day_of_week = cand_date.weekday()
+                cand_slots = [s for s in slots if s.day_of_week == cand_day_of_week]
+                if not cand_slots:
+                    continue
+
+                cand_score = 0.0
+                if req.preferred_start_time and req.preferred_end_time:
+                    req_start_m = req.preferred_start_time.hour * 60 + req.preferred_start_time.minute
+                    req_end_m = req.preferred_end_time.hour * 60 + req.preferred_end_time.minute
+                    req_duration = max(1, req_end_m - req_start_m)
+                    total_overlap_m = 0
+                    for s in cand_slots:
+                        slot_start_m = s.start_time.hour * 60 + s.start_time.minute
+                        slot_end_m = s.end_time.hour * 60 + s.end_time.minute
+                        overlap = max(0, min(slot_end_m, req_end_m) - max(slot_start_m, req_start_m))
+                        total_overlap_m += overlap
+                    if total_overlap_m <= 0:
+                        continue
+                    cand_score = min(1.0, total_overlap_m / req_duration)
+                else:
+                    cand_score = 1.0
+
+                if cand_score > 0:
+                    penalty = max(0.5, 1.0 - (0.10 * abs(offset)))
+                    discounted_score = round(cand_score * penalty, 4)
+                    rel = "day after" if offset == 1 else ("days after" if offset > 0 else ("day before" if offset == -1 else "days before"))
+                    flex_reason = f"Available within flexibility window on {cand_date.strftime('%A')} ({abs(offset)} {rel} requested date)"
+                    return discounted_score, DimensionStatusEnum.ACTIVE, flex_reason
+
+        # Return failure reason for exact date
+        if blackout:
+            return 0.0, DimensionStatusEnum.ACTIVE, f"Helper has a scheduled blackout date on {req.preferred_date}"
         if not day_slots:
             day_name = req.preferred_date.strftime("%A")
             return 0.0, DimensionStatusEnum.ACTIVE, f"Helper has no active hours on {day_name}s"
-
-        # If specific time window is provided
-        if req.preferred_start_time and req.preferred_end_time:
-            req_start_m = req.preferred_start_time.hour * 60 + req.preferred_start_time.minute
-            req_end_m = req.preferred_end_time.hour * 60 + req.preferred_end_time.minute
-            req_duration = max(1, req_end_m - req_start_m)
-
-            total_overlap_m = 0
-            for s in day_slots:
-                slot_start_m = s.start_time.hour * 60 + s.start_time.minute
-                slot_end_m = s.end_time.hour * 60 + s.end_time.minute
-                overlap = max(0, min(slot_end_m, req_end_m) - max(slot_start_m, req_start_m))
-                total_overlap_m += overlap
-
-            score = min(1.0, total_overlap_m / req_duration)
-            if score >= 0.95:
-                reason = f"Full schedule match on {req.preferred_date.strftime('%A')} ({req.preferred_start_time.strftime('%H:%M')}-{req.preferred_end_time.strftime('%H:%M')})"
-            elif score > 0:
-                reason = f"Partial schedule overlap ({int(score * 100)}%) on {req.preferred_date.strftime('%A')}"
-            else:
-                reason = f"No schedule overlap with requested hours on {req.preferred_date.strftime('%A')}"
-            return round(score, 4), DimensionStatusEnum.ACTIVE, reason
-        else:
-            # Date specified without exact hours -> matching slots exist on that day
-            day_name = req.preferred_date.strftime("%A")
-            return 1.0, DimensionStatusEnum.ACTIVE, f"Active schedule available on {day_name} ({len(day_slots)} slots)"
+        return 0.0, DimensionStatusEnum.ACTIVE, f"No schedule overlap with requested hours on {req.preferred_date.strftime('%A')}"
 
     # Scenario B: Preferred days of week specified
     if req.preferred_days_of_week and isinstance(req.preferred_days_of_week, list) and len(req.preferred_days_of_week) > 0:

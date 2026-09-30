@@ -33,19 +33,21 @@ export interface HelperAvailabilitySlotCreate {
 
 export interface PublicAvailabilityProfile {
   user_id: string;
-  timezone: string;
-  max_weekly_hours?: number | null;
-  max_monthly_sessions?: number | null;
+  helper_timezone: string;
+  timezone?: string;
+  max_weekly_sessions?: number | null;
+  accepting_sessions?: boolean;
   current_status: AvailabilityStatus;
   availability_badge: string;
-  available_days: number[];
-  available_time_ranges: string[];
+  available_days?: number[];
+  available_time_ranges?: string[];
   detailed_slots?: HelperAvailabilitySlot[];
 }
 
 export interface UpdateCapacityPayload {
+  helper_timezone?: string;
   timezone?: string;
-  max_weekly_hours?: number | null;
-  max_monthly_sessions?: number | null;
-  is_accepting_sessions?: boolean;
+  max_weekly_sessions?: number | null;
+  accepting_sessions?: boolean;
 }
+
