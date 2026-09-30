@@ -1,61 +1,83 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { requestsService } from "@/services/requests";
+import { intelligenceService } from "@/services/intelligence";
+import { createConnection, listConnections } from "@/services/connections";
 import { useToast } from "@/hooks/useToast";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Textarea } from "@/components/ui/Textarea";
 import { Modal } from "@/components/ui/Modal";
-import { AreaMap } from "@/components/map/AreaMap";
-import { RequestCommunityKnowledge } from "@/components/community/RequestCommunityKnowledge";
+import { NeedProgressTracker } from "@/components/intelligence/NeedProgressTracker";
+import { NeedIntelligenceCard } from "@/components/intelligence/NeedIntelligenceCard";
+import { SavedResourcesList } from "@/components/intelligence/SavedResourcesList";
+import { ResolveRequestModal } from "@/components/intelligence/ResolveRequestModal";
 import { formatDate } from "@/lib/utils";
 import type { NewcomerRequest } from "@/types/request";
+import type {
+  NeedStatus,
+  RequestIntelligenceResponse,
+  SavedResourceCreate,
+} from "@/types/intelligence";
+import type { ConnectionItem } from "@/types/connection";
 import {
   Sparkles,
   MapPin,
   Edit3,
   Trash2,
   ArrowLeft,
-  CheckCircle2,
   Clock,
-  Layers,
+  MessageSquare,
+  Sliders,
+  Send,
 } from "lucide-react";
 
 export function RequestDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [request, setRequest] = useState<NewcomerRequest | null>(null);
+  const [intelligence, setIntelligence] = useState<RequestIntelligenceResponse | null>(null);
+  const [connections, setConnections] = useState<ConnectionItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState("");
-  const [editStatus, setEditStatus] = useState("OPEN");
   const [isUpdating, setIsUpdating] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showResolveModal, setShowResolveModal] = useState(false);
+
+  // Connect helper modal state
+  const [connectingHelper, setConnectingHelper] = useState<{ id: string; name: string } | null>(null);
+  const [initialMessage, setInitialMessage] = useState("");
+  const [isConnecting, setIsConnecting] = useState(false);
 
   const navigate = useNavigate();
   const { success: toastSuccess, error: toastError } = useToast();
 
-  const loadRequest = () => {
+  const loadData = useCallback(async () => {
     if (!id) return;
     setIsLoading(true);
-    requestsService
-      .getRequestById(id)
-      .then((data) => {
-        setRequest(data);
-        setEditText(data.raw_text);
-        setEditStatus(data.status);
-      })
-      .catch(() => {
-        toastError("Could not find this request.");
-        navigate("/requests");
-      })
-      .finally(() => setIsLoading(false));
-  };
+    try {
+      const [reqData, intelData, connsData] = await Promise.all([
+        requestsService.getRequestById(id),
+        intelligenceService.getIntelligence(id).catch(() => null),
+        listConnections({ role: "requester" }).catch(() => ({ connections: [] })),
+      ]);
+      setRequest(reqData);
+      setEditText(reqData.raw_text);
+      setIntelligence(intelData);
+      setConnections(
+        (connsData.connections || []).filter((c) => c.request_id === id)
+      );
+    } catch {
+      toastError("Could not find this request.");
+      navigate("/requests");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [id, navigate, toastError]);
 
   useEffect(() => {
-    loadRequest();
-  }, [id]);
+    loadData();
+  }, [loadData]);
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,11 +87,13 @@ export function RequestDetailPage() {
     try {
       const updated = await requestsService.updateRequest(id, {
         text: editText.trim(),
-        status: editStatus,
       });
       setRequest(updated);
       setIsEditing(false);
       toastSuccess("Request updated and re-parsed by backend NLP engine!", "Updated");
+      // Reload intelligence
+      const intelData = await intelligenceService.getIntelligence(id);
+      setIntelligence(intelData);
     } catch {
       toastError("Failed to update request.");
     } finally {
@@ -79,34 +103,124 @@ export function RequestDetailPage() {
 
   const handleDelete = async () => {
     if (!id) return;
-    setIsDeleting(true);
     try {
       await requestsService.deleteRequest(id);
       toastSuccess("Request deleted.");
       navigate("/requests");
     } catch {
       toastError("Failed to delete request.");
+    }
+  };
+
+  const handleUpdateNeedProgress = async (
+    category: string,
+    newStatus: NeedStatus,
+    notes?: string
+  ) => {
+    if (!id) return;
+    try {
+      const updatedIntel = await intelligenceService.updateNeedProgress(id, {
+        category,
+        status: newStatus,
+        notes,
+      });
+      setIntelligence(updatedIntel);
+      if (request) {
+        setRequest({ ...request, status: updatedIntel.status });
+      }
+      toastSuccess(`Need '${category}' updated to ${newStatus}.`, "Progress Saved");
+    } catch {
+      toastError("Failed to update need progress.");
+    }
+  };
+
+  const handleResolveOverallRequest = async (summary: string) => {
+    if (!id) return;
+    try {
+      const updatedIntel = await intelligenceService.resolveRequest(id, summary);
+      setIntelligence(updatedIntel);
+      if (request) {
+        setRequest({ ...request, status: "RESOLVED" });
+      }
+      toastSuccess("Request successfully marked as RESOLVED!", "Resolved");
+    } catch {
+      toastError("Failed to resolve request.");
+    }
+  };
+
+  const handleSaveResource = async (res: SavedResourceCreate) => {
+    if (!id) return;
+    try {
+      await intelligenceService.saveResource(id, res);
+      const updatedIntel = await intelligenceService.getIntelligence(id);
+      setIntelligence(updatedIntel);
+      toastSuccess(`Saved '${res.name}' to this request.`, "Bookmarked");
+    } catch {
+      toastError("Failed to save resource.");
+    }
+  };
+
+  const handleDeleteSavedResource = async (placeId: string) => {
+    if (!id) return;
+    try {
+      await intelligenceService.deleteSavedResource(id, placeId);
+      const updatedIntel = await intelligenceService.getIntelligence(id);
+      setIntelligence(updatedIntel);
+      toastSuccess("Removed bookmark from request.", "Bookmark Removed");
+    } catch {
+      toastError("Failed to remove bookmark.");
+    }
+  };
+
+  const handleSendConnection = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!id || !connectingHelper) return;
+    setIsConnecting(true);
+    try {
+      await createConnection({
+        request_id: id,
+        helper_id: connectingHelper.id,
+        initial_message: initialMessage.trim() || undefined,
+      });
+      toastSuccess(`Connection request sent to ${connectingHelper.name}!`, "Connected");
+      setConnectingHelper(null);
+      setInitialMessage("");
+      loadData();
+    } catch {
+      toastError("Failed to send connection request.");
     } finally {
-      setIsDeleting(false);
+      setIsConnecting(false);
     }
   };
 
   if (isLoading || !request) {
     return (
       <div className="max-w-4xl mx-auto py-12 text-center text-sm text-gray-500">
-        Loading request details...
+        Loading request intelligence...
       </div>
     );
   }
 
-  const needs = request.extracted_requirements?.needs || [];
+  const savedPlaceIds = new Set(intelligence?.saved_resources.map((r) => r.place_id) || []);
   const preferences = request.preferences || [];
   const userContext = request.user_context || [];
 
+  const getStatusBadgeVariant = (st: string) => {
+    switch (st) {
+      case "RESOLVED":
+        return "success";
+      case "PARTIALLY_RESOLVED":
+      case "IN_PROGRESS":
+        return "primary";
+      default:
+        return "muted";
+    }
+  };
+
   return (
-    <div className="space-y-8 max-w-4xl mx-auto py-2 sm:py-6">
-      {/* Back button and Meta */}
-      <div className="flex items-center justify-between">
+    <div className="space-y-8 max-w-5xl mx-auto py-2 sm:py-6">
+      {/* Top Navigation & Controls */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <Link
           to="/requests"
           className="text-xs font-semibold text-brand-primary dark:text-teal-400 flex items-center gap-1 hover:underline min-h-[44px]"
@@ -114,7 +228,17 @@ export function RequestDetailPage() {
           <ArrowLeft className="w-4 h-4" /> Back to Requests
         </Link>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Link to={`/results/${request.id}`}>
+            <Button
+              variant="outline"
+              size="sm"
+              leftIcon={<Sliders className="w-3.5 h-3.5" />}
+              title="Open full hybrid candidate matcher with custom weight sliders and radar charts"
+            >
+              Advanced Matcher
+            </Button>
+          </Link>
           <Button
             variant="outline"
             size="sm"
@@ -135,253 +259,276 @@ export function RequestDetailPage() {
         </div>
       </div>
 
-      {/* Main Request & Understanding Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left: Original Request & Edit */}
-        <div className="lg:col-span-2 space-y-6">
-          <Card className="space-y-5">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5" />
-                Submitted {formatDate(request.created_at)}
-              </span>
-              <Badge variant={request.status === "MATCHED" ? "success" : "primary"}>
-                {request.status}
-              </Badge>
-            </div>
-
-            {isEditing ? (
-              <form onSubmit={handleUpdate} className="space-y-4 pt-2">
-                <Textarea
-                  label="Update Request Text (triggers automatic backend NLP re-parse)"
-                  value={editText}
-                  onChange={(e) => setEditText(e.target.value)}
-                  rows={4}
-                  required
-                />
-
-                <div className="space-y-1.5">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">
-                    Status
-                  </label>
-                  <select
-                    value={editStatus}
-                    onChange={(e) => setEditStatus(e.target.value)}
-                    className="w-full rounded-input border border-gray-300 dark:border-brand-dark-border bg-white dark:bg-brand-dark-card text-gray-900 dark:text-gray-100 p-2.5 text-sm"
-                  >
-                    <option value="OPEN">OPEN</option>
-                    <option value="MATCHED">MATCHED</option>
-                    <option value="CLOSED">CLOSED</option>
-                  </select>
-                </div>
-
-                <div className="flex justify-end gap-2 pt-2">
-                  <Button type="button" variant="outline" onClick={() => setIsEditing(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" isLoading={isUpdating}>
-                    Save & Re-parse
-                  </Button>
-                </div>
-              </form>
-            ) : (
-              <div>
-                <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-                  Original User Request
-                </h2>
-                <p className="text-lg font-medium text-gray-900 dark:text-gray-100 leading-relaxed italic bg-gray-50/70 dark:bg-brand-dark-muted/20 p-4 rounded-xl border border-gray-200/60 dark:border-brand-dark-border">
-                  "{request.raw_text}"
-                </p>
-              </div>
-            )}
-          </Card>
-
-          {/* Structured Intelligence Section */}
-          <Card className="space-y-5">
-            <div className="flex items-center gap-2 text-brand-primary dark:text-teal-300">
-              <Sparkles className="w-5 h-5 text-amber-500" />
-              <h3 className="text-lg font-bold font-heading text-gray-900 dark:text-gray-100">
-                What NEST Extracted
-              </h3>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-              {/* Target Location */}
-              <div className="p-3.5 rounded-xl bg-teal-50/50 dark:bg-brand-dark-muted/20 border border-teal-100 dark:border-brand-dark-border space-y-1">
-                <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                  <MapPin className="w-3.5 h-3.5 text-brand-primary" />
-                  Target Area & City
-                </span>
-                <p className="font-bold text-gray-900 dark:text-gray-100 text-base">
-                  {[request.area, request.city].filter(Boolean).join(", ") || "City-wide"}
-                </p>
-                {request.state && (
-                  <p className="text-xs text-gray-500">{request.state}, {request.country || "India"}</p>
-                )}
-              </div>
-
-              {/* Target Budget */}
-              <div className="p-3.5 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/40 space-y-1">
-                <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">
-                  Target Budget
-                </span>
-                <p className="font-bold text-amber-900 dark:text-amber-200 text-base">
-                  {request.budget_amount != null
-                    ? `${request.budget_operator === "<=" ? "Under " : ""}₹${request.budget_amount.toLocaleString("en-IN")}${request.budget_period ? ` / ${request.budget_period}` : ""}`
-                    : "Flexible / Not specified"}
-                </p>
-              </div>
-            </div>
-
-            {/* Extracted Needs */}
-            <div className="space-y-2">
-              <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Categorized Needs ({needs.length})
-              </span>
-              <div className="flex flex-wrap gap-2">
-                {needs.length === 0 ? (
-                  <span className="text-xs text-gray-400 italic">General assistance</span>
-                ) : (
-                  needs.map((n, idx) => (
-                    <Badge key={idx} variant="primary" size="md" icon="🏠">
-                      <span>{n.item}</span>
-                      <span className="text-[10px] text-gray-400">({n.category})</span>
-                    </Badge>
-                  ))
-                )}
-              </div>
-            </div>
-
-            {/* Preferences */}
-            {preferences.length > 0 && (
-              <div className="space-y-2 pt-2 border-t border-gray-100 dark:border-brand-dark-border/60">
-                <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Dietary & Lifestyle Preferences
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  {preferences.map((p, idx) => (
-                    <Badge key={idx} variant="success" size="md" icon="🌱">
-                      {p}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* User Context */}
-            {userContext.length > 0 && (
-              <div className="space-y-2 pt-2 border-t border-gray-100 dark:border-brand-dark-border/60">
-                <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Situation & Purpose
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  {userContext.map((c, idx) => (
-                    <Badge key={idx} variant="muted" size="md" icon="💼">
-                      {c}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="pt-2 text-right">
-              <span className="text-[11px] text-gray-400 font-mono">
-                Parser: {request.extraction_method}
-              </span>
-            </div>
-          </Card>
-        </div>
-
-        {/* Right Sidebar: Approximate Map & Matching Status */}
-        <div className="space-y-6">
-          <AreaMap
-            areaName={request.area || undefined}
-            cityName={request.city || undefined}
-          />
-
-          <Card className="p-5 space-y-3 bg-teal-50/40 dark:bg-brand-dark-muted/20 border-teal-100 dark:border-brand-dark-border">
-            <div className="flex items-center gap-2 text-brand-primary dark:text-teal-300 font-semibold text-sm">
-              <Layers className="w-4 h-4" />
-              <span>Semantic Embedding</span>
-            </div>
-            <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
-              This request is vectorized into 384 dimensions on PostgreSQL 16 using all-MiniLM-L6-v2 and ready for Phase 5 hybrid cosine scoring.
-            </p>
-          </Card>
-
-          <RequestCommunityKnowledge
-            requestId={request.id}
-            city={request.city}
-            area={request.area}
-          />
-        </div>
-      </div>
-
-      {/* Phase 5 Live Hybrid Matching Section */}
-      <section className="pt-6 border-t border-gray-200 dark:border-brand-dark-border space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h3 className="text-xl font-bold font-heading text-gray-900 dark:text-gray-100 flex items-center gap-2">
-              <CheckCircle2 className="w-5 h-5 text-brand-primary" />
-              Recommended Community Helpers
-            </h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              PostgreSQL pgvector cosine scoring, location proximity decay, and skill compatibility.
-            </p>
-          </div>
-          <Link to={`/results/${request.id}`}>
-            <Button
-              variant="primary"
-              size="md"
-              leftIcon={<Sparkles className="w-4 h-4 text-amber-300" />}
-            >
-              View Hybrid Match Results
-            </Button>
-          </Link>
-        </div>
-
-        <Card className="p-6 bg-teal-50/30 dark:bg-brand-dark-muted/10 border-teal-100 dark:border-brand-dark-border flex flex-col sm:flex-row items-center justify-between gap-4">
+      {/* Main Request Summary & Status Banner */}
+      <Card className="p-6 space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 border-b border-gray-100 dark:border-brand-dark-border/60 pb-4">
           <div className="space-y-1">
-            <h4 className="font-bold text-gray-900 dark:text-gray-100 text-sm">
-              Real-Time AI Candidate Matching Ready
-            </h4>
-            <p className="text-xs text-gray-600 dark:text-gray-300">
-              Explore candidates ranked by 384-dimensional vector similarity, adjust multi-factor weight sliders, and inspect radar scores.
-            </p>
+            <span className="text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5" />
+              Submitted {formatDate(request.created_at)}
+            </span>
+            <h1 className="text-xl sm:text-2xl font-bold font-heading text-gray-900 dark:text-gray-100">
+              Request Intelligence Hub
+            </h1>
           </div>
-          <Link to={`/results/${request.id}`}>
-            <Button variant="outline" size="sm">
-              Explore Candidates →
-            </Button>
-          </Link>
-        </Card>
-      </section>
-
-      {/* Delete Modal */}
-      <Modal
-        isOpen={showDeleteModal}
-        onClose={() => setShowDeleteModal(false)}
-        title="Delete Request"
-        description="Permanently delete this request from the NEST database? This action cannot be undone."
-      >
-        <div className="flex justify-end gap-3 pt-4">
-          <Button
-            variant="outline"
-            onClick={() => setShowDeleteModal(false)}
-            disabled={isDeleting}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="danger"
-            isLoading={isDeleting}
-            onClick={handleDelete}
-            leftIcon={<Trash2 className="w-4 h-4" />}
-          >
-            Delete Permanently
-          </Button>
+          <div className="flex items-center gap-2">
+            <Badge variant={getStatusBadgeVariant(intelligence?.status || request.status)} size="md">
+              {intelligence?.status || request.status}
+            </Badge>
+          </div>
         </div>
-      </Modal>
+
+        {/* Edit or Display Request Text */}
+        {isEditing ? (
+          <form onSubmit={handleUpdate} className="space-y-4">
+            <textarea
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              rows={3}
+              className="w-full text-sm p-3 rounded-xl border border-gray-200 dark:border-brand-dark-border bg-white dark:bg-brand-dark-surface focus:outline-none focus:ring-1 focus:ring-brand-primary"
+            />
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="ghost" size="sm" onClick={() => setIsEditing(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" size="sm" disabled={isUpdating}>
+                {isUpdating ? "Saving..." : "Update Request"}
+              </Button>
+            </div>
+          </form>
+        ) : (
+          <p className="text-sm sm:text-base text-gray-800 dark:text-gray-200 leading-relaxed font-medium">
+            "{request.raw_text}"
+          </p>
+        )}
+
+        {/* Request Context Metadata */}
+        <div className="flex flex-wrap gap-2 pt-1 text-xs">
+          {request.city && (
+            <span className="flex items-center gap-1 bg-gray-50 dark:bg-brand-dark-muted px-2.5 py-1 rounded-lg border border-gray-200 dark:border-brand-dark-border font-medium text-gray-700 dark:text-gray-300">
+              <MapPin className="w-3.5 h-3.5 text-red-500" />
+              {request.area ? `${request.area}, ` : ""}{request.city}
+            </span>
+          )}
+          {request.budget_amount && (
+            <span className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 font-semibold">
+              Budget: {request.budget_operator || "≤"} ₹{request.budget_amount.toLocaleString("en-IN")} {request.budget_period ? `/${request.budget_period}` : ""}
+            </span>
+          )}
+          {preferences.map((p, idx) => (
+            <Badge key={idx} variant="success" size="sm" icon="🌱">
+              {p}
+            </Badge>
+          ))}
+          {userContext.map((c, idx) => (
+            <Badge key={idx} variant="muted" size="sm" icon="💼">
+              {c}
+            </Badge>
+          ))}
+        </div>
+      </Card>
+
+      {/* Deterministic Action Plan Banner */}
+      {intelligence && intelligence.action_plan.length > 0 && (
+        <Card className="p-5 bg-teal-50/50 dark:bg-brand-dark-muted/20 border-teal-100 dark:border-brand-dark-border space-y-3">
+          <div className="flex items-center gap-2 text-brand-primary dark:text-teal-300 font-bold text-sm">
+            <Sparkles className="w-4 h-4 text-amber-500" />
+            <span>Recommended Immediate Next Steps</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {intelligence.action_plan.map((step, idx) => (
+              <div
+                key={idx}
+                className="p-3 rounded-xl bg-white dark:bg-brand-dark-surface border border-teal-100 dark:border-brand-dark-border/60 text-xs text-gray-700 dark:text-gray-300 flex items-start gap-2 shadow-2xs"
+              >
+                <span className="w-5 h-5 rounded-full bg-teal-100 dark:bg-teal-900/60 text-brand-primary dark:text-teal-300 flex items-center justify-center font-bold text-[10px] shrink-0">
+                  {idx + 1}
+                </span>
+                <span className="leading-snug">{step}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Need Resolution Progress Tracker */}
+      {intelligence && (
+        <NeedProgressTracker
+          bundles={intelligence.needs}
+          progressPercentage={intelligence.progress_percentage}
+          resolvedNeeds={intelligence.resolved_needs}
+          totalNeeds={intelligence.total_needs}
+          onUpdateStatus={handleUpdateNeedProgress}
+          onMarkOverallResolved={() => setShowResolveModal(true)}
+          isOverallResolved={intelligence.status === "RESOLVED"}
+        />
+      )}
+
+      {/* Active Connections on this Request */}
+      {connections.length > 0 && (
+        <Card className="p-5 space-y-3 border border-gray-200 dark:border-brand-dark-border">
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+              <MessageSquare className="w-4 h-4 text-brand-primary" />
+              Active Interactions for this Request ({connections.length})
+            </h4>
+            <Link to="/connections" className="text-xs text-brand-primary dark:text-teal-400 font-semibold hover:underline">
+              View All Connections
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            {connections.map((c) => (
+              <div
+                key={c.id}
+                className="p-3 rounded-xl border border-gray-100 dark:border-brand-dark-border bg-gray-50/50 dark:bg-brand-dark-muted/20 space-y-2"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-gray-900 dark:text-gray-100">
+                    {c.helper?.name || c.requester?.name || "Helper"}
+                  </span>
+                  <Badge variant={c.status === "ACCEPTED" ? "success" : "muted"} size="sm">
+                    {c.status}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-[10px] text-gray-400">
+                    Connected {formatDate(c.created_at)}
+                  </span>
+                  {c.status === "ACCEPTED" && (
+                    <Link to={`/connections`} className="text-xs text-brand-primary dark:text-teal-400 font-semibold hover:underline">
+                      Chat →
+                    </Link>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Need-by-Need Action Bundles */}
+      {intelligence && intelligence.needs.length > 0 ? (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold font-heading text-gray-900 dark:text-gray-100">
+                Actionable Need Bundles
+              </h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Verified people, community guides, and local places aggregated per requirement.
+              </p>
+            </div>
+          </div>
+
+          {intelligence.needs.map((bundle, idx) => (
+            <NeedIntelligenceCard
+              key={idx}
+              bundle={bundle}
+              requestId={request.id}
+              savedPlaceIds={savedPlaceIds}
+              onSaveResource={handleSaveResource}
+              onConnectHelper={(helperId, helperName) =>
+                setConnectingHelper({ id: helperId, name: helperName })
+              }
+            />
+          ))}
+        </div>
+      ) : (
+        <Card className="p-8 text-center text-sm text-gray-500">
+          No structured needs extracted for this request.
+        </Card>
+      )}
+
+      {/* Bookmarked / Saved Resources Section */}
+      {intelligence && (
+        <SavedResourcesList
+          resources={intelligence.saved_resources}
+          onDeleteResource={handleDeleteSavedResource}
+        />
+      )}
+
+      {/* Connect Helper Modal */}
+      {connectingHelper && (
+        <Modal
+          isOpen={true}
+          onClose={() => setConnectingHelper(null)}
+          title={`Connect with ${connectingHelper.name}`}
+        >
+          <form onSubmit={handleSendConnection} className="space-y-4">
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Send an introduction message to {connectingHelper.name} regarding your request. Strangers can only chat once a connection request is accepted.
+            </p>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                Initial Message
+              </label>
+              <textarea
+                value={initialMessage}
+                onChange={(e) => setInitialMessage(e.target.value)}
+                placeholder={`Hi ${connectingHelper.name.split(" ")[0]}, I saw your profile on NEST and am looking for local guidance with my request...`}
+                rows={3}
+                required
+                className="w-full text-xs p-3 rounded-xl border border-gray-200 dark:border-brand-dark-border bg-white dark:bg-brand-dark-surface focus:outline-none focus:ring-1 focus:ring-brand-primary"
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setConnectingHelper(null)}
+                disabled={isConnecting}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                disabled={isConnecting}
+                leftIcon={<Send className="w-3.5 h-3.5" />}
+              >
+                {isConnecting ? "Sending..." : "Send Request"}
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Mark Resolved Modal */}
+      <ResolveRequestModal
+        isOpen={showResolveModal}
+        onClose={() => setShowResolveModal(false)}
+        onConfirm={handleResolveOverallRequest}
+      />
+
+      {/* Delete Request Modal */}
+      {showDeleteModal && (
+        <Modal
+          isOpen={true}
+          onClose={() => setShowDeleteModal(false)}
+          title="Delete Request"
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              Are you sure you want to delete this request? This will cascade and delete associated intelligence records and bookmarks.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setShowDeleteModal(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                className="bg-brand-danger hover:bg-red-700 text-white"
+                onClick={handleDelete}
+              >
+                Delete Request
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

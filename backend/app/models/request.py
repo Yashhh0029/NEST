@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, DateTime, Float, ForeignKey, String, Text
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 from app.db.database import Base
@@ -42,6 +42,9 @@ class Request(Base):
     extracted_requirements = Column(JSONB, nullable=True, default=dict)
     preferences = Column(JSONB, nullable=True, default=list)
     user_context = Column(JSONB, nullable=True, default=list)
+    need_progress = Column(JSONB, nullable=False, default=dict)
+    resolution_summary = Column(Text, nullable=True)
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
     extraction_method = Column(
         String(100),
         nullable=False,
@@ -67,6 +70,59 @@ class Request(Base):
         uselist=False,
         cascade="all, delete-orphan",
     )
+    saved_resources = relationship(
+        "RequestSavedResource",
+        back_populates="request",
+        cascade="all, delete-orphan",
+        order_by="desc(RequestSavedResource.created_at)",
+    )
 
     def __repr__(self) -> str:
-        return f"<Request id={self.id} user_id={self.user_id} city={self.city} area={self.area}>"
+        return f"<Request id={self.id} user_id={self.user_id} city={self.city} area={self.area} status={self.status}>"
+
+
+class RequestSavedResource(Base):
+    __tablename__ = "request_saved_resources"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        index=True,
+        nullable=False,
+    )
+    request_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("requests.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    place_id = Column(String(255), nullable=False)
+    name = Column(String(255), nullable=False)
+    category = Column(String(100), nullable=False)
+    formatted_address = Column(Text, nullable=True)
+    rating = Column(Float, nullable=True)
+    user_ratings_total = Column(Integer, nullable=True)
+    # Public place coordinates only from Google Places (NEVER private home GPS)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint("request_id", "place_id", name="uq_request_saved_place"),
+    )
+
+    request = relationship("Request", back_populates="saved_resources")
+    user = relationship("User", foreign_keys=[user_id])
+

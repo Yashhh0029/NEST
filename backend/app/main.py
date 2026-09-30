@@ -14,6 +14,7 @@ from app.api.resources import router as resources_router
 from app.api.reviews import router as reviews_router
 from app.api.safety import router as safety_router
 from app.api.community import router as community_router
+from app.api.intelligence import router as intelligence_router
 from app.api.ws_chat import router as ws_router
 from app.core.config import settings
 from app.db.database import get_db
@@ -50,6 +51,7 @@ app.include_router(reviews_router, prefix=settings.API_V1_STR)
 app.include_router(resources_router, prefix=settings.API_V1_STR)
 app.include_router(safety_router, prefix=settings.API_V1_STR)
 app.include_router(community_router, prefix=settings.API_V1_STR)
+app.include_router(intelligence_router, prefix=settings.API_V1_STR)
 app.include_router(ws_router)
 
 

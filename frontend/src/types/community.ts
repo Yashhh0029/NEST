@@ -91,8 +91,21 @@ export interface RequestCommunityKnowledgeItem {
   accepted_or_top_answer?: CommunityAnswer | null;
 }
 
+export interface CommunitySearchItem {
+  question: CommunityQuestion;
+  similarity_score: number;
+  top_answer?: CommunityAnswer | null;
+}
+
+export interface CommunitySearchResponse {
+  query: string;
+  total: number;
+  results: CommunitySearchItem[];
+}
+
 export interface CommunityForRequestResponse {
   request_id: string;
   total: number;
   items: RequestCommunityKnowledgeItem[];
 }
+
