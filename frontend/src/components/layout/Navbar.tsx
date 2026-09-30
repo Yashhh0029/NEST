@@ -8,6 +8,7 @@ import {
   User,
   FileText,
   Users,
+  Calendar,
   MapPin,
   ShieldAlert,
   MessageSquare,
@@ -68,6 +69,13 @@ export function Navbar() {
                 >
                   <Users className="w-4 h-4 text-brand-primary" />
                   Connections
+                </Link>
+                <Link
+                  to="/sessions"
+                  className="px-3.5 py-2 text-sm font-medium rounded-xl text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-brand-dark-card transition-colors flex items-center gap-1.5"
+                >
+                  <Calendar className="w-4 h-4 text-brand-primary" />
+                  Sessions
                 </Link>
                 <Link
                   to="/resources"

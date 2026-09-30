@@ -30,6 +30,13 @@ def create_user_request(db: Session, user: User, req_in: RequestCreate) -> Reque
         preferences=parsed.preferences,
         user_context=parsed.user_context,
         extraction_method=parsed.extraction_method,
+        preferred_date=req_in.preferred_date,
+        preferred_start_time=req_in.preferred_start_time,
+        preferred_end_time=req_in.preferred_end_time,
+        requester_timezone=req_in.requester_timezone or "Asia/Kolkata",
+        is_time_flexible=req_in.is_time_flexible if req_in.is_time_flexible is not None else True,
+        flexibility_window_days=req_in.flexibility_window_days if req_in.flexibility_window_days is not None else 3,
+        preferred_days_of_week=req_in.preferred_days_of_week if req_in.preferred_days_of_week is not None else [],
     )
     db.add(new_request)
     db.commit()
@@ -107,6 +114,21 @@ def update_user_request(
 
     if update_in.status is not None:
         req.status = update_in.status.upper()
+
+    if update_in.preferred_date is not None:
+        req.preferred_date = update_in.preferred_date
+    if update_in.preferred_start_time is not None:
+        req.preferred_start_time = update_in.preferred_start_time
+    if update_in.preferred_end_time is not None:
+        req.preferred_end_time = update_in.preferred_end_time
+    if update_in.requester_timezone is not None:
+        req.requester_timezone = update_in.requester_timezone
+    if update_in.is_time_flexible is not None:
+        req.is_time_flexible = update_in.is_time_flexible
+    if update_in.flexibility_window_days is not None:
+        req.flexibility_window_days = update_in.flexibility_window_days
+    if update_in.preferred_days_of_week is not None:
+        req.preferred_days_of_week = update_in.preferred_days_of_week
 
     db.commit()
     db.refresh(req)

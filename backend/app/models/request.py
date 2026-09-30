@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, String, Text, Time, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 from app.db.database import Base
@@ -37,6 +37,15 @@ class Request(Base):
     budget_currency = Column(String(20), nullable=True, default="INR")
     budget_period = Column(String(50), nullable=True)  # "monthly", "weekly", "daily", "yearly", or None
     budget_operator = Column(String(20), nullable=True)  # "<=", ">=", "==", "~="
+
+    # Structured timing preferences (Phase 14)
+    preferred_date = Column(Date, nullable=True)
+    preferred_start_time = Column(Time, nullable=True)
+    preferred_end_time = Column(Time, nullable=True)
+    requester_timezone = Column(String(50), nullable=False, default="Asia/Kolkata")
+    is_time_flexible = Column(Boolean, nullable=False, default=True)
+    flexibility_window_days = Column(Integer, nullable=True, default=3)
+    preferred_days_of_week = Column(JSONB, nullable=True, default=list)
 
     # Structured payloads and explanations
     extracted_requirements = Column(JSONB, nullable=True, default=dict)

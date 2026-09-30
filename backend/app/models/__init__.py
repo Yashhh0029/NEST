@@ -1,3 +1,7 @@
+from app.models.availability import (
+    HelperAvailabilityException,
+    HelperAvailabilitySlot,
+)
 from app.models.community import (
     CommunityAnswer,
     CommunityAnswerVote,
@@ -11,7 +15,7 @@ from app.models.conversation import Conversation, Message
 from app.models.embedding import Embedding
 from app.models.location import Location
 from app.models.profile import Profile
-from app.models.request import Request
+from app.models.request import Request, RequestSavedResource
 from app.models.request_location import RequestLocation
 from app.models.review import Review
 from app.models.safety import (
@@ -22,10 +26,16 @@ from app.models.safety import (
     ReportReason,
     ReportStatus,
 )
+from app.models.session import (
+    AssistanceSession,
+    SessionModality,
+    SessionStatus,
+)
 from app.models.skill import Skill, UserSkill
 from app.models.user import User, UserRole
 
 __all__ = [
+    "AssistanceSession",
     "Block",
     "CommunityAnswer",
     "CommunityAnswerVote",
@@ -34,6 +44,8 @@ __all__ = [
     "ConnectionStatus",
     "Conversation",
     "Embedding",
+    "HelperAvailabilityException",
+    "HelperAvailabilitySlot",
     "Location",
     "Message",
     "ModerationAction",
@@ -46,11 +58,13 @@ __all__ = [
     "ReportStatus",
     "Request",
     "RequestLocation",
+    "RequestSavedResource",
     "Review",
+    "SessionModality",
+    "SessionStatus",
     "Skill",
     "User",
     "UserRole",
     "UserSkill",
     "VoteType",
 ]
-

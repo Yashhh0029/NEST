@@ -23,6 +23,11 @@ from app.schemas.matching import (
     TargetLocationSummary,
     WeightsSummary,
 )
+from app.models.availability import (
+    HelperAvailabilityException,
+    HelperAvailabilitySlot,
+)
+from app.services.availability_service import get_derived_capacity_status
 from app.services.embedding_repository import (
     sync_user_profile_embedding,
     sync_user_request_embedding,
@@ -233,6 +238,108 @@ def generate_match_reasons(
         )
 
     return reasons
+
+
+def calculate_availability_score(
+    db: Session,
+    helper_id: uuid.UUID,
+    req: Request,
+    cand_profile: Optional[Profile],
+) -> Tuple[Optional[float], DimensionStatusEnum, Optional[str]]:
+    """
+    Computes deterministic availability score in [0.0, 1.0] based on helper schedule,
+    derived capacity, blackout dates, and newcomer request timing preferences.
+    """
+    # 1. Check if helper has configured any active recurring slots
+    slots = (
+        db.query(HelperAvailabilitySlot)
+        .filter(
+            HelperAvailabilitySlot.user_id == helper_id,
+            HelperAvailabilitySlot.is_active == True,
+        )
+        .all()
+    )
+    if not slots:
+        return None, DimensionStatusEnum.UNAVAILABLE, "Availability schedule not published"
+
+    # 2. Check derived capacity
+    cap_status, active_count = get_derived_capacity_status(db, helper_id, cand_profile)
+    if cap_status == "NOT_ACCEPTING":
+        return 0.0, DimensionStatusEnum.ACTIVE, "Helper is currently not accepting new assistance sessions"
+    if cap_status == "AT_CAPACITY":
+        max_s = cand_profile.max_weekly_sessions if cand_profile else 3
+        return 0.0, DimensionStatusEnum.ACTIVE, f"Helper is currently at full capacity for the week ({active_count}/{max_s} sessions)"
+
+    # 3. Request-Time Aware matching
+    # Scenario A: Newcomer specified a preferred date
+    if req.preferred_date:
+        # Check blackout exception
+        blackout = (
+            db.query(HelperAvailabilityException)
+            .filter(
+                HelperAvailabilityException.user_id == helper_id,
+                HelperAvailabilityException.exception_date == req.preferred_date,
+                HelperAvailabilityException.is_available == False,
+            )
+            .first()
+        )
+        if blackout:
+            return 0.0, DimensionStatusEnum.ACTIVE, f"Helper has a scheduled blackout date on {req.preferred_date}"
+
+        day_of_week = req.preferred_date.weekday()  # 0=Monday, 6=Sunday
+        day_slots = [s for s in slots if s.day_of_week == day_of_week]
+        if not day_slots:
+            day_name = req.preferred_date.strftime("%A")
+            return 0.0, DimensionStatusEnum.ACTIVE, f"Helper has no active hours on {day_name}s"
+
+        # If specific time window is provided
+        if req.preferred_start_time and req.preferred_end_time:
+            req_start_m = req.preferred_start_time.hour * 60 + req.preferred_start_time.minute
+            req_end_m = req.preferred_end_time.hour * 60 + req.preferred_end_time.minute
+            req_duration = max(1, req_end_m - req_start_m)
+
+            total_overlap_m = 0
+            for s in day_slots:
+                slot_start_m = s.start_time.hour * 60 + s.start_time.minute
+                slot_end_m = s.end_time.hour * 60 + s.end_time.minute
+                overlap = max(0, min(slot_end_m, req_end_m) - max(slot_start_m, req_start_m))
+                total_overlap_m += overlap
+
+            score = min(1.0, total_overlap_m / req_duration)
+            if score >= 0.95:
+                reason = f"Full schedule match on {req.preferred_date.strftime('%A')} ({req.preferred_start_time.strftime('%H:%M')}-{req.preferred_end_time.strftime('%H:%M')})"
+            elif score > 0:
+                reason = f"Partial schedule overlap ({int(score * 100)}%) on {req.preferred_date.strftime('%A')}"
+            else:
+                reason = f"No schedule overlap with requested hours on {req.preferred_date.strftime('%A')}"
+            return round(score, 4), DimensionStatusEnum.ACTIVE, reason
+        else:
+            # Date specified without exact hours -> matching slots exist on that day
+            day_name = req.preferred_date.strftime("%A")
+            return 1.0, DimensionStatusEnum.ACTIVE, f"Active schedule available on {day_name} ({len(day_slots)} slots)"
+
+    # Scenario B: Preferred days of week specified
+    if req.preferred_days_of_week and isinstance(req.preferred_days_of_week, list) and len(req.preferred_days_of_week) > 0:
+        helper_days = set(s.day_of_week for s in slots)
+        req_days = set(req.preferred_days_of_week)
+        intersection = req_days.intersection(helper_days)
+        score = len(intersection) / len(req_days)
+        if score > 0:
+            reason = f"Available on {len(intersection)} of {len(req_days)} requested preferred days"
+        else:
+            reason = "No availability matching requested preferred days of the week"
+        return round(score, 4), DimensionStatusEnum.ACTIVE, reason
+
+    # Scenario C: Flexible / Unspecified timing preference
+    # General availability readiness: helper is available and accepting sessions
+    total_weekly_minutes = sum(
+        (s.end_time.hour * 60 + s.end_time.minute) - (s.start_time.hour * 60 + s.start_time.minute)
+        for s in slots
+    )
+    total_hours = total_weekly_minutes / 60.0
+    score = max(0.7, min(1.0, 0.7 + 0.3 * (total_hours / 10.0)))
+    reason = f"Published weekly availability ({total_hours:.1f} hours across {len(slots)} slots)"
+    return round(score, 4), DimensionStatusEnum.ACTIVE, reason
 
 
 def find_candidate_matches(
@@ -458,36 +565,43 @@ def find_candidate_matches(
         from app.services.review_service import get_user_reputation
         rep_summary = get_user_reputation(db, cand_user_id)
         has_reputation = rep_summary.review_count > 0 and rep_summary.average_rating is not None
-
         if has_reputation:
             # Normalized score: 1.0 -> 0.0, 5.0 -> 1.0
             reputation_score = max(0.0, min(1.0, (rep_summary.average_rating - 1.0) / 4.0))
             reputation_status = DimensionStatusEnum.ACTIVE
-            active_weights_cand = (
-                w_input.semantic + w_input.location + w_input.experience + w_input.reputation
-            )
-            if active_weights_cand > 0:
-                final_score = (
-                    w_input.semantic * semantic_score
-                    + w_input.location * location_score
-                    + w_input.experience * experience_score
-                    + w_input.reputation * reputation_score
-                ) / active_weights_cand
-            else:
-                final_score = 0.0
         else:
-            # Cold-start behavior: honest UNAVAILABLE status, zero reviews not penalized or fabricated
             reputation_score = None
             reputation_status = DimensionStatusEnum.UNAVAILABLE
-            active_weights_cand = w_input.semantic + w_input.location + w_input.experience
-            if active_weights_cand > 0:
-                final_score = (
-                    w_input.semantic * semantic_score
-                    + w_input.location * location_score
-                    + w_input.experience * experience_score
-                ) / active_weights_cand
-            else:
-                final_score = 0.0
+
+        # Real Availability evaluation (Phase 14)
+        avail_score, avail_status, avail_reason = calculate_availability_score(
+            db=db,
+            helper_id=cand_user_id,
+            req=req,
+            cand_profile=cand_profile,
+        )
+        has_availability = avail_score is not None
+
+        # Build active weights dynamically with dynamic redistribution
+        active_weights_cand = w_input.semantic + w_input.location + w_input.experience
+        if has_reputation:
+            active_weights_cand += w_input.reputation
+        if has_availability:
+            active_weights_cand += w_input.availability
+
+        if active_weights_cand > 0:
+            numerator = (
+                w_input.semantic * semantic_score
+                + w_input.location * location_score
+                + w_input.experience * experience_score
+            )
+            if has_reputation:
+                numerator += w_input.reputation * reputation_score
+            if has_availability:
+                numerator += w_input.availability * avail_score
+            final_score = numerator / active_weights_cand
+        else:
+            final_score = 0.0
 
         if final_score < min_score:
             continue
@@ -511,6 +625,15 @@ def find_candidate_matches(
                     category="reputation",
                     title="Community Endorsement",
                     explanation=f"Rated {rep_summary.average_rating:.1f} stars across {rep_summary.review_count} verified reviews.",
+                )
+            )
+
+        if avail_reason:
+            reasons.append(
+                MatchReason(
+                    category="availability",
+                    title="Schedule Compatibility",
+                    explanation=avail_reason,
                 )
             )
 
@@ -539,7 +662,7 @@ def find_candidate_matches(
                 location_score=round(location_score, 4),
                 experience_score=round(experience_score, 4),
                 reputation_score=round(reputation_score, 4) if reputation_score is not None else None,
-                availability_score=None,
+                availability_score=round(avail_score, 4) if avail_score is not None else None,
                 final_score=round(final_score, 4),
             ),
             dimension_statuses=DimensionStatuses(
@@ -547,7 +670,7 @@ def find_candidate_matches(
                 location=DimensionStatusEnum.ACTIVE,
                 experience=DimensionStatusEnum.ACTIVE,
                 reputation=reputation_status,
-                availability=DimensionStatusEnum.UNAVAILABLE,
+                availability=avail_status,
             ),
             reasons=reasons,
             is_available_for_help=cand_profile.availability if cand_profile else None,

@@ -1,6 +1,10 @@
 """Import all models for Alembic auto-discovery."""
 
 from app.db.database import Base
+from app.models.availability import (
+    HelperAvailabilityException,
+    HelperAvailabilitySlot,
+)
 from app.models.community import (
     CommunityAnswer,
     CommunityAnswerVote,
@@ -14,12 +18,13 @@ from app.models.profile import Profile
 from app.models.request import Request, RequestSavedResource
 from app.models.request_location import RequestLocation
 from app.models.review import Review
-from app.models.safety import AdminModerationAction, Block, Report
+from app.models.safety import Block, ModerationAction, Report
+from app.models.session import AssistanceSession
 from app.models.skill import Skill, UserSkill
 from app.models.user import User, UserRole
 
 __all__ = [
-    "AdminModerationAction",
+    "AssistanceSession",
     "Base",
     "Block",
     "CommunityAnswer",
@@ -29,8 +34,11 @@ __all__ = [
     "ConnectionStatus",
     "Conversation",
     "Embedding",
+    "HelperAvailabilityException",
+    "HelperAvailabilitySlot",
     "Location",
     "Message",
+    "ModerationAction",
     "Profile",
     "Report",
     "Request",

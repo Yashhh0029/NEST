@@ -18,6 +18,8 @@ import { CommunityPage } from "@/pages/CommunityPage";
 import { QuestionDetailPage } from "@/pages/QuestionDetailPage";
 import { ResourcesPage } from "@/pages/ResourcesPage";
 import { AdminReportsPage } from "@/pages/AdminReportsPage";
+import { SessionsPage } from "@/pages/SessionsPage";
+import { AvailabilitySettingsPage } from "@/pages/AvailabilitySettingsPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { Loader2 } from "lucide-react";
 
@@ -157,6 +159,22 @@ export function AppRoutes() {
           element={
             <ProtectedRoute>
               <ConnectionsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/sessions"
+          element={
+            <ProtectedRoute>
+              <SessionsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profile/availability"
+          element={
+            <ProtectedRoute>
+              <AvailabilitySettingsPage />
             </ProtectedRoute>
           }
         />

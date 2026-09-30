@@ -20,6 +20,7 @@ class ResolutionSourceEnum(str, Enum):
     CONNECTION = "connection"
     COMMUNITY_QUESTION = "community_question"
     SAVED_RESOURCE = "saved_resource"
+    SESSION = "session"
     MANUAL = "manual"
 
 

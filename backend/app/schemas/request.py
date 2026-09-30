@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime, time
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 from app.services.request_parser import ExtractedRequest
@@ -7,6 +7,13 @@ from app.services.request_parser import ExtractedRequest
 
 class RequestCreate(BaseModel):
     text: str = Field(..., min_length=1, max_length=2000, description="Raw natural-language request from newcomer")
+    preferred_date: Optional[date] = Field(None, description="Preferred date for assistance")
+    preferred_start_time: Optional[time] = Field(None, description="Earliest preferred time of day")
+    preferred_end_time: Optional[time] = Field(None, description="Latest preferred time of day")
+    requester_timezone: Optional[str] = Field("Asia/Kolkata", max_length=50, description="IANA timezone")
+    is_time_flexible: Optional[bool] = Field(True, description="Whether timing is flexible")
+    flexibility_window_days: Optional[int] = Field(3, ge=0, le=30, description="Flexibility margin in days")
+    preferred_days_of_week: Optional[List[int]] = Field(default_factory=list, description="0=Monday ... 6=Sunday")
 
 
 class RequestParse(BaseModel):
@@ -16,6 +23,13 @@ class RequestParse(BaseModel):
 class RequestUpdate(BaseModel):
     text: Optional[str] = Field(None, min_length=1, max_length=2000, description="Updated raw request text (will trigger re-parse)")
     status: Optional[str] = Field(None, max_length=50, description="Request status e.g. OPEN, CLOSED, FULFILLED")
+    preferred_date: Optional[date] = None
+    preferred_start_time: Optional[time] = None
+    preferred_end_time: Optional[time] = None
+    requester_timezone: Optional[str] = None
+    is_time_flexible: Optional[bool] = None
+    flexibility_window_days: Optional[int] = None
+    preferred_days_of_week: Optional[List[int]] = None
 
 
 class RequestResponse(BaseModel):
@@ -32,6 +46,13 @@ class RequestResponse(BaseModel):
     budget_currency: Optional[str]
     budget_period: Optional[str]
     budget_operator: Optional[str]
+    preferred_date: Optional[date] = None
+    preferred_start_time: Optional[time] = None
+    preferred_end_time: Optional[time] = None
+    requester_timezone: str = "Asia/Kolkata"
+    is_time_flexible: bool = True
+    flexibility_window_days: Optional[int] = 3
+    preferred_days_of_week: Optional[List[int]] = []
     extracted_requirements: Optional[Dict[str, Any]]
     preferences: Optional[List[str]]
     user_context: Optional[List[str]]

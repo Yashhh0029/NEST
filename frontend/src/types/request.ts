@@ -38,11 +38,25 @@ export interface RequestParseResponse {
 
 export interface RequestCreatePayload {
   text: string;
+  preferred_date?: string | null;
+  preferred_start_time?: string | null;
+  preferred_end_time?: string | null;
+  requester_timezone?: string | null;
+  is_time_flexible?: boolean | null;
+  flexibility_window_days?: number | null;
+  preferred_days_of_week?: number[] | null;
 }
 
 export interface RequestUpdatePayload {
   text?: string;
   status?: string;
+  preferred_date?: string | null;
+  preferred_start_time?: string | null;
+  preferred_end_time?: string | null;
+  requester_timezone?: string | null;
+  is_time_flexible?: boolean | null;
+  flexibility_window_days?: number | null;
+  preferred_days_of_week?: number[] | null;
 }
 
 export interface NewcomerRequest {
@@ -70,6 +84,14 @@ export interface NewcomerRequest {
   preferences?: string[] | null;
   user_context?: string[] | null;
   extraction_method: string;
+  preferred_date?: string | null;
+  preferred_start_time?: string | null;
+  preferred_end_time?: string | null;
+  requester_timezone?: string | null;
+  is_time_flexible?: boolean | null;
+  flexibility_window_days?: number | null;
+  preferred_days_of_week?: number[] | null;
   created_at: string;
   updated_at: string;
 }
+

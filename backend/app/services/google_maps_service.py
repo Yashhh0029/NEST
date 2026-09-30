@@ -179,6 +179,91 @@ class GoogleMapsService:
             logger.warning("Google Place details lookup failed gracefully: %s", exc)
             return None
 
+    def get_venue_details(self, place_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Fetch place details specifically for in-person meeting venue validation,
+        including primaryType and types array to enforce public venue category allowlists.
+        """
+        clean_place_id = place_id.strip()
+        if not clean_place_id:
+            return None
+
+        if not self.is_configured:
+            # Deterministic development fallback when Google Maps API key is unconfigured
+            p_lower = clean_place_id.lower()
+            if "hotel" in p_lower or "lodging" in p_lower or "residence" in p_lower:
+                return {
+                    "place_id": clean_place_id,
+                    "name": "Grand Palace Hotel",
+                    "formatted_address": "Indiranagar, Bengaluru",
+                    "latitude": 12.9716,
+                    "longitude": 77.5946,
+                    "primary_type": "hotel",
+                    "types": ["lodging", "hotel", "establishment"],
+                }
+            elif "far_away" in p_lower or "60km" in p_lower:
+                return {
+                    "place_id": clean_place_id,
+                    "name": "Far Away Outstation Cafe",
+                    "formatted_address": "Mysuru Road, 60km away",
+                    "latitude": 12.4000,
+                    "longitude": 76.8000,
+                    "primary_type": "cafe",
+                    "types": ["cafe", "establishment"],
+                }
+            elif "cafe" in p_lower or "coffee" in p_lower or "library" in p_lower or "hub" in p_lower:
+                return {
+                    "place_id": clean_place_id,
+                    "name": "Indiranagar Central Cafe",
+                    "formatted_address": "100ft Rd, Indiranagar, Bengaluru, Karnataka 560038",
+                    "latitude": 12.9716,
+                    "longitude": 77.5946,
+                    "primary_type": "cafe",
+                    "types": ["cafe", "coffee_shop", "establishment"],
+                }
+            return None
+
+        cache_key = f"venue_details:{clean_place_id}"
+        cached = self._get_from_cache(cache_key)
+        if cached is not None:
+            return cached
+
+        url = f"https://places.googleapis.com/v1/places/{clean_place_id}"
+        headers = {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": self.api_key,
+            "X-Goog-FieldMask": "id,displayName,formattedAddress,location,primaryType,types",
+        }
+
+        try:
+            resp = requests.get(url, headers=headers, timeout=5.0)
+            if resp.status_code != 200:
+                logger.warning("Google Place venue details returned status %d: %s", resp.status_code, resp.text[:200])
+                return None
+
+            data = resp.json()
+            loc_geo = data.get("location", {})
+            lat = loc_geo.get("latitude")
+            lon = loc_geo.get("longitude")
+            formatted = data.get("formattedAddress")
+            name_dict = data.get("displayName", {})
+            name = name_dict.get("text") if isinstance(name_dict, dict) else None
+
+            venue_info = {
+                "place_id": clean_place_id,
+                "name": name or "Eligible Public Venue",
+                "formatted_address": formatted,
+                "latitude": round(lat, 6) if lat is not None else None,
+                "longitude": round(lon, 6) if lon is not None else None,
+                "primary_type": data.get("primaryType"),
+                "types": data.get("types", []),
+            }
+            self._set_in_cache(cache_key, venue_info)
+            return venue_info
+        except Exception as exc:
+            logger.warning("Google Place venue details lookup failed: %s", exc)
+            return None
+
     def geocode_address(self, address: str) -> Optional[ResolvedLocation]:
         """
         Forward geocode an address string in India using Google Geocoding API.

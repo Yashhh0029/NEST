@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 from app.db.database import Base
@@ -32,6 +32,11 @@ class Profile(Base):
     help_description = Column(Text, nullable=True)
     needs_description = Column(Text, nullable=True)
     availability = Column(Boolean, nullable=False, default=True)
+
+    # Phase 14 Scheduling & Capacity extensions
+    helper_timezone = Column(String(50), nullable=False, default="Asia/Kolkata")
+    max_weekly_sessions = Column(Integer, nullable=False, default=3)
+    accepting_sessions = Column(Boolean, nullable=False, default=True)
 
     created_at = Column(
         DateTime(timezone=True),

@@ -10,6 +10,7 @@ from app.models.community import CommunityQuestion
 from app.models.connection import Connection, ConnectionStatus
 from app.models.request import Request, RequestSavedResource
 from app.models.review import Review
+from app.models.session import AssistanceSession, SessionStatus
 from app.models.user import User
 from app.schemas.community import CommunitySearchItem
 from app.schemas.intelligence import (
@@ -411,6 +412,36 @@ def update_need_progress(
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Saved resource not found for this request.",
+                )
+
+        elif payload.resolved_via == ResolutionSourceEnum.SESSION:
+            try:
+                s_uuid = uuid.UUID(ent_id_str)
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid session UUID format.",
+                )
+            sess = db.query(AssistanceSession).filter(AssistanceSession.id == s_uuid).first()
+            if not sess:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Assistance session not found.",
+                )
+            if sess.request_id != req.id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Assistance session is not linked to this request.",
+                )
+            if current_user.id not in [sess.proposer_id, sess.recipient_id]:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You are not a participant in this assistance session.",
+                )
+            if sess.status != SessionStatus.COMPLETED.value:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Only completed assistance sessions can resolve a need.",
                 )
 
     # Update need_progress JSONB map

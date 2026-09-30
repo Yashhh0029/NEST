@@ -88,6 +88,10 @@ def block_user(db: Session, blocker: User, target_user_id: uuid.UUID) -> BlockRe
     db.commit()
     db.refresh(new_block)
 
+    # Phase 14: Cancel any active/future uncompleted sessions between blocker and blocked user
+    from app.services.session_service import cancel_future_sessions_for_block
+    cancel_future_sessions_for_block(db, blocker.id, target_user_id, blocker.id)
+
     return BlockResponse(
         id=new_block.id,
         blocker_id=new_block.blocker_id,
@@ -566,6 +570,10 @@ def admin_suspend_user(
     )
     db.add(audit_entry)
     db.commit()
+
+    # Phase 14: Cancel any active/future uncompleted sessions for suspended user
+    from app.services.session_service import cancel_future_sessions_for_suspension
+    cancel_future_sessions_for_suspension(db, target.id)
 
 
 def admin_reactivate_user(
