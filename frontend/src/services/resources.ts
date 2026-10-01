@@ -1,5 +1,6 @@
 import { api } from "./api";
 import type {
+  NearbyHelpersResponse,
   ResourceCategoriesResponse,
   ResourceSearchResponse,
 } from "../types/resource";
@@ -28,3 +29,16 @@ export async function searchResources(params?: {
   });
   return resp.data;
 }
+
+export async function getNearbyHelpers(params: {
+  latitude: number;
+  longitude: number;
+  radius_km?: number;
+  request_id?: string;
+}): Promise<NearbyHelpersResponse> {
+  const resp = await api.get<NearbyHelpersResponse>("/api/resources/helpers", {
+    params,
+  });
+  return resp.data;
+}
+

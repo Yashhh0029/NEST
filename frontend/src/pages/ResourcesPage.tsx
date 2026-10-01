@@ -29,6 +29,7 @@ import {
   X,
   ExternalLink,
   Layers,
+  Users,
 } from "lucide-react";
 import { ResourceCard } from "@/components/resource/ResourceCard";
 import { GoogleMap, type MapCandidate, type ViewportBounds } from "@/components/location/GoogleMap";
@@ -38,7 +39,7 @@ import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { CardSkeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/hooks/useToast";
-import { getResourceCategories, searchResources } from "@/services/resources";
+import { getNearbyHelpers, getResourceCategories, searchResources } from "@/services/resources";
 import {
   getPlaceDetails,
   resolveAddressText,
@@ -47,9 +48,11 @@ import {
 } from "@/services/location";
 import type { PlaceAutocompletePrediction } from "@/types/google-location";
 import type {
+  NearbyHelperItem,
   ResourceCategory,
   ResourceSearchResponse,
 } from "@/types/resource";
+
 
 const CATEGORY_ICON_MAP: Record<string, React.FC<{ className?: string }>> = {
   Home,
@@ -99,6 +102,33 @@ export const ResourcesPage: React.FC = () => {
   const [isChangingLocation, setIsChangingLocation] = useState<boolean>(false);
   const [isLocatingUser, setIsLocatingUser] = useState<boolean>(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState<boolean>(false);
+  const [nearbyHelpers, setNearbyHelpers] = useState<NearbyHelperItem[]>([]);
+  const [isLoadingHelpers, setIsLoadingHelpers] = useState<boolean>(false);
+
+  // Fetch real eligible NEST community helpers near the active exploration center
+  useEffect(() => {
+    if (exploreCenter?.latitude != null && exploreCenter?.longitude != null) {
+      setIsLoadingHelpers(true);
+      getNearbyHelpers({
+        latitude: exploreCenter.latitude,
+        longitude: exploreCenter.longitude,
+        radius_km: 15.0,
+        request_id: requestIdParam || undefined,
+      })
+        .then((res) => {
+          setNearbyHelpers(res.helpers || []);
+        })
+        .catch(() => {
+          setNearbyHelpers([]);
+        })
+        .finally(() => {
+          setIsLoadingHelpers(false);
+        });
+    } else {
+      setNearbyHelpers([]);
+    }
+  }, [exploreCenter?.latitude, exploreCenter?.longitude, requestIdParam]);
+
 
   // Load category metadata on mount
   useEffect(() => {
@@ -215,22 +245,24 @@ export const ResourcesPage: React.FC = () => {
     setSearchParams(newParams);
   };
 
-  // Map resources to MapCandidates for fallback backward compatibility
-  const mapCandidates: MapCandidate[] = useMemo(() => {
-    if (!searchResult?.resources) return [];
-    return searchResult.resources
-      .filter((r) => r.latitude != null && r.longitude != null)
-      .map((r) => ({
-        id: r.id,
-        name: r.name,
-        approximateLatitude: r.latitude,
-        approximateLongitude: r.longitude,
-        area: r.category_display_name,
-        city: r.formatted_address,
-        distanceKm: r.distance_km,
-        score: r.ranking_score,
+  // Map real verified eligible helpers to MapCandidates for the map layer (ZERO fake markers)
+  const helperMapCandidates: MapCandidate[] = useMemo(() => {
+    return nearbyHelpers
+      .filter((h) => h.approximate_latitude != null && h.approximate_longitude != null)
+      .map((h) => ({
+        id: h.user_id,
+        name: h.name,
+        approximateLatitude: h.approximate_latitude,
+        approximateLongitude: h.approximate_longitude,
+        area: h.area,
+        city: h.city,
+        distanceKm: h.distance_km,
+        score: h.reputation_rating,
+        headline: h.headline,
+        skills: h.skills,
+        isHelper: true,
       }));
-  }, [searchResult?.resources]);
+  }, [nearbyHelpers]);
 
   const selectedResource = useMemo(() => {
     if (!selectedResourceId || !searchResult?.resources) return null;
@@ -246,8 +278,9 @@ export const ResourcesPage: React.FC = () => {
     try {
       const details = await getPlaceDetails(prediction.place_id);
       if (details.latitude != null && details.longitude != null) {
+        const components = [details.road, details.area, details.city].filter(Boolean);
         const label =
-          [details.area, details.city].filter(Boolean).join(", ") ||
+          (components.length > 0 ? components.join(", ") : null) ||
           details.formatted_address ||
           prediction.description;
         setExploreCenter({
@@ -266,8 +299,9 @@ export const ResourcesPage: React.FC = () => {
     try {
       const resolved = await resolveAddressText(prediction.description);
       if (resolved.latitude != null && resolved.longitude != null) {
+        const components = [resolved.road, resolved.area, resolved.city].filter(Boolean);
         const label =
-          [resolved.area, resolved.city].filter(Boolean).join(", ") ||
+          (components.length > 0 ? components.join(", ") : null) ||
           resolved.formatted_address ||
           prediction.description;
         setExploreCenter({
@@ -299,8 +333,9 @@ export const ResourcesPage: React.FC = () => {
             pos.coords.latitude,
             pos.coords.longitude
           );
+          const components = [rev.road, rev.area, rev.city].filter(Boolean);
           const label =
-            [rev.area, rev.city].filter(Boolean).join(", ") ||
+            (components.length > 0 ? components.join(", ") : null) ||
             rev.formatted_address ||
             "My Current Location";
           setExploreCenter({
@@ -328,21 +363,35 @@ export const ResourcesPage: React.FC = () => {
   };
 
   // Viewport search handler for map "Search this area" floating action
-  const handleSearchThisArea = (
+  const handleSearchThisArea = async (
     center: { latitude: number; longitude: number },
     radiusMeters: number,
     bounds?: ViewportBounds
   ) => {
+    let preciseLabel = exploreLocationLabel;
+    try {
+      const rev = await reverseGeocodeCoordinates(center.latitude, center.longitude);
+      const components = [rev.road, rev.area, rev.city].filter(Boolean);
+      if (components.length > 0) {
+        preciseLabel = components.join(", ");
+      } else if (rev.formatted_address) {
+        preciseLabel = rev.formatted_address;
+      }
+    } catch {
+      // Graceful fallback to existing label
+    }
+    setExploreLocationLabel(preciseLabel);
     setExploreCenter({
       latitude: center.latitude,
       longitude: center.longitude,
-      label: `Map Viewport (${center.latitude.toFixed(2)}, ${center.longitude.toFixed(2)})`,
+      label: preciseLabel,
     });
     setExploreRadius(radiusMeters);
     if (bounds) {
       setViewportBounds(bounds);
     }
   };
+
 
   const handleSelectPlaceOnMap = (placeId: string) => {
     setSelectedResourceId(placeId);
@@ -648,10 +697,56 @@ export const ResourcesPage: React.FC = () => {
         />
       ) : viewMode === "map" ? (
         <div className="space-y-4">
+          {/* Real Community Helper Status (Zero Fake Markers) */}
+          {isLoadingHelpers ? (
+            <div className="flex items-center gap-2 p-2.5 px-3.5 rounded-xl bg-gray-50 dark:bg-brand-dark-muted/20 border border-gray-200 dark:border-brand-dark-border text-xs text-gray-500">
+              <Users className="w-3.5 h-3.5 text-gray-400 animate-pulse shrink-0" />
+              <span>Checking for enrolled community helpers in this area...</span>
+            </div>
+          ) : nearbyHelpers.length === 0 ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 px-3.5 rounded-xl bg-gray-50 dark:bg-brand-dark-muted/20 border border-gray-200 dark:border-brand-dark-border text-xs text-gray-500 dark:text-gray-400">
+              <div className="flex items-center gap-2">
+                <Users className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                <span>No NEST helpers found in this area yet.</span>
+              </div>
+              <Link
+                to="/register?role=helper"
+                className="text-brand-primary hover:underline font-semibold"
+              >
+                Be the first local helper to join this area →
+              </Link>
+            </div>
+          ) : (
+
+            <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 px-3.5 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/30 border border-indigo-200/80 dark:border-indigo-800 text-xs text-indigo-900 dark:text-indigo-200">
+              <div className="flex items-center gap-2">
+                <Users className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                <span>
+                  Found <strong>{nearbyHelpers.length}</strong> verified NEST community helper{nearbyHelpers.length > 1 ? "s" : ""} active nearby
+                </span>
+              </div>
+              {requestIdParam ? (
+                <Link
+                  to={`/matching?request_id=${requestIdParam}`}
+                  className="text-indigo-600 dark:text-indigo-400 hover:underline font-semibold"
+                >
+                  View Helper Matches →
+                </Link>
+              ) : (
+                <Link
+                  to="/connections"
+                  className="text-indigo-600 dark:text-indigo-400 hover:underline font-semibold"
+                >
+                  Connect with Helpers →
+                </Link>
+              )}
+            </div>
+          )}
+
           <Card className="p-2 overflow-hidden rounded-2xl">
             <GoogleMap
               targetLocation={currentSearchTarget}
-              candidates={mapCandidates}
+              candidates={helperMapCandidates}
               places={searchResult?.resources || []}
               selectedPlaceId={selectedResourceId}
               onSelectPlace={(place) => handleSelectPlaceOnMap(place.id)}
@@ -660,6 +755,7 @@ export const ResourcesPage: React.FC = () => {
               className="h-[440px] sm:h-[540px]"
             />
           </Card>
+
 
           {/* Desktop: Selected place preview card below map */}
           {selectedResource ? (

@@ -12,6 +12,8 @@ from app.models.request import Request
 from app.models.request_location import RequestLocation
 from app.models.user import User
 from app.schemas.resource import (
+    NearbyHelperItem,
+    NearbyHelpersResponse,
     ResourceCategoriesResponse,
     ResourceCategory,
     ResourceItem,
@@ -598,6 +600,12 @@ def search_local_resources(
         search_lat = 18.5204
         search_lon = 73.8567
         locality_label = locality_label or "Pune, Maharashtra"
+    elif not locality_label:
+        rev = maps_service.reverse_geocode(search_lat, search_lon)
+        if rev:
+            parts = [p for p in [rev.road, rev.area, rev.city] if p]
+            locality_label = ", ".join(dict.fromkeys(parts)) or rev.formatted_address or "Pune, Maharashtra"
+
 
     # 2. Build text query
     query_terms: List[str] = []
@@ -737,3 +745,108 @@ def search_local_resources(
         radius_meters=effective_radius,
         provider="google_places",
     )
+
+
+# ============================================================================
+# 5. Real Community Helpers Query (Zero Fabrication)
+# ============================================================================
+
+def get_nearby_helpers(
+    db: Session,
+    current_user: User,
+    latitude: float,
+    longitude: float,
+    radius_km: float = 15.0,
+    request_id: Optional[uuid.UUID] = None,
+) -> NearbyHelpersResponse:
+    """
+    Query real, verified, active NEST community helpers near specified coordinates.
+    Strict Real-Data & Privacy Rules:
+    - Never fabricates fake helpers, initials, ratings, reviews, or coordinates.
+    - If zero eligible helpers in database, returns empty list ([]).
+    - Excludes requesting user and blocked/suspended users.
+    - Requires email_verified=True, is_active=True, role in ('helper', 'both').
+    - Privacy protection: returns approximate coordinates (rounded to 2 decimal places),
+      never raw private home or street coordinates.
+    """
+    from app.models.location import Location
+    from app.models.profile import Profile
+    from app.models.skill import Skill, UserSkill
+    from app.models.user import UserRole
+    from app.services.safety_service import get_blocked_user_ids
+    from app.services.review_service import get_user_reputation
+
+    blocked_user_ids = get_blocked_user_ids(db, current_user.id)
+
+    # Eligible helpers: active, email_verified, role in ('helper', 'both'), not self, not blocked
+    helper_query = (
+        db.query(User, Location, Profile)
+        .join(Location, Location.user_id == User.id)
+        .outerjoin(Profile, Profile.user_id == User.id)
+        .filter(
+            User.id != current_user.id,
+            User.is_active == True,
+            User.email_verified == True,
+            User.role.in_([UserRole.HELPER, UserRole.BOTH]),
+            Location.location_label == "Primary",
+            Location.latitude.isnot(None),
+            Location.longitude.isnot(None),
+        )
+    )
+    if blocked_user_ids:
+        helper_query = helper_query.filter(~User.id.in_(list(blocked_user_ids)))
+
+    candidate_rows = helper_query.all()
+    nearby_items: List[NearbyHelperItem] = []
+
+    for user, loc, prof in candidate_rows:
+        dist_km = haversine_km(latitude, longitude, loc.latitude, loc.longitude)
+        if dist_km <= radius_km:
+            # Verified skills
+            skills = (
+                db.query(Skill.name)
+                .join(UserSkill, UserSkill.skill_id == Skill.id)
+                .filter(UserSkill.user_id == user.id)
+                .all()
+            )
+            skills_list = [s[0] for s in skills]
+
+            # Reputation
+            rep = get_user_reputation(db, user.id)
+
+            # Display name without private contact details
+            display_name = user.name or user.email.split("@")[0].capitalize()
+
+            # Privacy: round coordinates to 2 decimals (~1.1km area)
+            approx_lat = round(loc.latitude, 2)
+            approx_lon = round(loc.longitude, 2)
+
+            nearby_items.append(
+                NearbyHelperItem(
+                    user_id=str(user.id),
+                    name=display_name,
+                    headline=prof.headline if prof else None,
+                    bio=prof.bio if prof else None,
+                    city=loc.city,
+                    area=loc.area,
+                    approximate_latitude=approx_lat,
+                    approximate_longitude=approx_lon,
+                    distance_km=round(dist_km, 1),
+                    skills=skills_list,
+                    reputation_rating=round(rep.average_rating, 1) if rep.average_rating is not None else None,
+                    reputation_reviews=rep.review_count,
+                    is_available_for_help=True,
+                )
+            )
+
+    # Sort ascending by distance
+    nearby_items.sort(key=lambda x: (x.distance_km if x.distance_km is not None else 999.0))
+
+    return NearbyHelpersResponse(
+        total=len(nearby_items),
+        helpers=nearby_items,
+        center_latitude=latitude,
+        center_longitude=longitude,
+        radius_km=radius_km,
+    )
+

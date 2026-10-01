@@ -449,13 +449,20 @@ class GoogleMapsService:
             except Exception as exc:
                 logger.warning("Google Reverse Geocoding failed gracefully: %s", exc)
 
-        # 2. Resilient fallback for Indian coordinates (e.g. 18.65, 73.80 -> Wakad / Nigdi, Pimpri-Chinchwad)
+        # 2. Real OpenStreetMap (Nominatim) reverse geocoding for zero-billing precision
+        osm_resolved = self.reverse_geocode_osm(latitude, longitude)
+        if osm_resolved:
+            self._set_in_cache(cache_key, osm_resolved)
+            return osm_resolved
+
+        # 3. Resilient offline fallback for Indian coordinates (e.g. 18.65, 73.80 -> Wakad / Nigdi, Pimpri-Chinchwad)
         fallback = self.resolve_indian_coordinates(latitude, longitude)
         if fallback:
             self._set_in_cache(cache_key, fallback)
             return fallback
 
         return None
+
 
     def compute_route_travel(
         self,
@@ -727,7 +734,76 @@ class GoogleMapsService:
         return city, area, state, country, postal, formatted, place_id
 
     @staticmethod
+    def reverse_geocode_osm(latitude: float, longitude: float) -> Optional[ResolvedLocation]:
+        """
+        Reverse geocode GPS coordinates to real human-readable street, neighborhood, and city
+        using OpenStreetMap Nominatim with zero billing.
+        Strict Real-Data Rules:
+        - Never fabricates fake address components or fake street numbers.
+        - Preserves real road, suburb, neighborhood, and city as returned by OpenStreetMap.
+        """
+        url = "https://nominatim.openstreetmap.org/reverse"
+        params = {
+            "format": "json",
+            "lat": latitude,
+            "lon": longitude,
+            "addressdetails": 1,
+            "zoom": 18,
+        }
+        headers = {"User-Agent": "NEST-LocalDiscovery/1.0 (contact: support@nest-app.local)"}
+        try:
+            resp = requests.get(url, params=params, headers=headers, timeout=5.0)
+            if resp.status_code == 200:
+                data = resp.json()
+                if isinstance(data, dict) and "address" in data:
+                    addr = data.get("address", {})
+                    road = addr.get("road") or addr.get("pedestrian") or addr.get("path")
+                    suburb = addr.get("suburb") or addr.get("residential") or addr.get("neighbourhood") or addr.get("subdistrict")
+                    neighborhood = addr.get("neighbourhood") or addr.get("residential")
+                    city = (
+                        addr.get("city")
+                        or addr.get("town")
+                        or addr.get("village")
+                        or addr.get("municipality")
+                        or addr.get("county")
+                        or addr.get("state_district")
+                    )
+                    state = addr.get("state")
+                    country = addr.get("country") or "India"
+                    postal = addr.get("postcode")
+                    display_name = data.get("display_name")
+                    osm_type = data.get("osm_type", "way")
+                    osm_id = str(data.get("osm_id", ""))
+
+                    resolved_area = suburb or neighborhood or road
+                    if resolved_area and city and resolved_area.strip().lower() == city.strip().lower():
+                        resolved_area = road if road != city else None
+
+                    precision = "rooftop" if road else ("neighborhood" if suburb else "locality")
+
+                    return ResolvedLocation(
+                        google_place_id=f"osm_{osm_type}_{osm_id}" if osm_id else None,
+                        formatted_address=display_name,
+                        city=city,
+                        area=resolved_area,
+                        state=state,
+                        country=country,
+                        postal_code=postal,
+                        latitude=round(latitude, 6),
+                        longitude=round(longitude, 6),
+                        location_precision=precision,
+                        location_source="osm_reverse_geocoding",
+                        road=road,
+                        neighborhood=neighborhood,
+                        suburb=suburb,
+                    )
+        except Exception as exc:
+            logger.warning("OSM Nominatim reverse geocode failed gracefully: %s", exc)
+        return None
+
+    @staticmethod
     def resolve_indian_coordinates(latitude: float, longitude: float) -> Optional[ResolvedLocation]:
+
         """
         Geographic coordinate boundary resolver for Indian metropolitan & urban regions.
         Acts as an intelligent, deterministic fallback so valid coordinates in India

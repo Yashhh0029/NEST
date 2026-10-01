@@ -354,3 +354,93 @@ def test_osm_provider_search_and_viewport(client: TestClient):
         assert place["review_count"] is None
         assert "openstreetmap.org" in place["maps_url"]
         assert any("OpenStreetMap" in r for r in place["ranking_reasons"])
+
+
+def test_nearby_helpers_real_data_and_eligibility_scenarios(client: TestClient):
+    """
+    Verify Real NEST Community Helper Eligibility Scenarios:
+    - Scenario A: Kothrud with zero enrolled helpers returns total=0, helpers=[] (ZERO fake markers).
+    - Scenario B: Genuinely eligible helper in Kothrud appears with privacy-protected coords.
+    - Scenario C: Deactivating that test account immediately causes helper to disappear.
+    """
+    from app.db.database import SessionLocal
+    from app.models.location import Location
+    from app.models.profile import Profile
+    from app.models.user import User, UserRole
+
+    db = SessionLocal()
+    try:
+        requester = create_authenticated_user(client, "Seeking Newcomer", "newcomer_seeking@example.test")
+
+        # 1. Scenario A: Zero eligible helpers in Kothrud, Pune (lat: 18.5074, lon: 73.8077)
+        resp = client.get(
+            "/api/resources/helpers?latitude=18.5074&longitude=73.8077&radius_km=15.0",
+            headers=requester["headers"],
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 0
+        assert data["helpers"] == []
+
+        # 2. Scenario B: Create ONE real eligible helper in Kothrud
+        helper_user = create_authenticated_user(client, "Rahul Kothrud Helper", "rahul_kothrud@example.test", role="helper")
+        user_id_str = helper_user["user"]["id"]
+        # Set role to helper, verified email, active
+        user_db = db.query(User).filter(User.id == user_id_str).first()
+        user_db.role = UserRole.HELPER
+        user_db.email_verified = True
+        user_db.is_active = True
+
+
+        # Add Primary Location in Kothrud
+        loc = Location(
+            user_id=user_db.id,
+            location_label="Primary",
+            area="Kothrud",
+            city="Pune",
+            state="Maharashtra",
+            country="India",
+            latitude=18.5074,
+            longitude=73.8077,
+            location_source="manual",
+        )
+        db.add(loc)
+        db.commit()
+
+        # Query again: exactly ONE helper appears
+        resp2 = client.get(
+            "/api/resources/helpers?latitude=18.5074&longitude=73.8077&radius_km=15.0",
+            headers=requester["headers"],
+        )
+        assert resp2.status_code == 200
+        data2 = resp2.json()
+        assert data2["total"] == 1
+        assert len(data2["helpers"]) == 1
+        h = data2["helpers"][0]
+        assert h["user_id"] == str(user_db.id)
+        assert h["name"] == "Rahul Kothrud Helper"
+        assert h["city"] == "Pune"
+        assert h["area"] == "Kothrud"
+        # Privacy check: coords are rounded to 2 decimals (~1.1 km precision)
+        assert h["approximate_latitude"] == 18.51
+        assert h["approximate_longitude"] == 73.81
+        assert h["distance_km"] == 0.0
+
+        # 3. Scenario C: Deactivate that helper account
+        user_db.is_active = False
+        db.commit()
+
+        # Query again: helper marker disappears (returns total=0)
+        resp3 = client.get(
+            "/api/resources/helpers?latitude=18.5074&longitude=73.8077&radius_km=15.0",
+            headers=requester["headers"],
+        )
+        assert resp3.status_code == 200
+        data3 = resp3.json()
+        assert data3["total"] == 0
+        assert data3["helpers"] == []
+    finally:
+        db.close()
+
+
+

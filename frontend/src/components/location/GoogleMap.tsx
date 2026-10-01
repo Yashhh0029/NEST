@@ -227,12 +227,13 @@ export function GoogleMap({
         const isSelected = selectedCandidateId === cand.id;
 
         // Privacy Protected Area Circle (~1000m radius representing approximate locality)
+        // Privacy Protected Area Circle (~1000m radius representing approximate helper locality)
         const circle = new google.maps.Circle({
-          strokeColor: isSelected ? "#0D9488" : "#64748B",
+          strokeColor: isSelected ? "#4338CA" : "#6366F1",
           strokeOpacity: 0.8,
           strokeWeight: isSelected ? 2 : 1,
-          fillColor: isSelected ? "#14B8A6" : "#94A3B8",
-          fillOpacity: isSelected ? 0.35 : 0.2,
+          fillColor: isSelected ? "#6366F1" : "#818CF8",
+          fillOpacity: isSelected ? 0.25 : 0.15,
           map,
           center: candLatLng,
           radius: 1000,
@@ -242,7 +243,7 @@ export function GoogleMap({
         const candMarker = new google.maps.Marker({
           position: candLatLng,
           map,
-          title: cand.name,
+          title: `NEST Helper: ${cand.name}`,
           label: {
             text: cand.name.charAt(0).toUpperCase(),
             color: "#FFFFFF",
@@ -252,7 +253,7 @@ export function GoogleMap({
           icon: {
             path: google.maps.SymbolPath.CIRCLE,
             scale: 12,
-            fillColor: isSelected ? "#0F766E" : "#475569",
+            fillColor: isSelected ? "#4338CA" : "#4F46E5",
             fillOpacity: 1,
             strokeColor: "#FFFFFF",
             strokeWeight: 2,
@@ -276,7 +277,7 @@ export function GoogleMap({
       }
     });
 
-    // 3. Add Real Google Places Markers
+    // 3. Add Real Verified Places
     places.forEach((place) => {
       if (place.latitude != null && place.longitude != null) {
         const placeLatLng = {
@@ -288,26 +289,22 @@ export function GoogleMap({
 
         const isSelected = selectedPlaceId === place.id;
 
+        // Place teardrop pin icon - distinct from helper avatar circle
         const marker = new google.maps.Marker({
           position: placeLatLng,
           map,
           title: place.name,
-          label: {
-            text: (place.name || "P").charAt(0).toUpperCase(),
-            color: "#FFFFFF",
-            fontSize: "11px",
-            fontWeight: "bold",
-          },
           icon: {
-            path: google.maps.SymbolPath.CIRCLE,
-            scale: isSelected ? 14 : 11,
+            path: "M 0,0 C -2,-20 -10,-22 -10,-30 A 10,10 0 1,1 10,-30 C 10,-22 2,-20 0,0 z",
+            scale: isSelected ? 1.3 : 1.0,
             fillColor: isSelected ? "#0D9488" : "#0F766E",
             fillOpacity: 1,
-            strokeColor: isSelected ? "#F0FDFA" : "#FFFFFF",
-            strokeWeight: isSelected ? 3 : 2,
+            strokeColor: "#FFFFFF",
+            strokeWeight: 1.5,
           },
           zIndex: isSelected ? 200 : 5,
         });
+
 
         const ratingHtml =
           place.rating != null

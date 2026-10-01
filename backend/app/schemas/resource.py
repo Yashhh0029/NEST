@@ -62,3 +62,32 @@ class ResourceCategoriesResponse(BaseModel):
     categories: List[ResourceCategory] = Field(..., description="List of supported categories")
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class NearbyHelperItem(BaseModel):
+    user_id: str = Field(..., description="Unique user ID of the helper")
+    name: str = Field(..., description="Display name of the helper")
+    headline: Optional[str] = Field(None, description="Helper professional or community headline")
+    bio: Optional[str] = Field(None, description="Short bio")
+    city: Optional[str] = Field(None, description="Helper enrolled city")
+    area: Optional[str] = Field(None, description="Helper enrolled locality/area")
+    approximate_latitude: Optional[float] = Field(None, description="Approximate latitude protected by privacy")
+    approximate_longitude: Optional[float] = Field(None, description="Approximate longitude protected by privacy")
+    distance_km: Optional[float] = Field(None, description="Distance from search origin in km")
+    skills: List[str] = Field(default_factory=list, description="Verified helper skills")
+    reputation_rating: Optional[float] = Field(None, description="Average review rating")
+    reputation_reviews: int = Field(0, description="Total verified reviews")
+    is_available_for_help: bool = Field(True, description="Whether helper is currently accepting assistance")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class NearbyHelpersResponse(BaseModel):
+    total: int = Field(0, description="Total eligible helpers found")
+    helpers: List[NearbyHelperItem] = Field(default_factory=list, description="List of real eligible community helpers")
+    center_latitude: float = Field(..., description="Search center latitude")
+    center_longitude: float = Field(..., description="Search center longitude")
+    radius_km: float = Field(..., description="Search radius in kilometers")
+
+    model_config = ConfigDict(from_attributes=True)
+

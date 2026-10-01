@@ -49,3 +49,28 @@ export interface ResourceCategoriesResponse {
   total: number;
   categories: ResourceCategory[];
 }
+
+export interface NearbyHelperItem {
+  user_id: string;
+  name: string;
+  headline?: string | null;
+  bio?: string | null;
+  city?: string | null;
+  area?: string | null;
+  approximate_latitude?: number | null;
+  approximate_longitude?: number | null;
+  distance_km?: number | null;
+  skills: string[];
+  reputation_rating?: number | null;
+  reputation_reviews: number;
+  is_available_for_help: boolean;
+}
+
+export interface NearbyHelpersResponse {
+  total: number;
+  helpers: NearbyHelperItem[];
+  center_latitude: number;
+  center_longitude: number;
+  radius_km: number;
+}
+

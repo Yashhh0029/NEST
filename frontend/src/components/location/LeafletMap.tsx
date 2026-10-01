@@ -65,17 +65,42 @@ function escapeHtml(str: string): string {
     .replace(/'/g, "&#039;");
 }
 
-function createPlaceIcon(name: string, isSelected: boolean) {
-  const initial = (name || "P").charAt(0).toUpperCase();
-  const bg = isSelected ? "#0D9488" : "#0F766E";
-  const border = isSelected ? "#F0FDFA" : "#FFFFFF";
+function createPlacePinIcon(isSelected: boolean) {
+  const width = isSelected ? 30 : 24;
+  const height = isSelected ? 38 : 30;
+  const fill = isSelected ? "#0D9488" : "#0F766E";
+  const stroke = isSelected ? "#F0FDFA" : "#FFFFFF";
+  const dropShadow = isSelected
+    ? "filter: drop-shadow(0 0 6px rgba(13,148,136,0.6));"
+    : "filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));";
+
+  return L.divIcon({
+    className: "nest-place-pin",
+    html: `
+      <div style="${dropShadow} cursor: pointer; transition: transform 0.15s ease;">
+        <svg width="${width}" height="${height}" viewBox="0 0 24 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 0C5.373 0 0 5.373 0 12C0 21 12 30 12 30C12 30 24 21 24 12C24 5.373 18.627 0 12 0Z" fill="${fill}" stroke="${stroke}" stroke-width="2"/>
+          <circle cx="12" cy="11" r="4.5" fill="#FFFFFF"/>
+        </svg>
+      </div>
+    `,
+    iconSize: [width, height],
+    iconAnchor: [width / 2, height],
+    popupAnchor: [0, -height],
+  });
+}
+
+function createHelperIcon(name: string, isSelected: boolean) {
+  const initial = (name || "H").charAt(0).toUpperCase();
+  const bg = isSelected ? "#4338CA" : "#4F46E5";
+  const border = isSelected ? "#E0E7FF" : "#FFFFFF";
   const size = isSelected ? 34 : 28;
   const ring = isSelected
-    ? "box-shadow: 0 0 0 4px rgba(13, 148, 136, 0.45);"
+    ? "box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.45);"
     : "box-shadow: 0 2px 6px rgba(0,0,0,0.3);";
 
   return L.divIcon({
-    className: "nest-leaflet-marker",
+    className: "nest-helper-marker",
     html: `
       <div style="
         width: ${size}px;
@@ -87,7 +112,7 @@ function createPlaceIcon(name: string, isSelected: boolean) {
         align-items: center;
         justify-content: center;
         color: white;
-        font-weight: bold;
+        font-weight: 700;
         font-size: ${isSelected ? 13 : 11}px;
         font-family: system-ui, sans-serif;
         ${ring}
@@ -102,6 +127,7 @@ function createPlaceIcon(name: string, isSelected: boolean) {
     popupAnchor: [0, -size / 2],
   });
 }
+
 
 function createTargetIcon(label: string) {
   return L.divIcon({
@@ -246,7 +272,7 @@ export function LeafletMap({
       layer.addLayer(targetMarker);
     }
 
-    // 2. Add Helper Candidates (if in Matching view)
+    // 2. Add Real Helper Candidates (if eligible helpers exist)
     candidates.forEach((cand) => {
       if (
         cand.approximateLatitude != null &&
@@ -260,21 +286,42 @@ export function LeafletMap({
 
         const isSelected = selectedCandidateId === cand.id;
 
-        // Privacy circle
+        // Privacy protected locality circle (~1000m radius)
         const circle = L.circle(candLatLng, {
           radius: 1000,
-          color: isSelected ? "#0D9488" : "#64748B",
+          color: isSelected ? "#4338CA" : "#6366F1",
           weight: isSelected ? 2 : 1,
-          fillColor: isSelected ? "#14B8A6" : "#94A3B8",
-          fillOpacity: isSelected ? 0.35 : 0.2,
+          fillColor: isSelected ? "#6366F1" : "#818CF8",
+          fillOpacity: isSelected ? 0.25 : 0.15,
         });
         circle.on("click", () => onSelectCandidate && onSelectCandidate(cand.id));
         layer.addLayer(circle);
 
         const marker = L.marker(candLatLng, {
-          icon: createPlaceIcon(cand.name, isSelected),
-          zIndexOffset: isSelected ? 500 : 10,
+          icon: createHelperIcon(cand.name, isSelected),
+          zIndexOffset: isSelected ? 600 : 20,
         });
+
+        const helperPopupHtml = `
+          <div style="font-family: system-ui, sans-serif; padding: 4px; min-width: 170px; max-width: 240px; color: #0f172a;">
+            <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: #4F46E5; margin-bottom: 2px;">
+              🤝 NEST Helper
+            </div>
+            <strong style="font-size: 13px; line-height: 1.2; display: block; margin-bottom: 2px;">
+              ${escapeHtml(cand.name)}
+            </strong>
+            <div style="font-size: 11px; color: #475569; margin-bottom: 4px;">
+              📍 ${escapeHtml([cand.area, cand.city].filter(Boolean).join(", ") || "Local Helper")}
+              ${cand.distanceKm != null ? ` (${cand.distanceKm} km away)` : ""}
+            </div>
+            <div style="font-size: 10px; color: #64748b;">
+              🔒 Approximate area (~1 km privacy radius)
+            </div>
+          </div>
+        `;
+        const helperPopup = L.popup({ offset: [0, -14] }).setContent(helperPopupHtml);
+        marker.bindPopup(helperPopup);
+
         marker.on("click", () => onSelectCandidate && onSelectCandidate(cand.id));
         layer.addLayer(marker);
       }
@@ -288,9 +335,10 @@ export function LeafletMap({
 
         const isSelected = selectedPlaceId === place.id;
         const marker = L.marker(placeLatLng, {
-          icon: createPlaceIcon(place.name, isSelected),
+          icon: createPlacePinIcon(isSelected),
           zIndexOffset: isSelected ? 900 : 50,
         });
+
 
         const ratingHtml =
           place.rating != null

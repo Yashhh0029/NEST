@@ -39,6 +39,9 @@ class ResolvedLocation(BaseModel):
     longitude: Optional[float] = None
     location_precision: str = "approximate"
     location_source: str = "google_places"
+    road: Optional[str] = None
+    neighborhood: Optional[str] = None
+    suburb: Optional[str] = None
 
     @field_validator("latitude")
     @classmethod

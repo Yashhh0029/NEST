@@ -4,10 +4,15 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 from app.core.dependencies import get_current_user, get_db
 from app.models.user import User
-from app.schemas.resource import ResourceCategoriesResponse, ResourceSearchResponse
+from app.schemas.resource import (
+    NearbyHelpersResponse,
+    ResourceCategoriesResponse,
+    ResourceSearchResponse,
+)
 from app.services import resource_service
 
 router = APIRouter(prefix="/resources", tags=["Local Resources & Places"])
+
 
 
 @router.get(
@@ -69,3 +74,35 @@ def search_resources(
         provider=provider,
         limit=limit,
     )
+
+
+@router.get(
+    "/helpers",
+    response_model=NearbyHelpersResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Discover real verified NEST community helpers in the exploration area",
+)
+def get_nearby_helpers(
+    latitude: float = Query(..., ge=-90.0, le=90.0, description="Center latitude of exploration area"),
+    longitude: float = Query(..., ge=-180.0, le=180.0, description="Center longitude of exploration area"),
+    radius_km: float = Query(15.0, ge=1.0, le=50.0, description="Radius in kilometers"),
+    request_id: Optional[uuid.UUID] = Query(None, description="Optional request ID context"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> NearbyHelpersResponse:
+    """
+    Retrieve real, eligible, active NEST community helpers near coordinates.
+    - NEVER fabricates fake helpers or placeholder data.
+    - Returns empty list if no helpers are found.
+    - Excludes requesting user and blocked/suspended users.
+    - Applies privacy protection (approximate coordinates only).
+    """
+    return resource_service.get_nearby_helpers(
+        db=db,
+        current_user=current_user,
+        latitude=latitude,
+        longitude=longitude,
+        radius_km=radius_km,
+        request_id=request_id,
+    )
+

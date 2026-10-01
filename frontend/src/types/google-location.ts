@@ -21,7 +21,11 @@ export interface ResolvedLocation {
   longitude?: number | null;
   location_precision: string;
   location_source: string;
+  road?: string | null;
+  neighborhood?: string | null;
+  suburb?: string | null;
 }
+
 
 export interface RequestLocationResponse {
   id: string;
