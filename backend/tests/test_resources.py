@@ -309,3 +309,48 @@ def test_request_target_location_isolation(mock_search: MagicMock, client: TestC
     call_args = mock_search.call_args[1]
     # Coordinates passed to Google should be Pune coordinates (~18.59), not Bengaluru (~12.97)
     assert call_args["latitude"] is not None and 18.0 <= call_args["latitude"] <= 19.0
+
+
+def test_osm_provider_search_and_viewport(client: TestClient):
+    """
+    Verify OpenStreetMap provider operates without Google Maps API key,
+    honestly preserving null ratings and returning real OSM verified entities.
+    """
+    user = create_authenticated_user(client, "OSM User", "osm_user_p10@example.test")
+
+    with patch("requests.get") as mock_get:
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = [
+            {
+                "place_id": 123456,
+                "osm_type": "node",
+                "osm_id": 987654,
+                "lat": "10.0165",
+                "lon": "76.3427",
+                "name": "Kakkanad Ladies PG & Hostel",
+                "display_name": "Kakkanad Ladies PG & Hostel, Infopark Road, Kakkanad, Kochi, Kerala",
+                "type": "hostel",
+                "address": {
+                    "tourism": "Kakkanad Ladies PG & Hostel",
+                    "road": "Infopark Road",
+                    "suburb": "Kakkanad",
+                    "city": "Kochi",
+                },
+            }
+        ]
+
+        resp = client.get(
+            "/api/resources/search?category=accommodation&provider=osm&latitude=10.016&longitude=76.342&min_lat=10.00&max_lat=10.05&min_lon=76.30&max_lon=76.38",
+            headers=user["headers"],
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "SUCCESS"
+        assert data["provider"] == "openstreetmap"
+        assert data["total"] == 1
+        place = data["resources"][0]
+        assert place["name"] == "Kakkanad Ladies PG & Hostel"
+        assert place["rating"] is None  # Strictly null: no fake ratings
+        assert place["review_count"] is None
+        assert "openstreetmap.org" in place["maps_url"]
+        assert any("OpenStreetMap" in r for r in place["ranking_reasons"])

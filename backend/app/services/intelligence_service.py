@@ -28,6 +28,10 @@ from app.schemas.intelligence import (
 from app.schemas.matching import HelperCandidate
 from app.schemas.resource import ResourceItem
 from app.services import community_service, matching_service, resource_service
+from app.services.request_state_machine import (
+    validate_request_transition,
+    get_accepted_connection_for_request,
+)
 from app.services.resource_service import resolve_category_from_need
 from app.services.safety_service import get_blocked_user_ids
 
@@ -354,6 +358,21 @@ def update_need_progress(
             detail="You do not have permission to modify this request.",
         )
 
+    # Enforce request state machine restrictions on need status transitions
+    if req.status in ["RESOLVED", "CLOSED"] and payload.status != NeedStatusEnum.RESOLVED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Terminal request status '{req.status}' cannot be moved backwards.",
+        )
+
+    if payload.status in [NeedStatusEnum.CONNECTED, NeedStatusEnum.RESOLUTION_PENDING]:
+        accepted_conn = get_accepted_connection_for_request(db, req.id, current_user.id)
+        if not accepted_conn:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot set need status to '{payload.status.value}' without an active accepted helper connection on this request.",
+            )
+
     norm_key = _normalize_need_key(payload.category)
 
     # Mandatory Adjustment 4: Server-Side Entity Validation
@@ -382,6 +401,11 @@ def update_need_progress(
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="You are not authorized for this connection.",
+                )
+            if conn.status not in [ConnectionStatus.ACCEPTED.value, ConnectionStatus.COMPLETED.value]:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Connection must be in ACCEPTED or COMPLETED status to resolve a need.",
                 )
 
         elif payload.resolved_via == ResolutionSourceEnum.COMMUNITY_QUESTION:
@@ -506,6 +530,16 @@ def resolve_overall_request(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have permission to modify this request.",
         )
+
+    # Validate transition via authoritative state machine
+    validate_request_transition(
+        db=db,
+        request=req,
+        target_status="RESOLVED",
+        user=current_user,
+        is_independent_resolution=payload.is_independent_resolution,
+        resolution_note=payload.resolution_summary,
+    )
 
     now = datetime.now(timezone.utc)
     req.status = "RESOLVED"

@@ -36,11 +36,15 @@ export const intelligenceService = {
    */
   async resolveRequest(
     requestId: string,
-    resolutionSummary?: string
+    resolutionSummary?: string,
+    isIndependentResolution: boolean = false
   ): Promise<RequestIntelligenceResponse> {
     const res = await api.post<RequestIntelligenceResponse>(
       `/api/requests/${requestId}/resolve`,
-      { resolution_summary: resolutionSummary }
+      {
+        resolution_summary: resolutionSummary,
+        is_independent_resolution: isIndependentResolution,
+      }
     );
     return res.data;
   },

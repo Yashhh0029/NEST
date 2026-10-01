@@ -94,9 +94,17 @@ def mock_google_maps_services(monkeypatch):
             )
         return None
 
-    def mock_reverse_geocode(lat: float, lon: float):
+    def mock_reverse_geocode(latitude: float = None, longitude: float = None, lat: float = None, lon: float = None, *args, **kwargs):
+        effective_lat = latitude if latitude is not None else lat
+        effective_lon = longitude if longitude is not None else lon
+        if effective_lat is None or effective_lon is None:
+            return None
+        lat, lon = effective_lat, effective_lon
         if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
             return None
+        indian_res = google_maps_service.resolve_indian_coordinates(lat, lon)
+        if indian_res:
+            return indian_res
         return ResolvedLocation(
             google_place_id="ChIJ_rev_geo_blr",
             formatted_address="Indiranagar, Bengaluru, Karnataka, India",
@@ -485,3 +493,78 @@ def test_prearrival_relocation_pune_to_kochi(client: TestClient):
     pune_feed = pune_feed_resp.json()
     found_in_pune = [r for r in pune_feed if r["id"] == req_id]
     assert len(found_in_pune) == 0
+
+
+def test_multi_result_address_component_parser():
+    """
+    Test that parse_google_address_components_multi correctly parses across multiple
+    geocoding results when locality is missing in results[0] (e.g. premise/rooftop)
+    but present in results[1].
+    """
+    mock_multi_results = [
+        {
+            "place_id": "ChIJ_rooftop_nigdi",
+            "formatted_address": "Sector 24, Pradhikaran, Nigdi, Pimpri-Chinchwad, Maharashtra 411044, India",
+            "address_components": [
+                {"long_name": "Sector 24", "short_name": "Sector 24", "types": ["subpremise"]},
+                {"long_name": "Nigdi", "short_name": "Nigdi", "types": ["sublocality_level_1", "sublocality"]},
+                {"long_name": "Pradhikaran", "short_name": "Pradhikaran", "types": ["neighborhood"]},
+                {"long_name": "411044", "short_name": "411044", "types": ["postal_code"]},
+                {"long_name": "India", "short_name": "IN", "types": ["country"]},
+            ],
+        },
+        {
+            "place_id": "ChIJ_pcmc_city",
+            "formatted_address": "Pimpri-Chinchwad, Maharashtra, India",
+            "address_components": [
+                {"long_name": "Pimpri-Chinchwad", "short_name": "Pimpri-Chinchwad", "types": ["locality", "political"]},
+                {"long_name": "Pune", "short_name": "Pune", "types": ["administrative_area_level_2", "political"]},
+                {"long_name": "Maharashtra", "short_name": "MH", "types": ["administrative_area_level_1", "political"]},
+                {"long_name": "India", "short_name": "IN", "types": ["country"]},
+            ],
+        },
+    ]
+
+    city, area, state, country, postal, formatted, place_id = (
+        google_maps_service.parse_google_address_components_multi(mock_multi_results)
+    )
+
+    assert city == "Pimpri-Chinchwad"
+    assert area == "Nigdi"
+    assert state == "Maharashtra"
+    assert country == "India"
+    assert postal == "411044"
+
+
+def test_indian_coordinates_fallback_and_api(client: TestClient):
+    """
+    Test coordinate resolver fallback for Indian coordinates (e.g. 18.65, 73.80)
+    never returns 'Unknown City' and provides specific neighborhood Nigdi in Pimpri-Chinchwad.
+    """
+    # 1. Direct coordinate resolver function
+    resolved = google_maps_service.resolve_indian_coordinates(18.65, 73.80)
+    assert resolved is not None
+    assert resolved.city == "Pimpri-Chinchwad"
+    assert resolved.area == "Nigdi"
+    assert resolved.state == "Maharashtra"
+    assert resolved.country == "India"
+    assert "Nigdi" in resolved.formatted_address
+
+    # 2. Reverse geocode service call
+    res_direct = google_maps_service.reverse_geocode(18.65, 73.80)
+    assert res_direct is not None
+    assert res_direct.city == "Pimpri-Chinchwad"
+    assert res_direct.city != "Unknown City"
+
+    # 3. HTTP API endpoint POST /api/location/reverse-geocode
+    res_api = client.post("/api/location/reverse-geocode", json={
+        "latitude": 18.65,
+        "longitude": 73.80,
+    })
+    assert res_api.status_code == 200
+    data = res_api.json()
+    assert data["city"] == "Pimpri-Chinchwad"
+    assert data["area"] == "Nigdi"
+    assert data["state"] == "Maharashtra"
+    assert data["city"] != "Unknown City"
+

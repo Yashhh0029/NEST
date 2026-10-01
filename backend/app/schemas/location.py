@@ -15,10 +15,11 @@ class LocationBase(BaseModel):
     google_place_id: Optional[str] = Field(None, max_length=255, description="Google Place ID")
     formatted_address: Optional[str] = Field(None, max_length=500, description="Human readable address")
     postal_code: Optional[str] = Field(None, max_length=20, description="Postal / PIN code")
+    private_unit: Optional[str] = Field(None, max_length=150, description="Optional private apartment/unit details, not shared publicly")
     location_source: Optional[str] = Field(default="manual", max_length=50, description="Source of coordinates")
     location_precision: Optional[str] = Field(default="locality", max_length=50, description="Precision level")
 
-    @field_validator("city", "area", "state", "country", "location_label", "google_place_id", "formatted_address", "postal_code")
+    @field_validator("city", "area", "state", "country", "location_label", "google_place_id", "formatted_address", "postal_code", "private_unit")
     @classmethod
     def clean_strings(cls, v: Optional[str]) -> Optional[str]:
         if v is not None:

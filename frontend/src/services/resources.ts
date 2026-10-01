@@ -16,6 +16,11 @@ export async function searchResources(params?: {
   latitude?: number;
   longitude?: number;
   radius_meters?: number;
+  min_lat?: number;
+  max_lat?: number;
+  min_lon?: number;
+  max_lon?: number;
+  provider?: string;
   limit?: number;
 }): Promise<ResourceSearchResponse> {
   const resp = await api.get<ResourceSearchResponse>("/api/resources/search", {

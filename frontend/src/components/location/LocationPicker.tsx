@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Navigation, ChevronDown, ChevronUp, Check, AlertCircle, Loader2 } from "lucide-react";
 import { PlaceAutocomplete } from "./PlaceAutocomplete";
+import { GoogleMap } from "./GoogleMap";
 import { getPlaceDetails, reverseGeocodeCoordinates } from "../../services/location";
 import type { PlaceAutocompletePrediction } from "../../types/google-location";
 import type { LocationCreateOrUpdatePayload } from "../../types/profile";
@@ -33,6 +34,7 @@ export function LocationPicker({
         google_place_id: details.google_place_id || prediction.place_id,
         formatted_address: details.formatted_address || prediction.description,
         postal_code: details.postal_code || undefined,
+        private_unit: value.private_unit,
         location_source: details.location_source || "google_places",
         location_precision: details.location_precision || "locality",
       });
@@ -43,6 +45,7 @@ export function LocationPicker({
         city: prediction.main_text,
         area: prediction.secondary_text || undefined,
         country: "India",
+        private_unit: value.private_unit,
         location_source: "manual",
         location_precision: "locality",
       });
@@ -65,8 +68,10 @@ export function LocationPicker({
           const lon = pos.coords.longitude;
           const resolved = await reverseGeocodeCoordinates(lat, lon);
 
+          const resolvedCity = resolved.city || resolved.area || "Selected Location";
+
           onChange({
-            city: resolved.city || "Unknown City",
+            city: resolvedCity,
             area: resolved.area || undefined,
             state: resolved.state || undefined,
             country: resolved.country || "India",
@@ -75,6 +80,7 @@ export function LocationPicker({
             google_place_id: resolved.google_place_id || undefined,
             formatted_address: resolved.formatted_address || undefined,
             postal_code: resolved.postal_code || undefined,
+            private_unit: value.private_unit,
             location_source: "browser_geolocation",
             location_precision: "rooftop",
           });
@@ -97,6 +103,10 @@ export function LocationPicker({
   };
 
   const hasLocation = Boolean(value.city);
+  const primaryDisplay = value.area || value.city;
+  const secondaryDisplay = value.area
+    ? [value.city, value.state, value.country || "India"].filter(Boolean).join(", ")
+    : [value.state, value.country || "India"].filter(Boolean).join(", ");
 
   return (
     <div className="space-y-3">
@@ -153,8 +163,13 @@ export function LocationPicker({
               <Check className="w-3.5 h-3.5" />
             </div>
             <div className="min-w-0">
-              <p className="font-semibold text-gray-900 dark:text-gray-100 truncate">
-                {value.formatted_address || [value.area, value.city, value.state].filter(Boolean).join(", ")}
+              <p className="font-semibold text-gray-900 dark:text-gray-100 truncate text-sm">
+                {primaryDisplay}
+                {secondaryDisplay && (
+                  <span className="text-xs font-normal text-gray-600 dark:text-gray-400 ml-1.5">
+                    • {secondaryDisplay}
+                  </span>
+                )}
               </p>
               <div className="flex items-center gap-2 mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
                 <span className="capitalize">Source: {value.location_source?.replace("_", " ") || "Manual"}</span>
@@ -166,6 +181,20 @@ export function LocationPicker({
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Live Google Map Preview with Pin */}
+      {value.latitude != null && value.longitude != null && (
+        <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-brand-dark-border shadow-sm">
+          <GoogleMap
+            targetLocation={{
+              latitude: value.latitude,
+              longitude: value.longitude,
+              label: [value.area, value.city].filter(Boolean).join(", "),
+            }}
+            className="h-44 sm:h-52 w-full"
+          />
         </div>
       )}
 
@@ -230,6 +259,22 @@ export function LocationPicker({
             className="w-full px-3 py-2 bg-gray-100 dark:bg-brand-dark-muted/30 border border-gray-200 dark:border-brand-dark-border rounded-lg text-xs text-gray-600 dark:text-gray-400 cursor-not-allowed"
           />
         </div>
+      </div>
+
+      {/* Optional Private Unit / Flat Input */}
+      <div>
+        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+          Flat / House / Suite <span className="text-[10px] text-gray-500 font-normal">(Private — not shared with others)</span>
+        </label>
+        <input
+          type="text"
+          aria-label="Private Unit"
+          value={value.private_unit || ""}
+          disabled={disabled}
+          onChange={(e) => onChange({ ...value, private_unit: e.target.value })}
+          placeholder="e.g. Flat 402, Building B (Optional, kept private)"
+          className="w-full px-3 py-2 bg-white dark:bg-brand-dark-surface border border-gray-300 dark:border-brand-dark-border rounded-lg text-xs text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-brand-primary"
+        />
       </div>
     </div>
   );

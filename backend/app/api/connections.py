@@ -99,6 +99,21 @@ def update_status(
 
 
 @router.post(
+    "/{connection_id}/accept",
+    response_model=ConnectionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Accept a connection request (convenience endpoint)",
+)
+def accept_connection(
+    connection_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ConnectionResponse:
+    """Helper accepts incoming connection request."""
+    return update_connection_status(db, connection_id, current_user, "accept")
+
+
+@router.post(
     "/{connection_id}/complete",
     response_model=ConnectionResponse,
     status_code=status.HTTP_200_OK,

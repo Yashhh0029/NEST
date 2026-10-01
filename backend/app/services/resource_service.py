@@ -2,7 +2,10 @@ import logging
 import math
 import re
 import uuid
+from abc import ABC, abstractmethod
+from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Tuple
+import requests
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from app.models.request import Request
@@ -329,7 +332,184 @@ def rank_and_explain_resources(
 
 
 # ============================================================================
-# 3. Resource Discovery Orchestrator
+# 3. Provider Abstraction (Google Places & OpenStreetMap Zero-Billing)
+# ============================================================================
+
+OSM_CATEGORY_SEARCH_TERMS: Dict[str, str] = {
+    "accommodation": "hostel",
+    "food": "restaurant",
+    "restaurants": "restaurant",
+    "hospitals": "hospital",
+    "clinics": "clinic",
+    "pharmacies": "pharmacy",
+    "banks": "bank",
+    "atms": "atm",
+    "grocery": "supermarket",
+    "public_transport": "station",
+    "gyms": "gym",
+    "coworking": "coworking",
+    "education": "college",
+    "government_services": "police station",
+    "repairs": "repair",
+}
+
+
+class OpenStreetMapResourceProvider:
+    """
+    Zero-billing, 100% real OpenStreetMap provider for local resource discovery.
+    Uses public Nominatim endpoints with:
+    - Custom User-Agent header (required by OSM policy)
+    - 24-hour in-memory TTL caching
+    - Strict preservation of real data (no fabricated reviews, ratings, or businesses)
+    - Viewbox bounding box support for map viewport panning
+    """
+    def __init__(self):
+        self._cache: Dict[str, Tuple[datetime, List[ResourceItem]]] = {}
+        self._cache_ttl = timedelta(hours=24)
+        self.endpoint = "https://nominatim.openstreetmap.org/search"
+        self.user_agent = "NEST-LocalDiscovery/1.0 (contact: support@nest-app.local)"
+
+    def _get_cache(self, key: str) -> Optional[List[ResourceItem]]:
+        if key in self._cache:
+            exp, data = self._cache[key]
+            if datetime.now(timezone.utc) < exp:
+                return data
+            del self._cache[key]
+        return None
+
+    def _set_cache(self, key: str, data: List[ResourceItem]):
+        self._cache[key] = (datetime.now(timezone.utc) + self._cache_ttl, data)
+
+    def search(
+        self,
+        category: str,
+        query: Optional[str],
+        latitude: float,
+        longitude: float,
+        radius_meters: float,
+        locality_label: Optional[str] = None,
+        min_lat: Optional[float] = None,
+        max_lat: Optional[float] = None,
+        min_lon: Optional[float] = None,
+        max_lon: Optional[float] = None,
+        limit: int = 15,
+    ) -> List[ResourceItem]:
+        category_meta = CATEGORIES_REGISTRY.get(category, CATEGORIES_REGISTRY["accommodation"])
+        default_osm_term = OSM_CATEGORY_SEARCH_TERMS.get(category, category_meta["default_query_terms"][0])
+        terms = query.strip() if query and query.strip() else default_osm_term
+
+        has_viewbox = (
+            min_lat is not None and max_lat is not None and
+            min_lon is not None and max_lon is not None
+        )
+
+        coord_str = f"{round(latitude, 3)},{round(longitude, 3)}"
+        viewbox_str = f"{min_lon},{max_lat},{max_lon},{min_lat}" if has_viewbox else "none"
+        cache_key = f"osm:{category}:{terms}:{coord_str}:{viewbox_str}:{limit}"
+        cached = self._get_cache(cache_key)
+        if cached is not None:
+            return cached
+
+        params: Dict[str, Any] = {
+            "format": "json",
+            "addressdetails": 1,
+            "limit": max(limit, 10),
+            "countrycodes": "in",
+        }
+
+        if has_viewbox:
+            # viewbox=left,top,right,bottom -> min_lon,max_lat,max_lon,min_lat
+            params["viewbox"] = f"{min_lon},{max_lat},{max_lon},{min_lat}"
+            params["bounded"] = 1
+            params["q"] = terms
+        else:
+            if locality_label:
+                params["q"] = f"{terms} in {locality_label}"
+            else:
+                deg = radius_meters / 111320.0
+                params["viewbox"] = f"{longitude - deg},{latitude + deg},{longitude + deg},{latitude - deg}"
+                params["bounded"] = 0
+                params["q"] = terms
+
+        headers = {"User-Agent": self.user_agent}
+
+        try:
+            resp = requests.get(self.endpoint, params=params, headers=headers, timeout=6.0)
+            if resp.status_code != 200:
+                logger.warning("Nominatim search returned %d", resp.status_code)
+                return []
+            raw_places = resp.json()
+            if not isinstance(raw_places, list):
+                return []
+
+            items: List[ResourceItem] = []
+            for p in raw_places:
+                try:
+                    p_lat = float(p.get("lat"))
+                    p_lon = float(p.get("lon"))
+                except (ValueError, TypeError):
+                    continue
+
+                dist_km = round(haversine_km(latitude, longitude, p_lat, p_lon), 2)
+                addr_dict = p.get("address", {})
+                name = (
+                    p.get("name")
+                    or addr_dict.get("amenity")
+                    or addr_dict.get("tourism")
+                    or addr_dict.get("shop")
+                    or (p.get("display_name", "").split(",")[0] if p.get("display_name") else "Local Facility")
+                )
+
+                osm_type = p.get("osm_type", "node")
+                osm_id = str(p.get("osm_id", p.get("place_id", uuid.uuid4().hex[:8])))
+                canonical_id = f"osm_{osm_type}_{osm_id}"
+
+                score = round(max(0.1, min(1.0, 1.0 - (dist_km / max(radius_meters / 1000.0, 1.0)) * 0.5)), 2)
+
+                reasons = [
+                    f"Nearby ({dist_km} km)",
+                    f"Category match: {category_meta['display_name']}",
+                    "OpenStreetMap community verified place",
+                ]
+
+                item = ResourceItem(
+                    id=canonical_id,
+                    name=name,
+                    category=category,
+                    category_display_name=category_meta["display_name"],
+                    formatted_address=p.get("display_name"),
+                    latitude=p_lat,
+                    longitude=p_lon,
+                    distance_km=dist_km,
+                    rating=None,
+                    review_count=None,
+                    price_level=None,
+                    is_open_now=None,
+                    google_place_id=canonical_id,
+                    maps_url=f"https://www.openstreetmap.org/{osm_type}/{osm_id}",
+                    website_url=None,
+                    phone_number=None,
+                    primary_type=p.get("type"),
+                    ranking_score=score,
+                    ranking_reasons=reasons,
+                )
+                items.append(item)
+
+            items.sort(key=lambda x: x.ranking_score, reverse=True)
+            trimmed = items[:limit]
+            self._set_cache(cache_key, trimmed)
+            return trimmed
+
+        except Exception as exc:
+            logger.warning("Nominatim POI search failed gracefully: %s", exc)
+            return []
+
+
+_osm_resource_provider = OpenStreetMapResourceProvider()
+
+
+# ============================================================================
+# 4. Resource Discovery Orchestrator
 # ============================================================================
 
 def search_local_resources(
@@ -341,11 +521,16 @@ def search_local_resources(
     latitude: Optional[float] = None,
     longitude: Optional[float] = None,
     radius_meters: int = 5000,
+    min_lat: Optional[float] = None,
+    max_lat: Optional[float] = None,
+    min_lon: Optional[float] = None,
+    max_lon: Optional[float] = None,
+    provider: Optional[str] = None,
     limit: int = 10,
     maps_service: GoogleMapsService = google_maps_service,
 ) -> ResourceSearchResponse:
     """
-    Search and rank real local resources using Google Places API (New).
+    Search and rank real local resources using Google Places API (New) or OpenStreetMap.
     
     Privacy guarantees:
     - Never uses or returns user's private home location.
@@ -414,12 +599,11 @@ def search_local_resources(
         search_lon = 73.8567
         locality_label = locality_label or "Pune, Maharashtra"
 
-    # 2. Build text query for Google Places (New)
+    # 2. Build text query
     query_terms: List[str] = []
     if query and query.strip():
         query_terms.append(query.strip())
     else:
-        # Combine default category keywords
         default_kw = category_meta["default_query_terms"][0]
         query_terms.append(default_kw)
 
@@ -428,13 +612,52 @@ def search_local_resources(
 
     effective_query = " ".join(query_terms)
 
-    # 3. Check provider availability
-    if not maps_service.is_configured:
-        logger.info("Google Maps Platform is not configured; returning PROVIDER_UNAVAILABLE.")
+    # 3. Provider selection logic
+    use_osm = False
+    if provider in ("osm", "openstreetmap"):
+        use_osm = True
+    elif provider == "auto":
+        use_osm = not maps_service.is_configured
+    elif provider is None:
+        # Default behavior: If Google is configured, use Google.
+        # If Google is NOT configured and provider is None, return PROVIDER_UNAVAILABLE
+        # to preserve full backwards compatibility with Phase 10 test suite.
+        if not maps_service.is_configured:
+            logger.info("Google Maps Platform is not configured; returning PROVIDER_UNAVAILABLE.")
+            return ResourceSearchResponse(
+                status="PROVIDER_UNAVAILABLE",
+                total=0,
+                resources=[],
+                search_center=SearchCenter(
+                    latitude=search_lat,
+                    longitude=search_lon,
+                    label=locality_label,
+                ),
+                category=effective_category,
+                query=effective_query,
+                radius_meters=radius_meters,
+                provider="google_places",
+            )
+
+    # 4A. Execute OpenStreetMap (Nominatim) search when requested or in auto zero-billing mode
+    if use_osm:
+        osm_items = _osm_resource_provider.search(
+            category=effective_category,
+            query=query,
+            latitude=search_lat,
+            longitude=search_lon,
+            radius_meters=float(radius_meters),
+            locality_label=locality_label,
+            min_lat=min_lat,
+            max_lat=max_lat,
+            min_lon=min_lon,
+            max_lon=max_lon,
+            limit=limit,
+        )
         return ResourceSearchResponse(
-            status="PROVIDER_UNAVAILABLE",
-            total=0,
-            resources=[],
+            status="SUCCESS" if osm_items else "NO_RESULTS",
+            total=len(osm_items),
+            resources=osm_items,
             search_center=SearchCenter(
                 latitude=search_lat,
                 longitude=search_lon,
@@ -443,9 +666,10 @@ def search_local_resources(
             category=effective_category,
             query=effective_query,
             radius_meters=radius_meters,
+            provider="openstreetmap",
         )
 
-    # 4. Execute search via Places API (New)
+    # 4B. Execute Google Places API (New) search
     raw_places = maps_service.search_places_text(
         text_query=effective_query,
         latitude=search_lat,
@@ -484,6 +708,7 @@ def search_local_resources(
             category=effective_category,
             query=effective_query,
             radius_meters=effective_radius,
+            provider="google_places",
         )
 
     # 5. Rank and normalize results
@@ -510,4 +735,5 @@ def search_local_resources(
         category=effective_category,
         query=effective_query,
         radius_meters=effective_radius,
+        provider="google_places",
     )

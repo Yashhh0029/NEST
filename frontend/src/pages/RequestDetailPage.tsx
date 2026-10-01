@@ -44,6 +44,7 @@ export function RequestDetailPage() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showResolveModal, setShowResolveModal] = useState(false);
+  const [isIndependentModal, setIsIndependentModal] = useState(false);
 
   // Connect helper modal state
   const [connectingHelper, setConnectingHelper] = useState<{ id: string; name: string } | null>(null);
@@ -135,17 +136,22 @@ export function RequestDetailPage() {
     }
   };
 
-  const handleResolveOverallRequest = async (summary: string) => {
+  const handleResolveOverallRequest = async (summary: string, isIndependent?: boolean) => {
     if (!id) return;
     try {
-      const updatedIntel = await intelligenceService.resolveRequest(id, summary);
+      const updatedIntel = await intelligenceService.resolveRequest(id, summary, isIndependent);
       setIntelligence(updatedIntel);
       if (request) {
         setRequest({ ...request, status: "RESOLVED" });
       }
-      toastSuccess("Request successfully marked as RESOLVED!", "Resolved");
-    } catch {
-      toastError("Failed to resolve request.");
+      toastSuccess(
+        isIndependent
+          ? "Request resolved independently without a helper."
+          : "Request successfully marked as RESOLVED!",
+        "Resolved"
+      );
+    } catch (err: any) {
+      toastError(err.response?.data?.detail || "Failed to resolve request.");
     }
   };
 
@@ -205,6 +211,7 @@ export function RequestDetailPage() {
   const savedPlaceIds = new Set(intelligence?.saved_resources.map((r) => r.place_id) || []);
   const preferences = request.preferences || [];
   const userContext = request.user_context || [];
+  const hasAcceptedHelper = connections.some((c) => c.status === "ACCEPTED");
 
   const getStatusBadgeVariant = (st: string) => {
     switch (st) {
@@ -380,6 +387,94 @@ export function RequestDetailPage() {
         </Card>
       )}
 
+      {/* State Machine Action Center */}
+      <Card className="p-5 border border-teal-200/80 dark:border-brand-dark-border bg-gradient-to-r from-teal-50/50 to-blue-50/40 dark:from-brand-dark-muted/20 dark:to-brand-dark-surface space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+              <span className="text-brand-primary">⚡</span> Available Request Actions
+            </h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              {intelligence?.status === "RESOLVED" || request.status === "RESOLVED"
+                ? "This request has been fulfilled and marked resolved."
+                : hasAcceptedHelper
+                ? "You have an accepted local helper! Coordinate in chat, schedule a verified session, or confirm resolution."
+                : "Explore verified helpers and community guides, or mark resolved if you solved your requirement independently."}
+            </p>
+          </div>
+
+          {intelligence?.status === "RESOLVED" || request.status === "RESOLVED" ? (
+            <Badge variant="success" size="md">
+              ✓ Resolved
+            </Badge>
+          ) : hasAcceptedHelper ? (
+            <div className="flex items-center gap-2 flex-wrap">
+              <Link to="/connections">
+                <Button variant="primary" size="sm" leftIcon={<MessageSquare className="w-3.5 h-3.5" />}>
+                  Open Chat
+                </Button>
+              </Link>
+              <Link to="/sessions">
+                <Button variant="outline" size="sm">
+                  📅 Schedule Help
+                </Button>
+              </Link>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (intelligence?.needs && intelligence.needs.length > 0) {
+                    handleUpdateNeedProgress(intelligence.needs[0].category, "RESOLUTION_PENDING");
+                  }
+                }}
+              >
+                ⏳ Mark Resolution Pending
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                onClick={() => {
+                  setIsIndependentModal(false);
+                  setShowResolveModal(true);
+                }}
+              >
+                ✓ Confirm Resolved
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 flex-wrap">
+              <Link to={`/results/${request.id}`}>
+                <Button variant="outline" size="sm">
+                  🔍 Find Helpers
+                </Button>
+              </Link>
+              <Link to="/community">
+                <Button variant="outline" size="sm">
+                  💬 Explore Community
+                </Button>
+              </Link>
+              <a href="#actionable-needs">
+                <Button variant="outline" size="sm">
+                  📍 Explore Places
+                </Button>
+              </a>
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-emerald-300 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                onClick={() => {
+                  setIsIndependentModal(true);
+                  setShowResolveModal(true);
+                }}
+              >
+                ✓ Resolved Independently
+              </Button>
+            </div>
+          )}
+        </div>
+      </Card>
+
       {/* Need Resolution Progress Tracker */}
       {intelligence && (
         <NeedProgressTracker
@@ -388,8 +483,16 @@ export function RequestDetailPage() {
           resolvedNeeds={intelligence.resolved_needs}
           totalNeeds={intelligence.total_needs}
           onUpdateStatus={handleUpdateNeedProgress}
-          onMarkOverallResolved={() => setShowResolveModal(true)}
+          onMarkOverallResolved={() => {
+            setIsIndependentModal(false);
+            setShowResolveModal(true);
+          }}
+          onResolveIndependently={() => {
+            setIsIndependentModal(true);
+            setShowResolveModal(true);
+          }}
           isOverallResolved={intelligence.status === "RESOLVED"}
+          hasAcceptedHelper={hasAcceptedHelper}
         />
       )}
 
@@ -437,7 +540,7 @@ export function RequestDetailPage() {
 
       {/* Need-by-Need Action Bundles */}
       {intelligence && intelligence.needs.length > 0 ? (
-        <div className="space-y-6">
+        <div id="actionable-needs" className="space-y-6">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-bold font-heading text-gray-900 dark:text-gray-100">
@@ -527,6 +630,7 @@ export function RequestDetailPage() {
       {/* Mark Resolved Modal */}
       <ResolveRequestModal
         isOpen={showResolveModal}
+        isIndependent={isIndependentModal}
         onClose={() => setShowResolveModal(false)}
         onConfirm={handleResolveOverallRequest}
       />

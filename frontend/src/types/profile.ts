@@ -40,6 +40,7 @@ export interface Location {
   google_place_id?: string | null;
   formatted_address?: string | null;
   postal_code?: string | null;
+  private_unit?: string | null;
   location_source?: string;
   location_precision?: string;
   created_at: string;
@@ -57,6 +58,7 @@ export interface LocationCreateOrUpdatePayload {
   google_place_id?: string;
   formatted_address?: string;
   postal_code?: string;
+  private_unit?: string;
   location_source?: string;
   location_precision?: string;
 }

@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -7,6 +8,7 @@ from app.models.user import User
 from app.schemas.request import RequestCreate, RequestUpdate
 from app.services.location_service import resolve_and_upsert_request_location
 from app.services.request_parser import parse_request
+from app.services.request_state_machine import validate_request_transition
 
 
 def create_user_request(db: Session, user: User, req_in: RequestCreate) -> Request:
@@ -120,7 +122,20 @@ def update_user_request(
         )
 
     if update_in.status is not None:
-        req.status = update_in.status.upper()
+        target_status = update_in.status.upper().strip()
+        validate_request_transition(
+            db=db,
+            request=req,
+            target_status=target_status,
+            user=user,
+            is_independent_resolution=bool(update_in.is_independent_resolution),
+            resolution_note=update_in.resolution_summary,
+        )
+        req.status = target_status
+        if target_status == "RESOLVED":
+            req.resolved_at = datetime.now(timezone.utc)
+            if update_in.resolution_summary:
+                req.resolution_summary = update_in.resolution_summary.strip()
 
     if update_in.preferred_date is not None:
         req.preferred_date = update_in.preferred_date

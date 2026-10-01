@@ -38,6 +38,8 @@ class RequestUpdate(BaseModel):
     is_time_flexible: Optional[bool] = None
     flexibility_window_days: Optional[int] = None
     preferred_days_of_week: Optional[List[int]] = None
+    is_independent_resolution: Optional[bool] = Field(False, description="Whether resolving independently without helper")
+    resolution_summary: Optional[str] = Field(None, max_length=1000, description="Optional note or explanation")
 
 
 class RequestResponse(BaseModel):

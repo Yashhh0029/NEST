@@ -12,7 +12,9 @@ interface NeedProgressTrackerProps {
   totalNeeds: number;
   onUpdateStatus: (category: string, newStatus: NeedStatus, notes?: string) => Promise<void>;
   onMarkOverallResolved: () => void;
+  onResolveIndependently?: () => void;
   isOverallResolved: boolean;
+  hasAcceptedHelper?: boolean;
 }
 
 export function NeedProgressTracker({
@@ -22,7 +24,9 @@ export function NeedProgressTracker({
   totalNeeds,
   onUpdateStatus,
   onMarkOverallResolved,
+  onResolveIndependently,
   isOverallResolved,
+  hasAcceptedHelper = false,
 }: NeedProgressTrackerProps) {
   const [selectedBundle, setSelectedBundle] = useState<NeedIntelligenceBundle | null>(null);
   const [targetStatus, setTargetStatus] = useState<NeedStatus>("RESOLVED");
@@ -82,10 +86,14 @@ export function NeedProgressTracker({
           <Button
             size="sm"
             variant="outline"
-            onClick={onMarkOverallResolved}
+            onClick={hasAcceptedHelper ? onMarkOverallResolved : (onResolveIndependently || onMarkOverallResolved)}
             leftIcon={<CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
           >
-            Mark Request Resolved
+            {hasAcceptedHelper
+              ? "Confirm Request Resolved"
+              : onResolveIndependently
+              ? "Resolved Independently"
+              : "Mark Request Resolved"}
           </Button>
         )}
       </div>
@@ -129,10 +137,14 @@ export function NeedProgressTracker({
 
             <div className="space-y-2">
               <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-                Current Status
+                Available Lifecycle Statuses
               </label>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {(["UNRESOLVED", "EXPLORING", "CONNECTED", "RESOLUTION_PENDING", "RESOLVED"] as NeedStatus[]).map((st) => (
+                {(
+                  hasAcceptedHelper
+                    ? (["UNRESOLVED", "EXPLORING", "CONNECTED", "RESOLUTION_PENDING", "RESOLVED"] as NeedStatus[])
+                    : (["UNRESOLVED", "EXPLORING"] as NeedStatus[])
+                ).map((st) => (
                   <button
                     key={st}
                     type="button"
@@ -147,6 +159,11 @@ export function NeedProgressTracker({
                   </button>
                 ))}
               </div>
+              {!hasAcceptedHelper && (
+                <p className="text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 p-2.5 rounded-lg border border-amber-200/60 dark:border-amber-800/40">
+                  CONNECTED and RESOLUTION PENDING require an accepted helper connection. To close this request on your own, use the <strong>Resolved Independently</strong> button.
+                </p>
+              )}
             </div>
 
             <div className="space-y-1">

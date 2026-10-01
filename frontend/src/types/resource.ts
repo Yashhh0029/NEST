@@ -42,6 +42,7 @@ export interface ResourceSearchResponse {
   category?: string | null;
   query: string;
   radius_meters: number;
+  provider?: string;
 }
 
 export interface ResourceCategoriesResponse {

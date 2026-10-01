@@ -46,6 +46,7 @@ class NeedProgressUpdate(BaseModel):
 
 class RequestResolvePayload(BaseModel):
     resolution_summary: Optional[str] = Field(None, max_length=1000, description="Optional user summary of how the overall request was resolved")
+    is_independent_resolution: Optional[bool] = Field(None, description="Whether request was resolved independently by requester")
 
 
 class SavedResourceCreate(BaseModel):

@@ -37,16 +37,21 @@ def search_resources(
     latitude: Optional[float] = Query(None, ge=-90.0, le=90.0, description="Manual search origin latitude"),
     longitude: Optional[float] = Query(None, ge=-180.0, le=180.0, description="Manual search origin longitude"),
     radius_meters: int = Query(5000, ge=500, le=25000, description="Search radius in meters"),
+    min_lat: Optional[float] = Query(None, ge=-90.0, le=90.0, description="Viewport bounding box minimum latitude"),
+    max_lat: Optional[float] = Query(None, ge=-90.0, le=90.0, description="Viewport bounding box maximum latitude"),
+    min_lon: Optional[float] = Query(None, ge=-180.0, le=180.0, description="Viewport bounding box minimum longitude"),
+    max_lon: Optional[float] = Query(None, ge=-180.0, le=180.0, description="Viewport bounding box maximum longitude"),
+    provider: Optional[str] = Query(None, description="Preferred provider: 'google', 'osm', or 'auto'"),
     limit: int = Query(10, ge=1, le=20, description="Maximum number of results to return"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ResourceSearchResponse:
     """
-    Search and rank real local resources using Google Places API (New).
+    Search and rank real local resources using Google Places API (New) or OpenStreetMap.
     - If request_id is provided, automatically uses the request's target location and extracted requirements.
     - Requires authentication to protect private request data.
     - Never exposes user's private home or device coordinates.
-    - Returns real Google Places results with transparent ranking and strict nulls for missing provider fields.
+    - Returns real provider results with transparent ranking and strict nulls for missing fields.
     """
     return resource_service.search_local_resources(
         db=db,
@@ -57,5 +62,10 @@ def search_resources(
         latitude=latitude,
         longitude=longitude,
         radius_meters=radius_meters,
+        min_lat=min_lat,
+        max_lat=max_lat,
+        min_lon=min_lon,
+        max_lon=max_lon,
+        provider=provider,
         limit=limit,
     )

@@ -52,6 +52,7 @@ class ResourceSearchResponse(BaseModel):
     category: Optional[str] = Field(None, description="Applied NEST category filter")
     query: str = Field("", description="Effective text query executed against provider")
     radius_meters: int = Field(5000, description="Search radius in meters")
+    provider: Optional[str] = Field("google_places", description="Provider used: 'google_places' or 'openstreetmap'")
 
     model_config = ConfigDict(from_attributes=True)
 

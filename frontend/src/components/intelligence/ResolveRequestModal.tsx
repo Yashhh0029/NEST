@@ -6,13 +6,15 @@ import { CheckCircle2 } from "lucide-react";
 interface ResolveRequestModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (summary: string) => Promise<void>;
+  onConfirm: (summary: string, isIndependent?: boolean) => Promise<void>;
+  isIndependent?: boolean;
 }
 
 export function ResolveRequestModal({
   isOpen,
   onClose,
   onConfirm,
+  isIndependent = false,
 }: ResolveRequestModalProps) {
   const [summary, setSummary] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -21,7 +23,11 @@ export function ResolveRequestModal({
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      await onConfirm(summary.trim());
+      if (isIndependent) {
+        await onConfirm(summary.trim(), true);
+      } else {
+        await onConfirm(summary.trim());
+      }
       onClose();
     } finally {
       setIsSubmitting(false);
@@ -29,12 +35,18 @@ export function ResolveRequestModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Mark Request as Resolved">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={isIndependent ? "Resolved Independently" : "Mark Request as Resolved"}
+    >
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="flex items-center gap-3 p-3 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-800/40 rounded-xl">
           <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
           <p className="text-xs text-emerald-800 dark:text-emerald-300">
-            Congratulations on making progress! Marking your request resolved will update all remaining open needs to resolved and archive your active discovery state.
+            {isIndependent
+              ? "Solved your requirement on your own without a helper? That's great! Confirming independent resolution closes your request legitimately without creating any fake helper connections."
+              : "Congratulations on making progress! Marking your request resolved will update all remaining open needs to resolved and complete this request."}
           </p>
         </div>
 

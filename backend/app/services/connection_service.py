@@ -259,6 +259,13 @@ def update_connection_status(
         conn.accepted_at = now
         conn.updated_at = now
 
+        # Legitimate lifecycle transition: linked request transitions to CONNECTED
+        if conn.request_id:
+            req = db.query(Request).filter(Request.id == conn.request_id).first()
+            if req and req.status in ["UNRESOLVED", "EXPLORING", "OPEN", "PENDING"]:
+                req.status = "CONNECTED"
+                req.updated_at = now
+
     elif clean_action == "decline":
         if conn.helper_id != current_user.id:
             raise HTTPException(
