@@ -25,7 +25,7 @@ const DEFAULT_WEIGHTS: MatchScoreWeights = {
   availability: 0.10,
 };
 
-export function FutureMatchingPage() {
+export function MatchingPage() {
   const { requestId } = useParams<{ requestId: string }>();
   const { success: toastSuccess, error: toastError } = useToast();
 

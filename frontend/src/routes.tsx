@@ -12,7 +12,7 @@ import { RequestDetailPage } from "@/pages/RequestDetailPage";
 import { ProfilePage } from "@/pages/ProfilePage";
 import { ProfileEditPage } from "@/pages/ProfileEditPage";
 import { ConnectionsPage } from "@/pages/ConnectionsPage";
-import { FutureMatchingPage } from "@/pages/FutureMatchingPage";
+import { MatchingPage } from "@/pages/MatchingPage";
 import { ChatPage } from "@/pages/ChatPage";
 import { CommunityPage } from "@/pages/CommunityPage";
 import { QuestionDetailPage } from "@/pages/QuestionDetailPage";
@@ -206,7 +206,7 @@ export function AppRoutes() {
           path="/results/:requestId"
           element={
             <ProtectedRoute>
-              <FutureMatchingPage />
+              <MatchingPage />
             </ProtectedRoute>
           }
         />
