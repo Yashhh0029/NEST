@@ -68,13 +68,21 @@ export function HelperCard({
     <Card hover className="space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl bg-teal-100 dark:bg-brand-dark-muted/60 text-brand-primary dark:text-teal-300 flex items-center justify-center font-bold text-lg font-heading">
+          <a
+            href={`/helpers/${helper.user_id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="w-12 h-12 rounded-xl bg-teal-100 dark:bg-brand-dark-muted/60 text-brand-primary dark:text-teal-300 flex items-center justify-center font-bold text-lg font-heading hover:opacity-80 transition"
+          >
             {helper.name.charAt(0)}
-          </div>
+          </a>
           <div>
-            <h4 className="font-bold text-gray-900 dark:text-gray-100 font-heading">
+            <a
+              href={`/helpers/${helper.user_id}`}
+              onClick={(e) => e.stopPropagation()}
+              className="font-bold text-gray-900 dark:text-gray-100 font-heading hover:text-teal-600 dark:hover:text-teal-400 hover:underline"
+            >
               {helper.name}
-            </h4>
+            </a>
             <div className="flex items-center gap-2">
               <p className="text-xs text-gray-500 dark:text-gray-400">
                 {helper.headline || "Community Helper"}

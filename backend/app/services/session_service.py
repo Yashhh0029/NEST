@@ -176,12 +176,12 @@ def validate_public_venue(
             req_lon = getattr(request_obj, "longitude", None)
 
     if req_lat is None and request_obj:
-        from app.models.profile import Profile
         if db:
-            prof = db.query(Profile).filter(Profile.user_id == request_obj.user_id).first()
-            if prof and prof.latitude is not None:
-                req_lat = prof.latitude
-                req_lon = prof.longitude
+            from app.models.location import Location
+            user_loc = db.query(Location).filter(Location.user_id == request_obj.user_id, Location.location_label == "Primary").first()
+            if user_loc and user_loc.latitude is not None:
+                req_lat = user_loc.latitude
+                req_lon = user_loc.longitude
         if req_lat is None and request_obj.city:
             c_low = request_obj.city.lower()
             if "bengaluru" in c_low or "bangalore" in c_low:
@@ -351,7 +351,14 @@ def propose_session(
             detail="You cannot propose a session to yourself.",
         )
 
-    # 1. Connection check with strict integrity
+    # 1. Block check
+    if is_blocked_bidirectional(db, current_user.id, payload.recipient_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot schedule session with this user due to safety restrictions.",
+        )
+
+    # 2. Connection check with strict integrity
     connection = (
         db.query(Connection)
         .filter(
@@ -373,13 +380,6 @@ def propose_session(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Assistance sessions can only be scheduled for accepted connections.",
-        )
-
-    # 2. Block check
-    if is_blocked_bidirectional(db, current_user.id, payload.recipient_id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Cannot schedule session with this user due to safety restrictions.",
         )
 
     # 3. Recipient active check

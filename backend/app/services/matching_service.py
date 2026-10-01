@@ -323,7 +323,7 @@ def calculate_availability_score(
         # If no exact match, check flexible window if requester indicated flexibility
         is_flexible = getattr(req, "is_time_flexible", False)
         window_days = getattr(req, "flexibility_window_days", None)
-        if is_flexible or (window_days and window_days > 0):
+        if is_flexible:
             max_window = window_days if (window_days and window_days > 0) else 2
             offsets = []
             for d in range(1, max_window + 1):
@@ -538,6 +538,7 @@ def find_candidate_matches(
         .filter(
             User.id != requesting_user.id,
             User.is_active == True,
+            User.email_verified == True,
             ~User.id.in_(
                 db.query(Embedding.owner_id).filter(Embedding.owner_type == "profile")
             ),
@@ -560,6 +561,7 @@ def find_candidate_matches(
             Embedding.owner_type == "profile",
             Embedding.owner_id != requesting_user.id,
             User.is_active == True,
+            User.email_verified == True,
         )
     )
     if blocked_user_ids:

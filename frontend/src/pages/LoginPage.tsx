@@ -1,14 +1,16 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
+import { authService } from "@/services/auth";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useToast } from "@/hooks/useToast";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { Eye, EyeOff, Compass } from "lucide-react";
+import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
+import { Eye, EyeOff, Compass, Mail } from "lucide-react";
 
 const loginSchema = z.object({
   email: z.string().min(1, "Please enter a valid email address").email("Please enter a valid email address"),
@@ -21,6 +23,9 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [isResending, setIsResending] = useState(false);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -41,9 +46,37 @@ export function LoginPage() {
     },
   });
 
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => prev - 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
+
+  const handleResend = async () => {
+    if (!unverifiedEmail || resendCooldown > 0) return;
+    setIsResending(true);
+    try {
+      const res = await authService.resendVerification(unverifiedEmail);
+      toastSuccess(res.message, "Verification Email Sent");
+      setResendCooldown(60);
+    } catch (err: unknown) {
+      let detail = "Failed to resend verification email.";
+      if (err && typeof err === "object" && "response" in err) {
+        const resp = (err as { response?: { data?: { detail?: string } } }).response;
+        if (resp?.data?.detail) detail = resp.data.detail;
+      }
+      toastError(detail, "Resend Error");
+    } finally {
+      setIsResending(false);
+    }
+  };
+
   const onSubmit = async (data: LoginFormData) => {
     setIsSubmitting(true);
     setApiError(null);
+    setUnverifiedEmail(null);
 
     try {
       await login(data);
@@ -57,12 +90,27 @@ export function LoginPage() {
           msg = responseData.detail;
         }
       }
-      setApiError(msg);
-      toastError(msg);
+
+      if (msg === "EMAIL_NOT_VERIFIED") {
+        setUnverifiedEmail(data.email);
+        setResendCooldown(45);
+      } else {
+        setApiError(msg);
+        toastError(msg);
+      }
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  const maskedEmail = (() => {
+    if (!unverifiedEmail) return "";
+    const [localPart, domain] = unverifiedEmail.split("@");
+    if (!localPart) return unverifiedEmail;
+    return localPart.length > 2
+      ? `${localPart[0]}***${localPart[localPart.length - 1]}@${domain}`
+      : `${localPart[0]}***@${domain}`;
+  })();
 
   return (
     <div className="max-w-md mx-auto py-8 sm:py-16">
@@ -79,11 +127,49 @@ export function LoginPage() {
           </p>
         </div>
 
+        {unverifiedEmail && (
+          <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 space-y-3 text-left">
+            <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200 font-semibold text-sm">
+              <Mail className="w-4 h-4 text-amber-600" />
+              <span>Verify your email first</span>
+            </div>
+            <p className="text-xs text-amber-700 dark:text-amber-300">
+              We sent a verification link to{" "}
+              <strong className="font-mono text-gray-900 dark:text-gray-100">
+                {maskedEmail}
+              </strong>
+              . Please verify your email before logging in.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleResend}
+              disabled={isResending || resendCooldown > 0}
+              className="w-full text-xs font-medium"
+            >
+              {isResending
+                ? "Sending..."
+                : resendCooldown > 0
+                ? `Resend available in ${resendCooldown}s`
+                : "Resend verification email"}
+            </Button>
+          </div>
+        )}
+
         {apiError && (
           <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 text-xs text-brand-danger font-medium">
             {apiError}
           </div>
         )}
+
+        <GoogleSignInButton text="signin_with" />
+
+        <div className="relative flex py-2 items-center">
+          <div className="flex-grow border-t border-slate-200 dark:border-slate-800"></div>
+          <span className="flex-shrink mx-3 text-xs text-slate-400 uppercase tracking-wider">or with email</span>
+          <div className="flex-grow border-t border-slate-200 dark:border-slate-800"></div>
+        </div>
 
         <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
           <Input

@@ -62,3 +62,32 @@ class FullProfileResponse(BaseModel):
     skills: List[UserSkillResponse] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class PublicUserSummary(BaseModel):
+    id: uuid.UUID
+    name: str
+    role: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PublicLocationSummary(BaseModel):
+    city: Optional[str] = None
+    area: Optional[str] = None
+    state: Optional[str] = None
+    country: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PublicProfileResponse(BaseModel):
+    user: PublicUserSummary
+    profile: Optional[ProfileResponse] = None
+    location: Optional[PublicLocationSummary] = None
+    skills: List[UserSkillResponse] = Field(default_factory=list)
+    reputation: Optional[dict] = None
+    public_availability: Optional[dict] = None
+
+    model_config = ConfigDict(from_attributes=True)

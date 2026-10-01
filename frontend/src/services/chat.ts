@@ -76,3 +76,27 @@ export async function deleteMessage(
   const resp = await api.delete<MessageItem>(`/api/messages/${message_id}`);
   return resp.data;
 }
+
+export interface TranslateChatResponse {
+  original_text: string;
+  translated_text: string;
+  detected_source_language: string;
+  target_language: string;
+  message_id?: string;
+  provider: string;
+}
+
+export async function translateChatMessage(
+  text: string,
+  target_language: string,
+  source_language: string = "auto",
+  message_id?: string
+): Promise<TranslateChatResponse> {
+  const resp = await api.post<TranslateChatResponse>("/api/chat/translate", {
+    text,
+    target_language,
+    source_language,
+    message_id,
+  });
+  return resp.data;
+}

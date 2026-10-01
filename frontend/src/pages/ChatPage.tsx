@@ -8,6 +8,7 @@ import {
   sendMessage,
   editMessage,
   deleteMessage,
+  translateChatMessage,
 } from "@/services/chat";
 import { useChatSocket } from "@/hooks/useChatSocket";
 import type { ConversationItem, MessageItem } from "@/types/chat";
@@ -32,7 +33,17 @@ import {
   WifiOff,
   ShieldAlert,
   Flag,
+  Languages,
 } from "lucide-react";
+
+interface MessageTranslation {
+  translatedText: string;
+  sourceLang: string;
+  targetLang: string;
+  loading: boolean;
+  showOriginal: boolean;
+  error?: string;
+}
 
 export function ChatPage() {
   const { connectionId } = useParams<{ connectionId: string }>();
@@ -58,6 +69,62 @@ export function ChatPage() {
   const [showReportModal, setShowReportModal] = useState<boolean>(false);
   const [reportingMessageId, setReportingMessageId] = useState<string | undefined>(undefined);
   const [isPartnerBlocked, setIsPartnerBlocked] = useState<boolean>(false);
+
+  // Multilingual translation state
+  const [targetLang, setTargetLang] = useState<string>("en");
+  const [translations, setTranslations] = useState<Record<string, MessageTranslation>>({});
+
+  const handleTranslateMessage = async (msg: MessageItem) => {
+    // If already translated for this message, just toggle showOriginal
+    const current = translations[msg.id];
+    if (current && current.translatedText) {
+      setTranslations((prev) => ({
+        ...prev,
+        [msg.id]: {
+          ...current,
+          showOriginal: !current.showOriginal,
+        },
+      }));
+      return;
+    }
+
+    setTranslations((prev) => ({
+      ...prev,
+      [msg.id]: {
+        translatedText: "",
+        sourceLang: "auto",
+        targetLang: targetLang,
+        loading: true,
+        showOriginal: false,
+      },
+    }));
+
+    try {
+      const result = await translateChatMessage(msg.content, targetLang, "auto", msg.id);
+      setTranslations((prev) => ({
+        ...prev,
+        [msg.id]: {
+          translatedText: result.translated_text,
+          sourceLang: result.detected_source_language,
+          targetLang: result.target_language,
+          loading: false,
+          showOriginal: false,
+        },
+      }));
+    } catch {
+      setTranslations((prev) => ({
+        ...prev,
+        [msg.id]: {
+          translatedText: "",
+          sourceLang: "",
+          targetLang: targetLang,
+          loading: false,
+          showOriginal: true,
+          error: "Translation failed. Check connection.",
+        },
+      }));
+    }
+  };
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const messageContainerRef = useRef<HTMLDivElement | null>(null);
@@ -311,8 +378,32 @@ export function ChatPage() {
           </div>
         </div>
 
-        {/* Safety Actions & Live status */}
+        {/* Header Right Actions */}
         <div className="flex items-center gap-2">
+          {/* Multilingual Translation Preference */}
+          <div className="flex items-center gap-1.5 bg-white dark:bg-brand-dark-card border border-gray-200 dark:border-brand-dark-border px-2.5 py-1 rounded-xl shadow-2xs text-xs">
+            <Languages className="w-3.5 h-3.5 text-brand-primary shrink-0" />
+            <span className="hidden md:inline text-[11px] text-gray-500 dark:text-gray-400 font-medium">Translate to:</span>
+            <select
+              value={targetLang}
+              onChange={(e) => setTargetLang(e.target.value)}
+              className="bg-transparent text-xs font-semibold text-gray-800 dark:text-gray-200 focus:outline-none cursor-pointer"
+              title="Select target language for message translation"
+            >
+              <option value="en">English</option>
+              <option value="hi">Hindi (हिंदी)</option>
+              <option value="ml">Malayalam (മലയാളം)</option>
+              <option value="mr">Marathi (मराठी)</option>
+              <option value="ta">Tamil (தமிழ்)</option>
+              <option value="te">Telugu (తెలుగు)</option>
+              <option value="kn">Kannada (ಕನ್ನಡ)</option>
+              <option value="bn">Bengali (বাংলা)</option>
+              <option value="gu">Gujarati (ગુજરાતી)</option>
+              <option value="pa">Punjabi (ਪੰਜਾਬੀ)</option>
+              <option value="ur">Urdu (اردو)</option>
+            </select>
+          </div>
+
           {partner && (
             <div className="flex items-center gap-1 sm:gap-2 mr-1">
               <button
@@ -402,7 +493,7 @@ export function ChatPage() {
         ) : (
           messages.map((msg) => {
             const isMine = msg.sender_id === user?.id;
-            const isDeleted = msg.deleted_at !== null;
+            const isDeleted = Boolean(msg.deleted_at);
             const isEditingThis = editingId === msg.id;
 
             return (
@@ -451,16 +542,81 @@ export function ChatPage() {
                           isDeleted ? "italic opacity-70" : ""
                         }`}
                       >
-                        {msg.content}
+                        {translations[msg.id]?.translatedText && !translations[msg.id]?.showOriginal
+                          ? translations[msg.id].translatedText
+                          : msg.content}
                       </p>
 
+                      {/* Multilingual Translation Details Box */}
+                      {translations[msg.id] && !isDeleted && (
+                        <div
+                          className={`mt-2 pt-1.5 border-t text-[11px] leading-tight space-y-1 ${
+                            isMine
+                              ? "border-teal-400/40 text-teal-100"
+                              : "border-gray-200 dark:border-brand-dark-border text-gray-600 dark:text-gray-300"
+                          }`}
+                        >
+                          {translations[msg.id].loading ? (
+                            <div className="flex items-center gap-1.5 py-0.5">
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                              <span>Translating message...</span>
+                            </div>
+                          ) : translations[msg.id].error ? (
+                            <div className="text-red-400 text-[10px]">
+                              {translations[msg.id].error}
+                            </div>
+                          ) : (
+                            <div className="space-y-1">
+                              <div className="flex items-center justify-between gap-2 text-[10px]">
+                                <span className="font-semibold flex items-center gap-1">
+                                  <Languages className="w-3 h-3 text-brand-primary" />
+                                  {translations[msg.id].showOriginal
+                                    ? "Original text shown"
+                                    : `Translated (${translations[msg.id].sourceLang.toUpperCase()} → ${translations[msg.id].targetLang.toUpperCase()})`}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleTranslateMessage(msg)}
+                                  className="underline cursor-pointer hover:opacity-100 text-[10px]"
+                                >
+                                  {translations[msg.id].showOriginal
+                                    ? "Show translation"
+                                    : "Show original"}
+                                </button>
+                              </div>
+                              {translations[msg.id].showOriginal ? (
+                                <p className="italic opacity-85 text-[11px]">
+                                  {translations[msg.id].translatedText}
+                                </p>
+                              ) : (
+                                <p className="italic opacity-80 text-[10px]">
+                                  Original: "{msg.content}"
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       <div
-                        className={`flex items-center justify-end gap-1.5 mt-1 text-[10px] ${
+                        className={`flex items-center justify-end gap-2 mt-1 text-[10px] ${
                           isMine
                             ? "text-teal-100/90"
                             : "text-gray-500 dark:text-gray-400"
                         }`}
                       >
+                        {/* Inline translate toggle for quick access */}
+                        {!isDeleted && !translations[msg.id] && (
+                          <button
+                            type="button"
+                            onClick={() => handleTranslateMessage(msg)}
+                            className="flex items-center gap-0.5 hover:underline opacity-75 hover:opacity-100 transition-opacity"
+                            title="Translate this message"
+                          >
+                            <Languages className="w-2.5 h-2.5" />
+                            <span>Translate</span>
+                          </button>
+                        )}
                         {msg.edited_at && !isDeleted && (
                           <span className="italic">(edited)</span>
                         )}
@@ -474,9 +630,16 @@ export function ChatPage() {
                     </>
                   )}
 
-                  {/* Actions for sender: Edit & Delete */}
+                  {/* Actions for sender: Translate, Edit & Delete */}
                   {isMine && !isDeleted && !isEditingThis && (
                     <div className="hidden group-hover:flex items-center gap-1 absolute -top-3 right-0 bg-white dark:bg-brand-dark-card border border-gray-200 dark:border-brand-dark-border rounded-lg shadow-sm px-1 py-0.5 text-gray-600 dark:text-gray-300">
+                      <button
+                        onClick={() => handleTranslateMessage(msg)}
+                        title="Translate message"
+                        className="p-1 hover:text-brand-primary transition-colors flex items-center gap-0.5 text-[10px]"
+                      >
+                        <Languages className="w-3 h-3" />
+                      </button>
                       <button
                         onClick={() => handleStartEdit(msg)}
                         title="Edit message"
@@ -494,9 +657,17 @@ export function ChatPage() {
                     </div>
                   )}
 
-                  {/* Actions for recipient: Report */}
+                  {/* Actions for recipient: Translate & Report */}
                   {!isMine && !isDeleted && (
                     <div className="hidden group-hover:flex items-center gap-1 absolute -top-3 right-0 bg-white dark:bg-brand-dark-card border border-gray-200 dark:border-brand-dark-border rounded-lg shadow-sm px-1.5 py-0.5 text-gray-600 dark:text-gray-300">
+                      <button
+                        onClick={() => handleTranslateMessage(msg)}
+                        title="Translate message"
+                        className="p-0.5 hover:text-brand-primary transition-colors flex items-center gap-1 text-[11px]"
+                      >
+                        <Languages className="w-3 h-3" />
+                        <span>Translate</span>
+                      </button>
                       <button
                         onClick={() => {
                           setReportingMessageId(msg.id);

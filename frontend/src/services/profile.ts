@@ -5,6 +5,7 @@ import type {
   LocationCreateOrUpdatePayload,
   Profile,
   ProfileUpdatePayload,
+  PublicProfile,
   SkillCreatePayload,
   UserSkill,
 } from "@/types/profile";
@@ -52,6 +53,11 @@ export const profileService = {
 
   async deleteMySkill(skillId: string): Promise<{ detail: string }> {
     const res = await api.delete<{ detail: string }>(`/api/profile/me/skills/${skillId}`);
+    return res.data;
+  },
+
+  async getPublicProfile(userId: string): Promise<PublicProfile> {
+    const res = await api.get<PublicProfile>(`/api/profile/users/${userId}`);
     return res.data;
   },
 };

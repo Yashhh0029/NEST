@@ -401,3 +401,41 @@ def test_websocket_authorization_and_message_delivery(client: TestClient):
     assert get_msgs.status_code == 200
     persisted_texts = [m["content"] for m in get_msgs.json()["messages"]]
     assert "Real-time message over WebSocket!" in persisted_texts
+
+
+def test_chat_translation_endpoint(client: TestClient):
+    """Test translating chat messages across languages."""
+    user = create_authenticated_user(client, "Translate User", f"trans_{uuid.uuid4().hex[:6]}@example.test")
+
+    # Unauthenticated fails
+    resp = client.post("/api/chat/translate", json={"text": "Hello", "target_language": "ml"})
+    assert resp.status_code == 401
+
+    # Authenticated translation from English to Malayalam
+    resp = client.post(
+        "/api/chat/translate",
+        headers=user["headers"],
+        json={
+            "text": "Hello, how are you?",
+            "target_language": "ml",
+            "source_language": "en",
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["original_text"] == "Hello, how are you?"
+    assert len(data["translated_text"]) > 0
+    assert data["target_language"] == "ml"
+
+    # Hindi to English
+    resp2 = client.post(
+        "/api/chat/translate",
+        headers=user["headers"],
+        json={
+            "text": "मुझे मदद चाहिए",
+            "target_language": "en",
+        },
+    )
+    assert resp2.status_code == 200
+    data2 = resp2.json()
+    assert "help" in data2["translated_text"].lower() or "need" in data2["translated_text"].lower()

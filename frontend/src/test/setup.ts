@@ -19,3 +19,20 @@ Object.defineProperty(window, "matchMedia", {
 // Mock scrollTo and scrollIntoView
 window.scrollTo = vi.fn();
 Element.prototype.scrollIntoView = vi.fn();
+
+// Mock IntersectionObserver
+class MockIntersectionObserver {
+  observe = vi.fn();
+  unobserve = vi.fn();
+  disconnect = vi.fn();
+}
+Object.defineProperty(window, "IntersectionObserver", {
+  writable: true,
+  configurable: true,
+  value: MockIntersectionObserver,
+});
+Object.defineProperty(global, "IntersectionObserver", {
+  writable: true,
+  configurable: true,
+  value: MockIntersectionObserver,
+});

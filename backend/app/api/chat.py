@@ -14,9 +14,39 @@ from app.schemas.chat import (
     MessageResponse,
     MessageUpdate,
 )
+from app.schemas.translation import (
+    TranslateMessageRequest,
+    TranslateMessageResponse,
+)
 from app.services import chat_service
+from app.services.translation_service import translation_service
 
 router = APIRouter(tags=["Chat & Messaging"])
+
+
+@router.post(
+    "/chat/translate",
+    response_model=TranslateMessageResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Translate chat message across languages",
+    description="Translates message text into target language with automatic source language detection.",
+)
+def translate_message(
+    payload: TranslateMessageRequest,
+    current_user: User = Depends(get_current_user),
+) -> TranslateMessageResponse:
+    translated_text, detected_lang = translation_service.translate(
+        text=payload.text,
+        target_language=payload.target_language,
+        source_language=payload.source_language or "auto",
+    )
+    return TranslateMessageResponse(
+        original_text=payload.text,
+        translated_text=translated_text,
+        detected_source_language=detected_lang,
+        target_language=payload.target_language,
+        message_id=payload.message_id,
+    )
 
 
 @router.post(

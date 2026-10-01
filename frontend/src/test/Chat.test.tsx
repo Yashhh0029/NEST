@@ -231,5 +231,54 @@ describe("Phase 8 Chat & Messaging Frontend", () => {
       ).toBeInTheDocument();
       expect(screen.getByText("Return to Connections")).toBeInTheDocument();
     });
+
+    it("translates message into selected language and toggles original/translated", async () => {
+      vi.spyOn(chatService, "getConversationByConnection").mockResolvedValue(mockConversation);
+      vi.spyOn(chatService, "getMessages").mockResolvedValue({
+        total: 2,
+        has_more: false,
+        messages: mockMessages,
+      });
+
+      const translateSpy = vi.spyOn(chatService, "translateChatMessage").mockResolvedValue({
+        original_text: "Hi! Welcome to Whitefield. How can I help?",
+        translated_text: "ഹായ്! വൈറ്റ്ഫീൽഡിലേക്ക് സ്വാഗതം. എനിക്ക് എങ്ങനെ സഹായിക്കാനാകും?",
+        detected_source_language: "en",
+        target_language: "ml",
+        provider: "Google Translate",
+      });
+
+      render(
+        <MemoryRouter initialEntries={["/chat/conn-active-1"]}>
+          <Routes>
+            <Route path="/chat/:connectionId" element={<ChatPage />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("Sneha Patil")).toBeInTheDocument();
+      });
+
+      // Find Translate button for Sneha's message
+      const translateBtns = screen.getAllByRole("button", { name: /Translate/i });
+      expect(translateBtns.length).toBeGreaterThan(0);
+      fireEvent.click(translateBtns[0]);
+
+      await waitFor(() => {
+        expect(translateSpy).toHaveBeenCalled();
+      });
+
+      // Confirm translated text appears
+      await waitFor(() => {
+        expect(screen.getByText(/വൈറ്റ്ഫീൽഡിലേക്ക് സ്വാഗതം/i)).toBeInTheDocument();
+      });
+
+      // Toggle show original
+      const toggleBtn = screen.getByRole("button", { name: /Show original/i });
+      fireEvent.click(toggleBtn);
+
+      expect(screen.getByText(/Show translation/i)).toBeInTheDocument();
+    });
   });
 });

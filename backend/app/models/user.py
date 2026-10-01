@@ -34,6 +34,10 @@ class User(Base):
     )
     is_active = Column(Boolean, default=True, nullable=False)
     is_verified = Column(Boolean, default=False, nullable=False)
+    email_verified = Column(Boolean, default=False, nullable=False)
+    email_verified_at = Column(DateTime(timezone=True), nullable=True)
+    email_verification_token_hash = Column(String(128), index=True, nullable=True)
+    email_verification_expires_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

@@ -66,3 +66,30 @@ class RequestResponse(BaseModel):
 class RequestParseResponse(BaseModel):
     raw_text: str
     extracted: ExtractedRequest
+
+
+class NearbyRequestItem(BaseModel):
+    id: uuid.UUID
+    user_id: uuid.UUID
+    requester_name: str
+    raw_text: str
+    intent: Optional[str] = None
+    status: str
+    city: Optional[str] = None
+    area: Optional[str] = None
+    state: Optional[str] = None
+    country: Optional[str] = None
+    budget_amount: Optional[float] = None
+    budget_currency: Optional[str] = None
+    budget_period: Optional[str] = None
+    preferred_date: Optional[date] = None
+    preferred_start_time: Optional[time] = None
+    preferred_end_time: Optional[time] = None
+    requester_timezone: Optional[str] = None
+    is_time_flexible: bool = True
+    needs: List[str] = Field(default_factory=list)
+    distance_km: Optional[float] = None
+    match_reasons: List[str] = Field(default_factory=list)
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

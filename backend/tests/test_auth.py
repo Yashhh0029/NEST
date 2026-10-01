@@ -41,6 +41,7 @@ def test_register_user_success(client: TestClient):
     assert data["email"] == "aarav.sharma@example.test"
     assert data["role"] == "newcomer"
     assert data["is_active"] is True
+    assert data["email_verified"] is False
     assert "id" in data
     # Critical security check: password_hash must NEVER be exposed in response
     assert "password" not in data
@@ -54,6 +55,9 @@ def test_register_user_success(client: TestClient):
         assert user_in_db.name == "Aarav Sharma"
         assert user_in_db.password_hash != "SecurePassword123!"
         assert verify_password("SecurePassword123!", user_in_db.password_hash) is True
+        assert user_in_db.email_verified is False
+        assert user_in_db.email_verification_token_hash is not None
+        assert user_in_db.email_verification_expires_at is not None
     finally:
         db.close()
 
@@ -109,7 +113,9 @@ def test_register_password_no_numbers(client: TestClient):
 
 
 def test_login_success(client: TestClient):
-    """Verify valid login returns signed JWT access token and user info."""
+    """Verify unverified login is rejected, and verified login returns signed JWT access token."""
+    from datetime import datetime, timezone
+
     register_payload = {
         "name": "Login Tester",
         "email": "login.tester@example.test",
@@ -122,6 +128,25 @@ def test_login_success(client: TestClient):
         "email": "login.tester@example.test",
         "password": "Password123!",
     }
+    # 1. Unverified account must be blocked
+    resp_unverified = client.post("/api/auth/login", json=login_payload)
+    assert resp_unverified.status_code == status.HTTP_403_FORBIDDEN
+    assert "EMAIL_NOT_VERIFIED" in resp_unverified.json()["detail"]
+
+    # 2. Verify account
+    db = SessionLocal()
+    try:
+        db.query(User).filter(User.email == "login.tester@example.test").update({
+            "email_verified": True,
+            "email_verified_at": datetime.now(timezone.utc),
+            "email_verification_token_hash": None,
+            "email_verification_expires_at": None,
+        })
+        db.commit()
+    finally:
+        db.close()
+
+    # 3. Verified login succeeds
     response = client.post("/api/auth/login", json=login_payload)
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
@@ -130,6 +155,7 @@ def test_login_success(client: TestClient):
     assert data["token_type"] == "bearer"
     assert data["user"]["email"] == "login.tester@example.test"
     assert data["user"]["role"] == "both"
+    assert data["user"]["email_verified"] is True
     # Never expose password hash
     assert "password_hash" not in data["user"]
 
@@ -165,6 +191,8 @@ def test_login_unknown_user(client: TestClient):
 
 def test_get_me_authenticated(client: TestClient):
     """Verify /api/auth/me returns current user profile when valid bearer token is supplied."""
+    from datetime import datetime, timezone
+
     reg_payload = {
         "name": "Priya Nair",
         "email": "priya.nair@example.test",
@@ -172,6 +200,19 @@ def test_get_me_authenticated(client: TestClient):
         "role": "helper",
     }
     client.post("/api/auth/register", json=reg_payload)
+
+    # Verify user
+    db = SessionLocal()
+    try:
+        db.query(User).filter(User.email == "priya.nair@example.test").update({
+            "email_verified": True,
+            "email_verified_at": datetime.now(timezone.utc),
+            "email_verification_token_hash": None,
+            "email_verification_expires_at": None,
+        })
+        db.commit()
+    finally:
+        db.close()
 
     login_resp = client.post("/api/auth/login", json={
         "email": "priya.nair@example.test",
@@ -188,6 +229,7 @@ def test_get_me_authenticated(client: TestClient):
     assert data["name"] == "Priya Nair"
     assert data["email"] == "priya.nair@example.test"
     assert data["role"] == "helper"
+    assert data["email_verified"] is True
     assert "password_hash" not in data
 
 
@@ -203,4 +245,19 @@ def test_get_me_unauthorized_invalid_token(client: TestClient):
         "/api/auth/me",
         headers={"Authorization": "Bearer invalid.jwt.token"},
     )
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+def test_google_auth_missing_token_returns_400(client: TestClient):
+    """Verify POST /api/auth/google returns 400 when token string is empty or absent."""
+    response = client.post("/api/auth/google", json={})
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    response2 = client.post("/api/auth/google", json={"id_token": ""})
+    assert response2.status_code == status.HTTP_400_BAD_REQUEST
+
+
+def test_google_auth_invalid_token_returns_401(client: TestClient):
+    """Verify POST /api/auth/google returns 401 for fabricated token."""
+    response = client.post("/api/auth/google", json={"id_token": "fabricated_google_token"})
     assert response.status_code == status.HTTP_401_UNAUTHORIZED

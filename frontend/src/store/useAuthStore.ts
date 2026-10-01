@@ -8,6 +8,7 @@ interface AuthState {
   isAuthenticated: boolean;
   loading: boolean;
   login: (payload: LoginPayload) => Promise<void>;
+  googleLogin: (credential: string) => Promise<void>;
   logout: () => void;
   setUser: (user: User | null) => void;
   clearAuth: () => void;
@@ -24,6 +25,23 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ loading: true });
     try {
       const tokenData = await authService.login(payload);
+      const user = await authService.getMe();
+      set({
+        accessToken: tokenData.access_token,
+        user,
+        isAuthenticated: true,
+        loading: false,
+      });
+    } catch (error) {
+      set({ loading: false, isAuthenticated: false, user: null, accessToken: null });
+      throw error;
+    }
+  },
+
+  googleLogin: async (credential: string) => {
+    set({ loading: true });
+    try {
+      const tokenData = await authService.googleLogin(credential);
       const user = await authService.getMe();
       set({
         accessToken: tokenData.access_token,

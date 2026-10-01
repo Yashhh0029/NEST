@@ -174,6 +174,7 @@ async def complete_session(
 
 @router.get("/{session_id}/ics")
 @router.get("/{session_id}/calendar.ics")
+@router.get("/{session_id}/calendar")
 def export_session_calendar(
     session_id: uuid.UUID,
     db: Session = Depends(get_db),

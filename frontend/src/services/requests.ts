@@ -1,5 +1,6 @@
 import { api } from "./api";
 import type {
+  NearbyRequestItem,
   NewcomerRequest,
   RequestCreatePayload,
   RequestParseResponse,
@@ -34,5 +35,10 @@ export const requestsService = {
 
   async deleteRequest(id: string): Promise<void> {
     await api.delete(`/api/requests/${id}`);
+  },
+
+  async getNearbyRequests(params?: { radius_km?: number; limit?: number }): Promise<NearbyRequestItem[]> {
+    const res = await api.get<NearbyRequestItem[]>("/api/requests/nearby", { params });
+    return res.data;
   },
 };

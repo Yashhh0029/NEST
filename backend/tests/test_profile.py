@@ -336,3 +336,31 @@ def test_password_hash_never_exposed(client: TestClient):
                 assert_no_passwords(item)
 
     assert_no_passwords(full_resp)
+
+
+def test_get_public_profile_endpoint(client: TestClient):
+    """18. Public profile endpoint returns public data without leaking email or exact coordinates."""
+    helper = create_authenticated_user(client, "Nikhil Sharma", "nikhil.sharma@example.test", role="helper")
+    client.put(
+        "/api/profile/me",
+        json={"headline": "Techie in Hinjewadi", "bio": "Been in Hinjewadi for 4 years."},
+        headers=helper["headers"],
+    )
+    client.put(
+        "/api/profile/me/location",
+        json={"city": "Pune", "area": "Hinjewadi", "latitude": 18.5913, "longitude": 73.7389},
+        headers=helper["headers"],
+    )
+
+    resp = client.get(f"/api/profile/users/{helper['user']['id']}")
+    assert resp.status_code == status.HTTP_200_OK
+    data = resp.json()
+    assert data["user"]["name"] == "Nikhil Sharma"
+    assert "email" not in data["user"]
+    assert data["location"]["city"] == "Pune"
+    assert data["location"]["area"] == "Hinjewadi"
+    # Never expose exact coordinates in public profile
+    assert "latitude" not in data["location"]
+    assert "longitude" not in data["location"]
+    assert "reputation" in data
+    assert "public_availability" in data

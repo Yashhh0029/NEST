@@ -206,3 +206,102 @@ def delete_user_location(
     db.delete(loc)
     db.commit()
     return True
+
+
+def get_public_profile(
+    db: Session,
+    target_user_id: "uuid.UUID",
+    caller: Optional[User] = None,
+):
+    """
+    Retrieve public-safe profile for a user.
+    Excludes exact coordinates, phone numbers, and emails.
+    Includes verified reputation and coarse availability.
+    """
+    import uuid
+    from fastapi import HTTPException, status
+    from app.models.safety import Block
+    from app.schemas.profile import (
+        ProfileResponse,
+        PublicLocationSummary,
+        PublicProfileResponse,
+        PublicUserSummary,
+    )
+    from app.schemas.skill import UserSkillResponse
+    from app.services.availability_service import get_public_or_detailed_availability
+    from app.services.review_service import get_user_reputation
+
+    target_user = db.query(User).filter(User.id == target_user_id, User.is_active == True).first()
+    if not target_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found or inactive.",
+        )
+
+    if caller and caller.id != target_user.id:
+        blocked = (
+            db.query(Block)
+            .filter(
+                ((Block.blocker_id == caller.id) & (Block.blocked_id == target_user.id))
+                | ((Block.blocker_id == target_user.id) & (Block.blocked_id == caller.id))
+            )
+            .first()
+        )
+        if blocked:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found.",
+            )
+
+    profile = db.query(Profile).filter(Profile.user_id == target_user.id).first()
+    profile_resp = ProfileResponse.model_validate(profile) if profile else None
+
+    loc = (
+        db.query(Location)
+        .filter(Location.user_id == target_user.id, Location.location_label == "Primary")
+        .first()
+    )
+    if not loc:
+        loc = db.query(Location).filter(Location.user_id == target_user.id).first()
+
+    loc_summary = (
+        PublicLocationSummary(
+            city=loc.city,
+            area=loc.area,
+            state=loc.state,
+            country=loc.country,
+        )
+        if loc
+        else None
+    )
+
+    user_skills_raw = (
+        db.query(UserSkill, Skill.name)
+        .join(Skill, UserSkill.skill_id == Skill.id)
+        .filter(UserSkill.user_id == target_user.id)
+        .order_by(Skill.name.asc())
+        .all()
+    )
+    skills_resp = [
+        UserSkillResponse(
+            id=us.id,
+            skill_id=us.skill_id,
+            skill_name=skill_name,
+            proficiency=us.proficiency,
+            years_experience=us.years_experience,
+            created_at=us.created_at,
+        )
+        for us, skill_name in user_skills_raw
+    ]
+
+    rep = get_user_reputation(db, target_user.id).model_dump()
+    avail = get_public_or_detailed_availability(db, target_user.id, viewer=caller).model_dump()
+
+    return PublicProfileResponse(
+        user=PublicUserSummary.model_validate(target_user),
+        profile=profile_resp,
+        location=loc_summary,
+        skills=skills_resp,
+        reputation=rep,
+        public_availability=avail,
+    )

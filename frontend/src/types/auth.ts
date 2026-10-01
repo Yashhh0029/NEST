@@ -7,6 +7,8 @@ export interface User {
   role: UserRole;
   is_active: boolean;
   is_verified: boolean;
+  email_verified: boolean;
+  email_verified_at?: string;
   created_at: string;
 }
 
@@ -25,4 +27,14 @@ export interface LoginPayload {
 export interface TokenResponse {
   access_token: string;
   token_type: string;
+  user?: User;
+}
+
+export interface VerifyEmailResponse {
+  message: string;
+  email_verified: boolean;
+}
+
+export interface ResendVerificationResponse {
+  message: string;
 }

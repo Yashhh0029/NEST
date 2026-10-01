@@ -95,3 +95,28 @@ export interface NewcomerRequest {
   updated_at: string;
 }
 
+export interface NearbyRequestItem {
+  id: string;
+  user_id: string;
+  requester_name: string;
+  raw_text: string;
+  intent?: string | null;
+  status: string;
+  city?: string | null;
+  area?: string | null;
+  state?: string | null;
+  country?: string | null;
+  budget_amount?: number | null;
+  budget_currency?: string | null;
+  budget_period?: string | null;
+  preferred_date?: string | null;
+  preferred_start_time?: string | null;
+  preferred_end_time?: string | null;
+  requester_timezone?: string | null;
+  is_time_flexible: boolean;
+  needs: string[];
+  distance_km?: number | null;
+  match_reasons: string[];
+  created_at: string;
+}
+

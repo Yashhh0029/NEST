@@ -5,7 +5,10 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.models.user import UserRole
 
-EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
+EMAIL_REGEX = re.compile(
+    r"^[a-zA-Z0-9_+-]+(?:\.[a-zA-Z0-9_+-]+)*@"
+    r"(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$"
+)
 
 
 class UserRegister(BaseModel):
@@ -62,6 +65,8 @@ class UserResponse(BaseModel):
     role: UserRole
     is_active: bool
     is_verified: bool
+    email_verified: bool = False
+    email_verified_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 
@@ -76,3 +81,33 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     user_id: Optional[str] = None
+
+
+class GoogleAuthRequest(BaseModel):
+    id_token: Optional[str] = Field(None, description="Google OAuth ID Token from Google Identity Services")
+    credential: Optional[str] = Field(None, description="Google One Tap / GIS credential token alias")
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str = Field(..., min_length=1, description="Verification token received in email")
+
+
+class VerifyEmailResponse(BaseModel):
+    message: str
+    email_verified: bool
+
+
+class ResendVerificationRequest(BaseModel):
+    email: str = Field(..., description="Email address to resend verification link to")
+
+    @field_validator("email")
+    @classmethod
+    def validate_and_normalize_email(cls, v: str) -> str:
+        cleaned = v.strip().lower()
+        if not EMAIL_REGEX.match(cleaned):
+            raise ValueError("Invalid email address format")
+        return cleaned
+
+
+class ResendVerificationResponse(BaseModel):
+    message: str

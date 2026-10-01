@@ -28,7 +28,7 @@ def clean_test_data():
         try:
             # Find test users
             test_users = db.query(User).filter(
-                (User.email.like("%@example.test")) | (User.email.like("%@nest.local"))
+                (User.email.like("%@example.test")) | (User.email.like("%@nest.local")) | (User.email.like("%@example.com"))
             ).all()
             user_ids = [u.id for u in test_users]
             if user_ids:
@@ -51,18 +51,58 @@ def clean_test_data():
             db.close()
 
     _cleanup()
+    from app.services.email_service import test_email_provider
+    test_email_provider.clear()
+
+    # Deactivate real non-test users during test
+    db_ctx = SessionLocal()
+    real_users = db_ctx.query(User).filter(
+        ~User.email.like("%@example.test"),
+        ~User.email.like("%@nest.local"),
+        ~User.email.like("%@example.com"),
+    ).all()
+    real_user_ids = [u.id for u in real_users]
+    if real_user_ids:
+        db_ctx.query(User).filter(User.id.in_(real_user_ids)).update({"is_active": False}, synchronize_session=False)
+        db_ctx.commit()
+    db_ctx.close()
+
     yield
+
     _cleanup()
+    test_email_provider.clear()
+    # Reactivate real non-test users after test
+    if real_user_ids:
+        db_ctx = SessionLocal()
+        db_ctx.query(User).filter(User.id.in_(real_user_ids)).update({"is_active": True}, synchronize_session=False)
+        db_ctx.commit()
+        db_ctx.close()
 
 
 def create_authenticated_user(client: TestClient, name: str, email: str, role: str = "newcomer"):
     """Helper utility to register and log in a test user, returning auth headers and user info."""
+    from datetime import datetime, timezone
+
     client.post("/api/auth/register", json={
         "name": name,
         "email": email,
         "password": "SecurePassword123!",
         "role": role,
     })
+
+    # Legitimate verification simulation: set email_verified = True in DB
+    db = SessionLocal()
+    try:
+        db.query(User).filter(User.email == email.strip().lower()).update({
+            "email_verified": True,
+            "email_verified_at": datetime.now(timezone.utc),
+            "email_verification_token_hash": None,
+            "email_verification_expires_at": None,
+        })
+        db.commit()
+    finally:
+        db.close()
+
     login_resp = client.post("/api/auth/login", json={
         "email": email,
         "password": "SecurePassword123!",

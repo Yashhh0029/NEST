@@ -32,6 +32,23 @@ class Settings(BaseSettings):
     # Google Maps Platform (Phase 6)
     GOOGLE_MAPS_API_KEY: str = ""
 
+    # Google OAuth
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+
+    # Transactional Email (Email Verification)
+    EMAIL_PROVIDER: str = "smtp"  # "smtp", "resend", "sendgrid", "test"
+    EMAIL_FROM: str = "NEST Community <noreply@nest-community.org>"
+    EMAIL_API_KEY: str = ""
+    RESEND_API_KEY: str = ""
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_TLS: bool = True
+    EMAIL_VERIFICATION_TOKEN_EXPIRE_HOURS: int = 24
+    EMAIL_RESEND_COOLDOWN_SECONDS: int = 60
+
     model_config = SettingsConfigDict(
         env_file=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env"),
         env_file_encoding="utf-8",
@@ -39,5 +56,21 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    def model_post_init(self, __context):
+        # Sync RESEND_API_KEY and EMAIL_API_KEY
+        if self.RESEND_API_KEY and not self.EMAIL_API_KEY:
+            self.EMAIL_API_KEY = self.RESEND_API_KEY
+        elif self.EMAIL_API_KEY and not self.RESEND_API_KEY:
+            self.RESEND_API_KEY = self.EMAIL_API_KEY
+
+        # If API key is present and provider is still default smtp without host, auto-select resend
+        if self.EMAIL_API_KEY and self.EMAIL_PROVIDER == "smtp" and not self.SMTP_HOST:
+            self.EMAIL_PROVIDER = "resend"
+
+        # If resend is active and EMAIL_FROM has unverified domain, default to Resend sandbox sender
+        if self.EMAIL_PROVIDER == "resend" and "noreply@nest-community.org" in self.EMAIL_FROM:
+            self.EMAIL_FROM = "NEST Verification <onboarding@resend.dev>"
+
 
 settings = Settings()
+

@@ -143,3 +143,165 @@ def delete_user_request(
     db.delete(req)
     db.commit()
     return True
+
+
+def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Calculate Haversine distance in kilometers between two lat/lon coordinates."""
+    import math
+    R = 6371.0
+    d_lat = math.radians(lat2 - lat1)
+    d_lon = math.radians(lon2 - lon1)
+    a = (
+        math.sin(d_lat / 2.0) ** 2
+        + math.cos(math.radians(lat1))
+        * math.cos(math.radians(lat2))
+        * math.sin(d_lon / 2.0) ** 2
+    )
+    c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
+    return R * c
+
+
+def get_nearby_requests_for_helper(
+    db: Session,
+    helper: User,
+    radius_km: Optional[float] = None,
+    limit: int = 50,
+):
+    """
+    Retrieve open newcomer requests relevant to this helper.
+    Excludes helper's own requests and users with active safety blocks.
+    Computes real proximity and generates truthful explanation reasons.
+    """
+    from typing import Set
+    from app.models.safety import Block
+    from app.models.location import Location
+    from app.models.request_location import RequestLocation
+    from app.schemas.request import NearbyRequestItem
+
+    # 1. Safety exclusions: bidirectional blocks
+    blocked_subq = db.query(Block.blocked_id).filter(Block.blocker_id == helper.id)
+    blocker_subq = db.query(Block.blocker_id).filter(Block.blocked_id == helper.id)
+    blocked_ids = set([r[0] for r in blocked_subq.all()] + [r[0] for r in blocker_subq.all()])
+    blocked_ids.add(helper.id)
+
+    # 2. Get helper's location & profile context
+    helper_loc = (
+        db.query(Location)
+        .filter(Location.user_id == helper.id, Location.location_label == "Primary")
+        .first()
+    )
+    if not helper_loc:
+        helper_loc = db.query(Location).filter(Location.user_id == helper.id).first()
+
+    helper_city = (helper_loc.city or "").strip().lower() if helper_loc else ""
+    helper_lat = float(helper_loc.latitude) if helper_loc and helper_loc.latitude is not None else None
+    helper_lon = float(helper_loc.longitude) if helper_loc and helper_loc.longitude is not None else None
+
+    # Helper skills and profile keywords
+    helper_keywords: Set[str] = set()
+    if helper.profile:
+        if helper.profile.help_description:
+            helper_keywords.update(helper.profile.help_description.lower().split())
+        if helper.profile.headline:
+            helper_keywords.update(helper.profile.headline.lower().split())
+        if helper.profile.occupation:
+            helper_keywords.update(helper.profile.occupation.lower().split())
+
+    # 3. Query open requests from active, email-verified requesters
+    open_requests = (
+        db.query(Request)
+        .join(User, User.id == Request.user_id)
+        .filter(
+            Request.status == "OPEN",
+            User.is_active == True,
+            User.email_verified == True,
+            ~Request.user_id.in_(blocked_ids),
+        )
+        .order_by(Request.created_at.desc())
+        .limit(100)
+        .all()
+    )
+
+    items = []
+    for req in open_requests:
+        req_user = db.query(User).filter(User.id == req.user_id).first()
+        requester_name = req_user.name if req_user else "Newcomer"
+
+        # Check location
+        req_loc = db.query(RequestLocation).filter(RequestLocation.request_id == req.id).first()
+        dist_km = None
+        if (
+            helper_lat is not None
+            and helper_lon is not None
+            and req_loc
+            and req_loc.latitude is not None
+            and req_loc.longitude is not None
+        ):
+            dist_km = round(_haversine_distance(helper_lat, helper_lon, float(req_loc.latitude), float(req_loc.longitude)), 1)
+            if radius_km is not None and dist_km > radius_km:
+                continue
+
+        # Extract needs
+        extracted = req.extracted_requirements or {}
+        needs_list = []
+        if isinstance(extracted, dict):
+            raw_needs = extracted.get("needs", [])
+            if isinstance(raw_needs, list):
+                for n in raw_needs:
+                    if isinstance(n, dict) and "category" in n:
+                        needs_list.append(str(n["category"]).capitalize())
+                    elif isinstance(n, str):
+                        needs_list.append(n.capitalize())
+
+        # Generate truthful reasons
+        reasons = []
+        if dist_km is not None:
+            reasons.append(f"Located within {dist_km} km")
+        elif req.city and helper_city and req.city.strip().lower() == helper_city:
+            reasons.append(f"Located in your city ({req.city})")
+
+        # Skill / topic overlap
+        for n in needs_list:
+            if n.lower() in helper_keywords or any(n.lower() in kw for kw in helper_keywords):
+                reasons.append(f"Matches your background in {n}")
+                break
+
+        if not reasons:
+            reasons.append("Open request awaiting a local guide")
+
+        item = NearbyRequestItem(
+            id=req.id,
+            user_id=req.user_id,
+            requester_name=requester_name,
+            raw_text=req.raw_text,
+            intent=req.intent,
+            status=req.status,
+            city=req.city,
+            area=req.area,
+            state=req.state,
+            country=req.country,
+            budget_amount=float(req.budget_amount) if req.budget_amount is not None else None,
+            budget_currency=req.budget_currency,
+            budget_period=req.budget_period,
+            preferred_date=req.preferred_date,
+            preferred_start_time=req.preferred_start_time,
+            preferred_end_time=req.preferred_end_time,
+            requester_timezone=req.requester_timezone,
+            is_time_flexible=req.is_time_flexible,
+            needs=needs_list,
+            distance_km=dist_km,
+            match_reasons=reasons,
+            created_at=req.created_at,
+        )
+        items.append(item)
+
+    # Sort items: proximity first (if known), then match reasons count, then creation time
+    items.sort(
+        key=lambda x: (
+            x.distance_km if x.distance_km is not None else 999999.0,
+            -len(x.match_reasons),
+            -x.created_at.timestamp(),
+        )
+    )
+
+    return items[:limit]

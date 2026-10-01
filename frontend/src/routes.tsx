@@ -20,6 +20,8 @@ import { ResourcesPage } from "@/pages/ResourcesPage";
 import { AdminReportsPage } from "@/pages/AdminReportsPage";
 import { SessionsPage } from "@/pages/SessionsPage";
 import { AvailabilitySettingsPage } from "@/pages/AvailabilitySettingsPage";
+import { HelperProfilePage } from "@/pages/HelperProfilePage";
+import { VerifyEmailPage } from "@/pages/VerifyEmailPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { Loader2 } from "lucide-react";
 
@@ -112,6 +114,10 @@ export function AppRoutes() {
             </PublicOnlyRoute>
           }
         />
+        <Route
+          path="/verify-email"
+          element={<VerifyEmailPage />}
+        />
 
         {/* Protected Routes */}
         <Route
@@ -183,6 +189,14 @@ export function AppRoutes() {
           element={
             <ProtectedRoute>
               <ProfileEditPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/helpers/:id"
+          element={
+            <ProtectedRoute>
+              <HelperProfilePage />
             </ProtectedRoute>
           }
         />

@@ -349,3 +349,28 @@ def test_multiple_locations_and_needs():
     assert "accommodation" in categories
     assert "food" in categories
     assert "transport" in categories
+
+
+def test_nearby_requests_feed(client: TestClient):
+    """33. Helper retrieves open requests from nearby newcomers."""
+    # 1. Newcomer creates an open request
+    newcomer = create_authenticated_user(client, "Rohan Newcomer", "rohan.nc@example.test", role="newcomer")
+    client.post(
+        "/api/requests",
+        json={"text": "Moving to Hinjewadi, Pune. Need PG and tiffin service."},
+        headers=newcomer["headers"],
+    )
+
+    # 2. Helper lists nearby requests
+    helper = create_authenticated_user(client, "Anita Helper", "anita.hlp@example.test", role="helper")
+    resp = client.get("/api/requests/nearby", headers=helper["headers"])
+    assert resp.status_code == status.HTTP_200_OK
+    data = resp.json()
+    assert isinstance(data, list)
+    # The request should appear in the feed
+    matching = [r for r in data if "Hinjewadi" in r.get("raw_text", "")]
+    assert len(matching) >= 1
+    req_item = matching[0]
+    assert req_item["city"] == "Pune"
+    assert "requester_name" in req_item
+    assert len(req_item["match_reasons"]) >= 1

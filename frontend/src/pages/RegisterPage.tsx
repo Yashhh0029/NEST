@@ -1,15 +1,15 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { authService } from "@/services/auth";
-import { useAuthStore } from "@/store/useAuthStore";
 import { useToast } from "@/hooks/useToast";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { Eye, EyeOff, Check, X, Compass } from "lucide-react";
+import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
+import { Eye, EyeOff, Check, X, Compass, Mail, ExternalLink } from "lucide-react";
 import type { UserRole } from "@/types/common";
 
 const registerSchema = z.object({
@@ -29,9 +29,10 @@ export function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState<string | null>(null);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [isResending, setIsResending] = useState(false);
 
-  const navigate = useNavigate();
-  const { login } = useAuthStore();
   const { success: toastSuccess, error: toastError } = useToast();
 
   const initialRoleParam = searchParams.get("role");
@@ -67,6 +68,14 @@ export function RegisterPage() {
     }
   }, [initialRoleParam, setValue]);
 
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => prev - 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
+
   // Password strength checks
   const hasMinLength = passwordValue.length >= 8;
   const hasNumber = /[0-9]/.test(passwordValue);
@@ -77,14 +86,10 @@ export function RegisterPage() {
     setApiError(null);
 
     try {
-      // 1. Register user
       await authService.register(data);
-
-      // 2. Automatically log in to get JWT token
-      await login({ email: data.email, password: data.password });
-
-      toastSuccess("Account created successfully! Welcome to NEST.", "Registration Complete");
-      navigate("/onboarding");
+      setRegisteredEmail(data.email);
+      setResendCooldown(60);
+      toastSuccess("Verification link sent! Please check your email to activate your account.", "Account Created");
     } catch (err: unknown) {
       const errorDetail =
         err && typeof err === "object" && "response" in err
@@ -97,6 +102,103 @@ export function RegisterPage() {
       setIsSubmitting(false);
     }
   };
+
+  const handleResend = async () => {
+    if (!registeredEmail || resendCooldown > 0) return;
+    setIsResending(true);
+    try {
+      const res = await authService.resendVerification(registeredEmail);
+      toastSuccess(res.message, "Verification Email Sent");
+      setResendCooldown(60);
+    } catch (err: unknown) {
+      let detail = "Failed to resend verification email.";
+      if (err && typeof err === "object" && "response" in err) {
+        const resp = (err as { response?: { data?: { detail?: string } } }).response;
+        if (resp?.data?.detail) detail = resp.data.detail;
+      }
+      toastError(detail, "Resend Error");
+    } finally {
+      setIsResending(false);
+    }
+  };
+
+  if (registeredEmail) {
+    const isGmail = registeredEmail.includes("@gmail.com") || registeredEmail.includes("@googlemail.com");
+    const isOutlook = registeredEmail.includes("@outlook.com") || registeredEmail.includes("@hotmail.com");
+    const webmailUrl = isGmail
+      ? "https://mail.google.com"
+      : isOutlook
+      ? "https://outlook.live.com"
+      : `mailto:${registeredEmail}`;
+
+    const [localPart, domain] = registeredEmail.split("@");
+    const maskedEmail =
+      localPart && localPart.length > 2
+        ? `${localPart[0]}***${localPart[localPart.length - 1]}@${domain}`
+        : `${localPart || ""}***@${domain || ""}`;
+
+    return (
+      <div className="max-w-md mx-auto py-12 px-4">
+        <Card className="p-6 sm:p-8 space-y-6 text-center shadow-lg border border-slate-200 dark:border-slate-800">
+          <div className="w-14 h-14 rounded-2xl bg-teal-50 dark:bg-brand-dark-muted/60 text-brand-primary dark:text-teal-300 mx-auto flex items-center justify-center mb-2">
+            <Mail className="w-7 h-7 text-teal-600" />
+          </div>
+
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 text-xs font-semibold">
+              ✉️ Check your email
+            </div>
+            <h1 className="text-2xl font-bold font-heading text-gray-900 dark:text-gray-100">
+              Verify your email to continue
+            </h1>
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              We've sent a cryptographically secure verification link to:
+            </p>
+            <p className="text-base font-semibold text-teal-700 dark:text-teal-300 bg-slate-50 dark:bg-slate-900 py-2 px-3 rounded-lg border border-slate-200 dark:border-slate-800">
+              {maskedEmail}
+            </p>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 text-xs text-amber-800 dark:text-amber-200 text-left">
+            <strong>Security Notice:</strong> The link will expire in 24 hours. Your account remains inactive until your email ownership is confirmed.
+          </div>
+
+          <div className="space-y-3 pt-2">
+            <a
+              href={webmailUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block"
+            >
+              <Button className="w-full gap-2 py-2.5">
+                <ExternalLink className="w-4 h-4" /> Open Email Inbox
+              </Button>
+            </a>
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleResend}
+              disabled={isResending || resendCooldown > 0}
+              className="w-full py-2.5"
+            >
+              {isResending
+                ? "Sending..."
+                : resendCooldown > 0
+                ? `Resend available in ${resendCooldown}s`
+                : "Resend verification email"}
+            </Button>
+          </div>
+
+          <div className="pt-2 border-t border-slate-200 dark:border-slate-800">
+            <Link to="/login" className="text-xs text-slate-500 hover:text-teal-600 dark:hover:text-teal-400">
+              Already verified? Sign in here
+            </Link>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-md mx-auto py-6 sm:py-12">
@@ -118,6 +220,14 @@ export function RegisterPage() {
             {apiError}
           </div>
         )}
+
+        <GoogleSignInButton text="signup_with" />
+
+        <div className="relative flex py-2 items-center">
+          <div className="flex-grow border-t border-slate-200 dark:border-slate-800"></div>
+          <span className="flex-shrink mx-3 text-xs text-slate-400 uppercase tracking-wider">or register with email</span>
+          <div className="flex-grow border-t border-slate-200 dark:border-slate-800"></div>
+        </div>
 
         <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
           {/* Name */}

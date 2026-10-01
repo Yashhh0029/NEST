@@ -360,22 +360,23 @@ def get_public_or_detailed_availability(
 
     # Check if viewer has an active connection with target
     has_active_conn = False
-    if viewer.id == target_user_id:
-        has_active_conn = True
-    else:
-        conn = (
-            db.query(Connection)
-            .filter(
-                Connection.status == ConnectionStatus.ACCEPTED.value,
-                or_(
-                    and_(Connection.requester_id == viewer.id, Connection.helper_id == target_user_id),
-                    and_(Connection.requester_id == target_user_id, Connection.helper_id == viewer.id),
-                ),
-            )
-            .first()
-        )
-        if conn:
+    if viewer:
+        if viewer.id == target_user_id:
             has_active_conn = True
+        else:
+            conn = (
+                db.query(Connection)
+                .filter(
+                    Connection.status == ConnectionStatus.ACCEPTED.value,
+                    or_(
+                        and_(Connection.requester_id == viewer.id, Connection.helper_id == target_user_id),
+                        and_(Connection.requester_id == target_user_id, Connection.helper_id == viewer.id),
+                    ),
+                )
+                .first()
+            )
+            if conn:
+                has_active_conn = True
 
     if has_active_conn:
         # Tier 2: Return detailed slots for coordination

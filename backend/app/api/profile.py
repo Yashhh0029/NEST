@@ -1,8 +1,8 @@
 import uuid
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from app.core.dependencies import get_current_user, get_db
+from app.core.dependencies import get_current_user, get_db, get_optional_current_user
 from app.models.user import User
 from app.schemas.location import LocationCreate, LocationResponse
 from app.schemas.profile import (
@@ -10,11 +10,13 @@ from app.schemas.profile import (
     ProfilePatch,
     ProfileResponse,
     ProfileUpdate,
+    PublicProfileResponse,
 )
 from app.schemas.skill import SkillCreate, UserSkillResponse
 from app.services.profile_service import (
     delete_user_location,
     get_full_profile,
+    get_public_profile,
     get_user_location,
     patch_profile,
     upsert_profile,
@@ -193,3 +195,19 @@ def delete_my_skill(
     """Delete a skill from authenticated user's profile."""
     remove_user_skill(db, current_user, skill_id)
     return {"detail": "Skill removed successfully"}
+
+
+@router.get(
+    "/users/{user_id}",
+    response_model=PublicProfileResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get public helper profile",
+    description="Returns public-safe profile, skills, reputation, and availability without exposing private details.",
+)
+def get_user_public_profile(
+    user_id: uuid.UUID,
+    current_user: Optional[User] = Depends(get_optional_current_user),
+    db: Session = Depends(get_db),
+) -> PublicProfileResponse:
+    """Return public profile of a user."""
+    return get_public_profile(db, user_id, caller=current_user)

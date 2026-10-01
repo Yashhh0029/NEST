@@ -1,10 +1,11 @@
 import uuid
-from typing import List
-from fastapi import APIRouter, Depends, status
+from typing import List, Optional
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 from app.core.dependencies import get_current_user, get_db
 from app.models.user import User
 from app.schemas.request import (
+    NearbyRequestItem,
     RequestCreate,
     RequestParse,
     RequestParseResponse,
@@ -15,6 +16,7 @@ from app.services.request_parser import parse_request
 from app.services.request_service import (
     create_user_request,
     delete_user_request,
+    get_nearby_requests_for_helper,
     get_user_request_by_id,
     get_user_requests,
     update_user_request,
@@ -67,6 +69,23 @@ def list_my_requests(
     """List current user's requests."""
     requests = get_user_requests(db, current_user)
     return [RequestResponse.model_validate(r) for r in requests]
+
+
+@router.get(
+    "/nearby",
+    response_model=List[NearbyRequestItem],
+    status_code=status.HTTP_200_OK,
+    summary="List nearby open newcomer requests for helper feed",
+    description="Returns open newcomer requests with proximity calculations and privacy-safe summaries for enrolled helpers.",
+)
+def get_nearby_requests(
+    radius_km: Optional[float] = Query(None, description="Optional search radius in km"),
+    limit: int = Query(50, ge=1, le=100, description="Max number of requests to return"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> List[NearbyRequestItem]:
+    """Get nearby open requests for helper."""
+    return get_nearby_requests_for_helper(db, current_user, radius_km=radius_km, limit=limit)
 
 
 @router.get(

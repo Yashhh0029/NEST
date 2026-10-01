@@ -82,3 +82,35 @@ export interface FullProfile {
   location?: Location | null;
   skills: UserSkill[];
 }
+
+export interface PublicProfile {
+  user: {
+    id: string;
+    name: string;
+    role: string;
+    created_at: string;
+  };
+  profile?: Profile | null;
+  location?: {
+    city?: string | null;
+    area?: string | null;
+    state?: string | null;
+    country?: string | null;
+  } | null;
+  skills: UserSkill[];
+  reputation?: {
+    user_id: string;
+    average_rating?: number | null;
+    review_count: number;
+    status: string;
+  } | null;
+  public_availability?: {
+    user_id: string;
+    helper_timezone: string;
+    capacity_status: string;
+    has_schedule_configured: boolean;
+    next_available_date?: string | null;
+    coarse_windows: string[];
+    active_slots_count: number;
+  } | null;
+}
