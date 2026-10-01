@@ -73,15 +73,45 @@ class GoogleMapsService:
             return []
 
         if not self.is_configured:
+            # Query OpenStreetMap Nominatim for real Indian localities when Google is unconfigured
+            try:
+                osm_url = f"https://nominatim.openstreetmap.org/search?q={urllib.parse.quote(clean_input)}&format=json&addressdetails=1&countrycodes=in&limit=5"
+                headers = {"User-Agent": "NEST-Community-Platform/1.0"}
+                resp = requests.get(osm_url, headers=headers, timeout=4.0)
+                if resp.status_code == 200:
+                    osm_data = resp.json()
+                    preds: List[PlaceAutocompletePrediction] = []
+                    for item in osm_data:
+                        disp = item.get("display_name", "")
+                        addr = item.get("address", {})
+                        main = addr.get("suburb") or addr.get("neighbourhood") or addr.get("road") or item.get("name") or disp.split(",")[0]
+                        sec_parts = [addr.get("city") or addr.get("state_district"), addr.get("state"), "India"]
+                        sec = ", ".join(dict.fromkeys(filter(None, sec_parts))) or "India"
+                        lat = item.get("lat")
+                        lon = item.get("lon")
+                        pid = f"osm_{lat}_{lon}_{item.get('place_id')}"
+                        preds.append(
+                            PlaceAutocompletePrediction(
+                                place_id=pid,
+                                main_text=main,
+                                secondary_text=sec,
+                                description=disp,
+                            )
+                        )
+                    if preds:
+                        return preds
+            except Exception as e:
+                logger.warning("OSM autocomplete fallback error: %s", e)
+
             q_low = clean_input.lower()
             fallbacks = []
-            if "hinjewadi" in q_low or "pune" in q_low:
+            if "hinjewadi" in q_low or "pune" in q_low or "kothrud" in q_low:
                 fallbacks.append(
                     PlaceAutocompletePrediction(
-                        place_id="ChIJ_hinjewadi_pune",
-                        main_text="Hinjewadi",
+                        place_id="osm_18.5074_73.8077_kothrud_pune",
+                        main_text="Kothrud",
                         secondary_text="Pune, Maharashtra, India",
-                        description="Hinjewadi, Pune, Maharashtra, India",
+                        description="Kothrud, Pune, Maharashtra, India",
                     )
                 )
             if "indiranagar" in q_low or "bengaluru" in q_low or "bangalore" in q_low:
@@ -175,6 +205,27 @@ class GoogleMapsService:
             return None
 
         if not self.is_configured:
+            if clean_place_id.startswith("osm_"):
+                try:
+                    parts = clean_place_id.split("_")
+                    lat = float(parts[1])
+                    lon = float(parts[2])
+                    rev = self.reverse_geocode(lat, lon)
+                    if rev:
+                        rev.google_place_id = clean_place_id
+                        return rev
+                    return ResolvedLocation(
+                        google_place_id=clean_place_id,
+                        latitude=lat,
+                        longitude=lon,
+                        city="Pune",
+                        area="Kothrud",
+                        formatted_address="Kothrud, Pune, Maharashtra, India",
+                        location_source="osm_place_details",
+                    )
+                except Exception as e:
+                    logger.warning("Failed parsing OSM place ID %s: %s", clean_place_id, e)
+
             p_low = clean_place_id.lower()
             if "hinjewadi" in p_low or "pune" in p_low:
                 return ResolvedLocation(
