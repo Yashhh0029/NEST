@@ -13,6 +13,7 @@ import { NeedIntelligenceCard } from "@/components/intelligence/NeedIntelligence
 import { SavedResourcesList } from "@/components/intelligence/SavedResourcesList";
 import { ResolveRequestModal } from "@/components/intelligence/ResolveRequestModal";
 import { formatDate } from "@/lib/utils";
+import { GoogleMap } from "@/components/location/GoogleMap";
 import type { NewcomerRequest } from "@/types/request";
 import type {
   NeedStatus,
@@ -327,6 +328,34 @@ export function RequestDetailPage() {
           ))}
         </div>
       </Card>
+
+      {/* Target Destination Google Map */}
+      {(request.target_location?.latitude != null || request.city) && (
+        <Card className="p-4 sm:p-5 border border-gray-200 dark:border-brand-dark-border space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-brand-primary" />
+              Target Destination Area ({request.target_location?.city || request.city})
+            </h3>
+            <span className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">
+              Geographic Map &middot; Privacy Protected Area
+            </span>
+          </div>
+          <GoogleMap
+            targetLocation={{
+              latitude: request.target_location?.latitude,
+              longitude: request.target_location?.longitude,
+              label:
+                request.target_location?.formatted_address ||
+                [request.target_location?.area || request.area, request.target_location?.city || request.city]
+                  .filter(Boolean)
+                  .join(", ") ||
+                "Target Destination",
+            }}
+            className="h-64 sm:h-72"
+          />
+        </Card>
+      )}
 
       {/* Deterministic Action Plan Banner */}
       {intelligence && intelligence.action_plan.length > 0 && (

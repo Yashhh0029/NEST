@@ -13,13 +13,16 @@ def create_user_request(db: Session, user: User, req_in: RequestCreate) -> Reque
     """Parse natural language request and persist structured requirements and target location."""
     parsed = parse_request(req_in.text)
 
+    final_city = req_in.target_city or parsed.location.city
+    final_area = req_in.target_area or parsed.location.area
+
     new_request = Request(
         user_id=user.id,
         raw_text=req_in.text,
         intent=parsed.intent,
         status="OPEN",
-        city=parsed.location.city,
-        area=parsed.location.area,
+        city=final_city,
+        area=final_area,
         state=parsed.location.state,
         country=parsed.location.country or "India",
         budget_amount=parsed.budget.amount if parsed.budget else None,
@@ -47,8 +50,12 @@ def create_user_request(db: Session, user: User, req_in: RequestCreate) -> Reque
         db=db,
         request_id=new_request.id,
         user=user,
-        city_hint=parsed.location.city,
-        area_hint=parsed.location.area,
+        city_hint=final_city,
+        area_hint=final_area,
+        google_place_id=req_in.target_google_place_id,
+        latitude=req_in.target_latitude,
+        longitude=req_in.target_longitude,
+        formatted_address=req_in.target_formatted_address,
     )
 
     return new_request

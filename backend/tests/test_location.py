@@ -64,6 +64,34 @@ def mock_google_maps_services(monkeypatch):
                 location_precision="locality",
                 location_source="google_geocoding",
             )
+        elif "kochi" in norm or "kakkanad" in norm:
+            return ResolvedLocation(
+                google_place_id="ChIJ_kochi_kakkanad",
+                formatted_address="Kakkanad, Kochi, Kerala, India",
+                city="Kochi",
+                area="Kakkanad",
+                state="Kerala",
+                country="India",
+                postal_code="682030",
+                latitude=9.9312,
+                longitude=76.2673,
+                location_precision="locality",
+                location_source="google_geocoding",
+            )
+        elif "pune" in norm or "kothrud" in norm or "hinjewadi" in norm:
+            return ResolvedLocation(
+                google_place_id="ChIJ_pune_kothrud",
+                formatted_address="Kothrud, Pune, Maharashtra, India",
+                city="Pune",
+                area="Kothrud",
+                state="Maharashtra",
+                country="India",
+                postal_code="411038",
+                latitude=18.5204,
+                longitude=73.8567,
+                location_precision="locality",
+                location_source="google_geocoding",
+            )
         return None
 
     def mock_reverse_geocode(lat: float, lon: float):
@@ -352,3 +380,108 @@ def test_candidate_privacy_no_exact_coordinates_exposed(client: TestClient):
     assert approx_lat == 12.94
     # 77.6244910283 rounded to 2 decimal places is 77.62
     assert approx_lon == 77.62
+
+
+def test_prearrival_relocation_pune_to_kochi(client: TestClient):
+    """
+    LOCATION-FIRST DUAL-LOCATION & PRE-ARRIVAL RELOCATION TEST:
+    1. Newcomer physically located in Pune (UserLocation = Pune).
+    2. Newcomer creates a request targeting Kochi ('I'm moving to Kochi and need a PG before I arrive').
+    3. Verify Newcomer's UserLocation in profile remains Pune (never overwritten by request target).
+    4. Verify Request target location is resolved to Kochi.
+    5. Helper enrolled in Kochi discovers the request in /api/requests/nearby within 50 km.
+    6. Helper enrolled in Pune does NOT discover the request within 50 km (Pune-Kochi is ~1100 km away).
+    """
+    # 1. Newcomer in Pune
+    newcomer = create_authenticated_user(client, "Rohan Relocating", "rohan.reloc@example.test", role="newcomer")
+    pune_loc_resp = client.put(
+        "/api/profile/me/location",
+        headers=newcomer["headers"],
+        json={
+            "city": "Pune",
+            "area": "Kothrud",
+            "state": "Maharashtra",
+            "country": "India",
+            "latitude": 18.5204,
+            "longitude": 73.8567,
+            "location_label": "Primary",
+        },
+    )
+    assert pune_loc_resp.status_code == 200
+
+    # 2. Helper Anita in Kochi
+    kochi_helper = create_authenticated_user(client, "Anita Kochi", "anita.kochi@example.test", role="helper")
+    client.put(
+        "/api/profile/me/location",
+        headers=kochi_helper["headers"],
+        json={
+            "city": "Kochi",
+            "area": "Kakkanad",
+            "state": "Kerala",
+            "country": "India",
+            "latitude": 9.9312,
+            "longitude": 76.2673,
+            "location_label": "Primary",
+        },
+    )
+
+    # 3. Helper Vikram in Pune
+    pune_helper = create_authenticated_user(client, "Vikram Pune", "vikram.pune@example.test", role="helper")
+    client.put(
+        "/api/profile/me/location",
+        headers=pune_helper["headers"],
+        json={
+            "city": "Pune",
+            "area": "Kothrud",
+            "state": "Maharashtra",
+            "country": "India",
+            "latitude": 18.5204,
+            "longitude": 73.8567,
+            "location_label": "Primary",
+        },
+    )
+
+    # 4. Newcomer creates Kochi relocation request
+    req_resp = client.post(
+        "/api/requests",
+        headers=newcomer["headers"],
+        json={
+            "text": "I'm moving to Kochi and need a PG in Kakkanad before I arrive.",
+            "target_city": "Kochi",
+            "target_area": "Kakkanad",
+            "target_latitude": 9.9312,
+            "target_longitude": 76.2673,
+            "target_formatted_address": "Kakkanad, Kochi, Kerala, India",
+        },
+    )
+    assert req_resp.status_code == 201
+    created_req = req_resp.json()
+    req_id = created_req["id"]
+    assert created_req["city"] == "Kochi"
+
+    # 5. Verify Newcomer's primary location is STILL Pune (NOT overwritten!)
+    user_loc_resp = client.get("/api/profile/me/location", headers=newcomer["headers"])
+    assert user_loc_resp.status_code == 200
+    user_loc_data = user_loc_resp.json()
+    assert user_loc_data["city"] == "Pune"
+    assert user_loc_data["area"] == "Kothrud"
+    assert user_loc_data["state"] == "Maharashtra"
+    assert round(user_loc_data["latitude"], 2) == 18.52
+    assert round(user_loc_data["longitude"], 2) == 73.86
+
+    # 6. Helper in Kochi queries nearby requests (within 50 km) -> MUST find Rohan's request!
+    kochi_feed_resp = client.get("/api/requests/nearby?radius_km=50", headers=kochi_helper["headers"])
+    assert kochi_feed_resp.status_code == 200
+    kochi_feed = kochi_feed_resp.json()
+    found_in_kochi = [r for r in kochi_feed if r["id"] == req_id]
+    assert len(found_in_kochi) == 1
+    assert found_in_kochi[0]["city"] == "Kochi"
+    assert found_in_kochi[0]["distance_km"] is not None
+    assert found_in_kochi[0]["distance_km"] <= 5.0
+
+    # 7. Helper in Pune queries nearby requests (within 50 km) -> MUST NOT find Rohan's Kochi request!
+    pune_feed_resp = client.get("/api/requests/nearby?radius_km=50", headers=pune_helper["headers"])
+    assert pune_feed_resp.status_code == 200
+    pune_feed = pune_feed_resp.json()
+    found_in_pune = [r for r in pune_feed if r["id"] == req_id]
+    assert len(found_in_pune) == 0

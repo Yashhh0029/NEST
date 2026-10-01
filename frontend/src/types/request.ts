@@ -45,6 +45,12 @@ export interface RequestCreatePayload {
   is_time_flexible?: boolean | null;
   flexibility_window_days?: number | null;
   preferred_days_of_week?: number[] | null;
+  target_city?: string | null;
+  target_area?: string | null;
+  target_google_place_id?: string | null;
+  target_latitude?: number | null;
+  target_longitude?: number | null;
+  target_formatted_address?: string | null;
 }
 
 export interface RequestUpdatePayload {
@@ -91,6 +97,20 @@ export interface NewcomerRequest {
   is_time_flexible?: boolean | null;
   flexibility_window_days?: number | null;
   preferred_days_of_week?: number[] | null;
+  target_location?: {
+    id?: string;
+    request_id?: string;
+    city?: string | null;
+    area?: string | null;
+    state?: string | null;
+    country?: string;
+    latitude?: number | null;
+    longitude?: number | null;
+    formatted_address?: string | null;
+    google_place_id?: string | null;
+    location_precision?: string;
+    location_source?: string;
+  } | null;
   created_at: string;
   updated_at: string;
 }

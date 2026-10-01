@@ -121,7 +121,11 @@ export function RequestBox() {
 
     setIsSubmitting(true);
     try {
-      const created = await requestsService.createRequest({ text: cleanText });
+      const created = await requestsService.createRequest({
+        text: cleanText,
+        target_city: backendExtracted?.location?.city || undefined,
+        target_area: backendExtracted?.location?.area || undefined,
+      });
       toastSuccess("Request created successfully! Finding community matches...");
       navigate(`/requests/${created.id}`);
     } catch (err: unknown) {

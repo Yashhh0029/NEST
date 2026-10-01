@@ -2,6 +2,7 @@ import uuid
 from datetime import date, datetime, time
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
+from app.schemas.location import RequestLocationResponse
 from app.services.request_parser import ExtractedRequest
 
 
@@ -14,6 +15,13 @@ class RequestCreate(BaseModel):
     is_time_flexible: Optional[bool] = Field(True, description="Whether timing is flexible")
     flexibility_window_days: Optional[int] = Field(3, ge=0, le=30, description="Flexibility margin in days")
     preferred_days_of_week: Optional[List[int]] = Field(default_factory=list, description="0=Monday ... 6=Sunday")
+    # Target location override / explicit map selection
+    target_city: Optional[str] = Field(None, max_length=100, description="Explicit target city where help is needed")
+    target_area: Optional[str] = Field(None, max_length=100, description="Explicit target area/neighborhood")
+    target_google_place_id: Optional[str] = Field(None, max_length=255, description="Google Place ID of target destination")
+    target_latitude: Optional[float] = Field(None, ge=-90.0, le=90.0, description="Target destination latitude")
+    target_longitude: Optional[float] = Field(None, ge=-180.0, le=180.0, description="Target destination longitude")
+    target_formatted_address: Optional[str] = Field(None, max_length=500, description="Formatted address of target destination")
 
 
 class RequestParse(BaseModel):
@@ -57,6 +65,7 @@ class RequestResponse(BaseModel):
     preferences: Optional[List[str]]
     user_context: Optional[List[str]]
     extraction_method: str
+    target_location: Optional[RequestLocationResponse] = None
     created_at: datetime
     updated_at: datetime
 
