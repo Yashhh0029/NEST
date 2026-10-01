@@ -13,12 +13,17 @@ export interface SessionListParams {
   connection_id?: string;
 }
 
+export interface SessionListResponse {
+  total: number;
+  sessions: AssistanceSession[];
+}
+
 export const sessionService = {
   /**
    * Propose a new assistance session between connected users.
    */
   async proposeSession(payload: SessionCreate): Promise<AssistanceSession> {
-    const { data } = await api.post<AssistanceSession>("/api/v1/sessions", payload);
+    const { data } = await api.post<AssistanceSession>("/api/sessions", payload);
     return data;
   },
 
@@ -26,15 +31,18 @@ export const sessionService = {
    * List assistance sessions for current user with optional filters.
    */
   async listSessions(params?: SessionListParams): Promise<AssistanceSession[]> {
-    const { data } = await api.get<AssistanceSession[]>("/api/v1/sessions", { params });
-    return data;
+    const { data } = await api.get<SessionListResponse | AssistanceSession[]>("/api/sessions", { params });
+    if (Array.isArray(data)) {
+      return data;
+    }
+    return data?.sessions ?? [];
   },
 
   /**
    * Get single assistance session by ID.
    */
   async getSessionById(id: string): Promise<AssistanceSession> {
-    const { data } = await api.get<AssistanceSession>(`/api/v1/sessions/${id}`);
+    const { data } = await api.get<AssistanceSession>(`/api/sessions/${id}`);
     return data;
   },
 
@@ -42,7 +50,7 @@ export const sessionService = {
    * Accept a proposed or reschedule-proposed session (recipient only).
    */
   async acceptSession(id: string): Promise<AssistanceSession> {
-    const { data } = await api.post<AssistanceSession>(`/api/v1/sessions/${id}/accept`);
+    const { data } = await api.post<AssistanceSession>(`/api/sessions/${id}/accept`);
     return data;
   },
 
@@ -50,7 +58,7 @@ export const sessionService = {
    * Decline a proposed or reschedule-proposed session (recipient only).
    */
   async declineSession(id: string): Promise<AssistanceSession> {
-    const { data } = await api.post<AssistanceSession>(`/api/v1/sessions/${id}/decline`);
+    const { data } = await api.post<AssistanceSession>(`/api/sessions/${id}/decline`);
     return data;
   },
 
@@ -58,7 +66,7 @@ export const sessionService = {
    * Cancel an active assistance session with mandatory reason.
    */
   async cancelSession(id: string, payload: SessionCancel): Promise<AssistanceSession> {
-    const { data } = await api.post<AssistanceSession>(`/api/v1/sessions/${id}/cancel`, payload);
+    const { data } = await api.post<AssistanceSession>(`/api/sessions/${id}/cancel`, payload);
     return data;
   },
 
@@ -66,7 +74,7 @@ export const sessionService = {
    * Propose new scheduled time for an assistance session.
    */
   async rescheduleSession(id: string, payload: SessionReschedule): Promise<AssistanceSession> {
-    const { data } = await api.post<AssistanceSession>(`/api/v1/sessions/${id}/reschedule`, payload);
+    const { data } = await api.post<AssistanceSession>(`/api/sessions/${id}/reschedule`, payload);
     return data;
   },
 
@@ -74,7 +82,7 @@ export const sessionService = {
    * Dual-confirmation: mark session complete. Completed once both parties confirm.
    */
   async completeSession(id: string): Promise<AssistanceSession> {
-    const { data } = await api.post<AssistanceSession>(`/api/v1/sessions/${id}/complete`);
+    const { data } = await api.post<AssistanceSession>(`/api/sessions/${id}/complete`);
     return data;
   },
 
@@ -82,7 +90,7 @@ export const sessionService = {
    * Download RFC 5545 iCalendar (.ics) file for confirmed session.
    */
   async downloadCalendarIcs(id: string, title?: string): Promise<void> {
-    const response = await api.get(`/api/v1/sessions/${id}/calendar.ics`, {
+    const response = await api.get(`/api/sessions/${id}/calendar.ics`, {
       responseType: "blob",
     });
     const blob = new Blob([response.data], { type: "text/calendar;charset=utf-8" });
