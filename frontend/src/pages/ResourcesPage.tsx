@@ -87,8 +87,8 @@ export const ResourcesPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null);
 
-  // Provider mode: auto (Google if configured, else OpenStreetMap), osm, or google
-  const [providerMode, setProviderMode] = useState<"auto" | "osm" | "google">("auto");
+  // Provider mode: Google Maps Platform & Google Places API (New)
+  const providerMode: "google" | "osm" = "google";
 
   // Location exploration state
   const [exploreCenter, setExploreCenter] = useState<{
@@ -427,11 +427,9 @@ export const ResourcesPage: React.FC = () => {
               Local Resource Discovery
             </h1>
             {searchResult?.provider && (
-              <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-teal-50 dark:bg-teal-950/40 text-brand-primary border border-teal-200 dark:border-teal-800">
+              <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
                 <Layers className="w-3 h-3" />
-                {searchResult.provider === "openstreetmap"
-                  ? "OpenStreetMap (Zero-Billing)"
-                  : "Google Places API"}
+                Google Places API (New)
               </span>
             )}
           </div>
@@ -622,59 +620,35 @@ export const ResourcesPage: React.FC = () => {
           <div className="w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 flex items-center justify-center mx-auto">
             <AlertCircle className="w-6 h-6" />
           </div>
-          <div className="space-y-1">
-            <h3 className="font-bold text-lg text-gray-900 dark:text-gray-100">
+          <div className="space-y-1.5">
+            <h3 className="font-bold text-lg text-gray-900 dark:text-gray-100 font-heading">
               Local Places Search Unavailable
             </h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto">
-              Google Places integration is currently unavailable or unconfigured. NEST does not fabricate fake businesses. Please try connecting with local community helpers instead.
+            <p className="text-sm text-gray-600 dark:text-gray-400 max-w-md mx-auto">
+              Real Google Places Platform data is required for NEST Local Resource Discovery. Google Places integration is currently unavailable or unconfigured. NEST does not fabricate fake businesses or synthetic places.
             </p>
-          </div>
-
-          {/* Quick Option to Explore using OpenStreetMap (100% Free & Zero Billing) */}
-          <div className="p-4 bg-teal-50 dark:bg-brand-dark-muted/40 border border-teal-200 dark:border-teal-800 rounded-xl max-w-lg mx-auto text-left text-xs space-y-2">
-            <div className="flex items-center gap-2 font-semibold text-teal-900 dark:text-teal-200">
-              <Compass className="w-4 h-4 text-brand-primary" />
-              <span>Explore With OpenStreetMap (100% Free):</span>
-            </div>
-            <p className="text-gray-600 dark:text-gray-300">
-              You can instantly explore real community-verified places, hostels, hospitals, and transit without any Google Cloud billing credentials.
-            </p>
-            <div className="pt-1 flex items-center gap-2">
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => {
-                  setProviderMode("osm");
-                  fetchResources();
-                }}
-                className="text-xs"
-              >
-                Switch to OpenStreetMap Mode
-              </Button>
-            </div>
           </div>
 
           {/* Diagnostic Setup Guidance for Developers/Admins */}
-          <div className="p-4 text-left bg-gray-50 dark:bg-brand-dark-muted/30 border border-gray-200 dark:border-brand-dark-border rounded-xl max-w-lg mx-auto space-y-2 text-xs text-gray-600 dark:text-gray-300">
+          <div className="p-5 text-left bg-gray-50 dark:bg-brand-dark-muted/30 border border-gray-200 dark:border-brand-dark-border rounded-xl max-w-lg mx-auto space-y-3 text-xs text-gray-700 dark:text-gray-300">
             <div className="flex items-center gap-2 font-semibold text-gray-800 dark:text-gray-200">
               <KeyRound className="w-4 h-4 text-brand-primary" />
               <span>How to enable Google Places Exploration:</span>
             </div>
-            <ol className="list-decimal list-inside space-y-1 text-gray-600 dark:text-gray-400">
-              <li>Add <code className="font-mono bg-white dark:bg-brand-dark-card px-1 py-0.5 rounded border">GOOGLE_MAPS_API_KEY</code> to <code className="font-mono">backend/.env</code></li>
-              <li>Add <code className="font-mono bg-white dark:bg-brand-dark-card px-1 py-0.5 rounded border">VITE_GOOGLE_MAPS_API_KEY</code> to <code className="font-mono">frontend/.env</code></li>
-              <li>Enable <span className="font-medium">Places API (New)</span>, <span className="font-medium">Maps JavaScript API</span>, and <span className="font-medium">Geocoding API</span> in Google Cloud Console</li>
+            <ol className="list-decimal list-inside space-y-2 text-gray-600 dark:text-gray-400 font-mono text-[11px]">
+              <li>Add <code className="bg-white dark:bg-brand-dark-card px-1.5 py-0.5 rounded border">GOOGLE_MAPS_API_KEY</code> to <code className="font-sans font-semibold">backend/.env</code></li>
+              <li>Add <code className="bg-white dark:bg-brand-dark-card px-1.5 py-0.5 rounded border">VITE_GOOGLE_MAPS_API_KEY</code> to <code className="font-sans font-semibold">frontend/.env</code></li>
+              <li className="font-sans text-xs">Enable <span className="font-semibold text-gray-800 dark:text-gray-200">Places API (New)</span>, <span className="font-semibold text-gray-800 dark:text-gray-200">Maps JavaScript API</span>, and <span className="font-semibold text-gray-800 dark:text-gray-200">Geocoding API</span> in Google Cloud Console</li>
             </ol>
             <div className="pt-2 flex justify-end">
               <Button
-                variant="secondary"
+                variant="primary"
                 size="sm"
                 onClick={() => fetchResources()}
                 className="text-xs flex items-center gap-1.5"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
-                Retry Search
+                Retry Places Search
               </Button>
             </div>
           </div>

@@ -1,10 +1,23 @@
 import { useEffect, useRef, useState } from "react";
-import { loadGoogleMaps } from "../../lib/google-maps-loader";
-import { MapPin, Shield, Navigation, Search, Loader2, Compass } from "lucide-react";
+import { loadGoogleMaps, resetGoogleMapsLoader } from "../../lib/google-maps-loader";
+import {
+  MapPin,
+  Shield,
+  Navigation,
+  Search,
+  Loader2,
+  Compass,
+  KeyRound,
+  RefreshCw,
+} from "lucide-react";
 import type { ResourceItem } from "../../types/resource";
-import { LeafletMap, type ViewportBounds } from "./LeafletMap";
 
-export type { ViewportBounds };
+export interface ViewportBounds {
+  minLat: number;
+  maxLat: number;
+  minLon: number;
+  maxLon: number;
+}
 
 export interface MapCandidate {
   id: string;
@@ -432,6 +445,20 @@ export function GoogleMap({
     );
   };
 
+  // Loading state while Google Maps script is loading
+  if (mapLoaded === null) {
+    return (
+      <div
+        className={`w-full rounded-2xl border border-gray-200 dark:border-brand-dark-border bg-gray-50 dark:bg-brand-dark-surface flex flex-col items-center justify-center p-8 space-y-3 ${className}`}
+      >
+        <Loader2 className="w-8 h-8 text-brand-primary animate-spin" />
+        <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+          Loading Google Maps Platform...
+        </p>
+      </div>
+    );
+  }
+
   // Fallback view when Google Maps JS API is unconfigured or failed
   if (mapLoaded === false) {
     const isJsdom =
@@ -524,20 +551,63 @@ export function GoogleMap({
       );
     }
 
-    // Real Browser: Render real interactive Leaflet / OpenStreetMap
+    // Real Browser: Google Maps API key unconfigured or failed to load
     return (
-      <LeafletMap
-        targetLocation={targetLocation}
-        candidates={candidates}
-        selectedCandidateId={selectedCandidateId}
-        onSelectCandidate={onSelectCandidate}
-        places={places}
-        selectedPlaceId={selectedPlaceId}
-        onSelectPlace={onSelectPlace}
-        onSearchThisArea={onSearchThisArea}
-        isSearchingArea={isSearchingArea}
-        className={className}
-      />
+      <div
+        className={`w-full rounded-2xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/40 dark:bg-brand-dark-surface p-6 sm:p-8 flex flex-col items-center justify-center text-center space-y-4 ${className}`}
+      >
+        <div className="w-12 h-12 rounded-2xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center shadow-sm">
+          <MapPin className="w-6 h-6" />
+        </div>
+
+        <div className="space-y-1.5 max-w-md">
+          <h3 className="font-bold text-base sm:text-lg text-gray-900 dark:text-gray-100 font-heading">
+            Google Maps Platform Integration Required
+          </h3>
+          <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+            Real Google Maps basemap and Google Places (New) are required for the NEST Local Resource Discovery map experience.
+          </p>
+        </div>
+
+        <div className="w-full max-w-md text-left bg-white dark:bg-brand-dark-card border border-gray-200 dark:border-brand-dark-border rounded-xl p-4 space-y-2.5 text-xs">
+          <div className="flex items-center gap-2 font-semibold text-gray-800 dark:text-gray-200">
+            <KeyRound className="w-4 h-4 text-brand-primary" />
+            <span>Required Environment Configuration:</span>
+          </div>
+          <ol className="list-decimal list-inside space-y-1.5 text-gray-600 dark:text-gray-400 font-mono text-[11px]">
+            <li>
+              frontend/.env:{" "}
+              <code className="bg-gray-100 dark:bg-brand-dark-muted px-1.5 py-0.5 rounded text-gray-900 dark:text-gray-100">
+                VITE_GOOGLE_MAPS_API_KEY=&lt;key&gt;
+              </code>
+            </li>
+            <li>
+              backend/.env:{" "}
+              <code className="bg-gray-100 dark:bg-brand-dark-muted px-1.5 py-0.5 rounded text-gray-900 dark:text-gray-100">
+                GOOGLE_MAPS_API_KEY=&lt;key&gt;
+              </code>
+            </li>
+          </ol>
+          <p className="text-[11px] text-gray-500 dark:text-gray-400 pt-1 font-sans">
+            Ensure <strong>Maps JavaScript API</strong>, <strong>Places API (New)</strong>, and <strong>Geocoding API</strong> are enabled in your Google Cloud Console.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3 pt-1">
+          <button
+            type="button"
+            onClick={() => {
+              resetGoogleMapsLoader();
+              setMapLoaded(null);
+              loadGoogleMaps().then(setMapLoaded);
+            }}
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-primary text-white text-xs font-semibold rounded-lg hover:bg-brand-primary/90 transition shadow-sm"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Retry Connection
+          </button>
+        </div>
+      </div>
     );
   }
 

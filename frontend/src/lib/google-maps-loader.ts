@@ -48,3 +48,7 @@ export function loadGoogleMaps(): Promise<boolean> {
 
   return loadPromise;
 }
+
+export function resetGoogleMapsLoader(): void {
+  loadPromise = null;
+}

@@ -624,12 +624,8 @@ def search_local_resources(
     use_osm = False
     if provider in ("osm", "openstreetmap"):
         use_osm = True
-    elif provider == "auto":
-        use_osm = not maps_service.is_configured
-    elif provider is None:
-        # Default behavior: If Google is configured, use Google.
-        # If Google is NOT configured and provider is None, return PROVIDER_UNAVAILABLE
-        # to preserve full backwards compatibility with Phase 10 test suite.
+    else:
+        # Production Google Places requirement (provider="google", "auto", or None)
         if not maps_service.is_configured:
             logger.info("Google Maps Platform is not configured; returning PROVIDER_UNAVAILABLE.")
             return ResourceSearchResponse(
