@@ -48,6 +48,7 @@ class GoogleMapsService:
         # In-memory TTL cache: key -> (expiration_datetime, data)
         self._cache: Dict[str, Tuple[datetime, Any]] = {}
         self._cache_ttl = timedelta(hours=24)
+        self._routes_api_available: bool = True
 
     @property
     def is_configured(self) -> bool:
@@ -503,13 +504,15 @@ class GoogleMapsService:
         """
         straight_km = round(haversine_km(origin_lat, origin_lon, dest_lat, dest_lon), 1)
 
-        if not self.is_configured:
-            return TravelRouteInfo(
-                straight_line_distance_km=straight_km,
-                route_distance_km=None,
-                estimated_travel_time_minutes=None,
-                travel_mode=travel_mode,
-            )
+        fallback = TravelRouteInfo(
+            straight_line_distance_km=straight_km,
+            route_distance_km=None,
+            estimated_travel_time_minutes=None,
+            travel_mode=travel_mode,
+        )
+
+        if not self.is_configured or not getattr(self, "_routes_api_available", True):
+            return fallback
 
         cache_key = f"route:{round(origin_lat, 3)},{round(origin_lon, 3)}->{round(dest_lat, 3)},{round(dest_lon, 3)}:{travel_mode}"
         cached = self._get_from_cache(cache_key)
@@ -545,15 +548,12 @@ class GoogleMapsService:
                     )
                     self._set_in_cache(cache_key, info)
                     return info
+            elif resp.status_code in (401, 403):
+                self._routes_api_available = False
         except Exception as exc:
             logger.warning("Google Routes API call failed gracefully: %s", exc)
 
-        fallback = TravelRouteInfo(
-            straight_line_distance_km=straight_km,
-            route_distance_km=None,
-            estimated_travel_time_minutes=None,
-            travel_mode=travel_mode,
-        )
+        self._set_in_cache(cache_key, fallback)
         return fallback
 
     def search_places_text(
