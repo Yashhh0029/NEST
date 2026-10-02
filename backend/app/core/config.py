@@ -29,8 +29,9 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
     EMBEDDING_DIMENSION: int = 384
 
-    # Google Maps Platform (Phase 6)
-    GOOGLE_MAPS_API_KEY: str = ""
+    # Google Maps Platform (Phase 6 Location Intelligence)
+    GOOGLE_MAPS_SERVER_API_KEY: str = ""
+    GOOGLE_MAPS_API_KEY: str = ""  # Fallback for backward compatibility
 
     # Google OAuth
     GOOGLE_CLIENT_ID: str = ""

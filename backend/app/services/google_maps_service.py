@@ -43,8 +43,8 @@ class GoogleMapsService:
     """
 
     def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key if api_key is not None else settings.GOOGLE_MAPS_API_KEY
-        self.referer_header = "http://localhost:3000/"
+        server_key = settings.GOOGLE_MAPS_SERVER_API_KEY or settings.GOOGLE_MAPS_API_KEY
+        self.api_key = api_key if api_key is not None else server_key
         # In-memory TTL cache: key -> (expiration_datetime, data)
         self._cache: Dict[str, Tuple[datetime, Any]] = {}
         self._cache_ttl = timedelta(hours=24)
@@ -154,7 +154,6 @@ class GoogleMapsService:
         headers = {
             "Content-Type": "application/json",
             "X-Goog-Api-Key": self.api_key,
-            "Referer": self.referer_header,
         }
         payload: Dict[str, Any] = {
             "input": clean_input,
@@ -270,7 +269,6 @@ class GoogleMapsService:
             "Content-Type": "application/json",
             "X-Goog-Api-Key": self.api_key,
             "X-Goog-FieldMask": "id,displayName,formattedAddress,location,addressComponents",
-            "Referer": self.referer_header,
         }
 
         try:
@@ -362,7 +360,6 @@ class GoogleMapsService:
             "Content-Type": "application/json",
             "X-Goog-Api-Key": self.api_key,
             "X-Goog-FieldMask": "id,displayName,formattedAddress,location,primaryType,types",
-            "Referer": self.referer_header,
         }
 
         try:
@@ -415,8 +412,7 @@ class GoogleMapsService:
         }
 
         try:
-            headers = {"Referer": self.referer_header}
-            resp = requests.get(url, params=params, headers=headers, timeout=5.0)
+            resp = requests.get(url, params=params, timeout=5.0)
             if resp.status_code != 200:
                 logger.warning("Google Geocoding returned status %d", resp.status_code)
                 return None
@@ -479,8 +475,7 @@ class GoogleMapsService:
                 "key": self.api_key,
             }
             try:
-                headers = {"Referer": self.referer_header}
-                resp = requests.get(url, params=params, headers=headers, timeout=5.0)
+                resp = requests.get(url, params=params, timeout=5.0)
                 if resp.status_code == 200:
                     data = resp.json()
                     results = data.get("results", [])
@@ -554,7 +549,6 @@ class GoogleMapsService:
             "Content-Type": "application/json",
             "X-Goog-Api-Key": self.api_key,
             "X-Goog-FieldMask": "routes.distanceMeters,routes.duration",
-            "Referer": self.referer_header,
         }
         payload = {
             "origin": {"location": {"latLng": {"latitude": origin_lat, "longitude": origin_lon}}},
@@ -631,7 +625,6 @@ class GoogleMapsService:
                 "places.regularOpeningHours,places.googleMapsUri,places.websiteUri,"
                 "places.nationalPhoneNumber"
             ),
-            "Referer": self.referer_header,
         }
         payload: Dict[str, Any] = {
             "textQuery": clean_query,
