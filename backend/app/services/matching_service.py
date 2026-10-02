@@ -474,8 +474,14 @@ def find_candidate_matches(
         if target_city and user_city and target_city.strip().lower() != user_city.strip().lower():
             # Cross-city relocation scenario: target city is different from home city.
             # Do NOT inherit home city GPS coordinates for a different destination city!
-            req_lat = None
-            req_lon = None
+            dest_query = ", ".join(filter(None, [req.area, target_city, "India"]))
+            resolved_dest = google_maps_service.geocode_address(dest_query)
+            if resolved_dest and resolved_dest.latitude is not None:
+                req_lat = resolved_dest.latitude
+                req_lon = resolved_dest.longitude
+            else:
+                req_lat = None
+                req_lon = None
         else:
             # Same city or no distinct target city: safe to use home GPS coordinates
             req_lat = req_user_loc.latitude if req_user_loc else None

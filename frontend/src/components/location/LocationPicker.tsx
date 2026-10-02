@@ -24,6 +24,8 @@ export function LocationPicker({
   const handleSelectPrediction = async (prediction: PlaceAutocompletePrediction) => {
     try {
       const details = await getPlaceDetails(prediction.place_id);
+      const displayName = details.name || details.display_name || prediction.main_text;
+      const formattedAddress = details.formatted_address || prediction.description;
       onChange({
         city: details.city || prediction.main_text,
         area: details.area || undefined,
@@ -32,7 +34,8 @@ export function LocationPicker({
         latitude: details.latitude != null ? details.latitude : undefined,
         longitude: details.longitude != null ? details.longitude : undefined,
         google_place_id: details.google_place_id || prediction.place_id,
-        formatted_address: details.formatted_address || prediction.description,
+        display_name: displayName,
+        formatted_address: formattedAddress,
         postal_code: details.postal_code || undefined,
         private_unit: value.private_unit,
         location_source: details.location_source || "google_places",
@@ -44,6 +47,7 @@ export function LocationPicker({
       onChange({
         city: prediction.main_text,
         area: prediction.secondary_text || undefined,
+        display_name: prediction.main_text,
         country: "India",
         private_unit: value.private_unit,
         location_source: "manual",
@@ -103,10 +107,12 @@ export function LocationPicker({
   };
 
   const hasLocation = Boolean(value.city);
-  const primaryDisplay = value.area || value.city;
-  const secondaryDisplay = value.area
-    ? [value.city, value.state, value.country || "India"].filter(Boolean).join(", ")
-    : [value.state, value.country || "India"].filter(Boolean).join(", ");
+  const primaryDisplay = value.display_name || value.area || value.city;
+  const secondaryDisplay = value.display_name && value.display_name !== value.area && value.display_name !== value.city
+    ? [value.area, value.city, value.state, value.country || "India"].filter(Boolean).join(", ")
+    : (value.area
+      ? [value.city, value.state, value.country || "India"].filter(Boolean).join(", ")
+      : [value.state, value.country || "India"].filter(Boolean).join(", "));
 
   return (
     <div className="space-y-3">

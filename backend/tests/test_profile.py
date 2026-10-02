@@ -364,3 +364,53 @@ def test_get_public_profile_endpoint(client: TestClient):
     assert "longitude" not in data["location"]
     assert "reputation" in data
     assert "public_availability" in data
+
+
+def test_set_location_with_display_name_and_place_types(client: TestClient):
+    """19. Set location with exact Google Place identity (display_name, place_types, google_place_id)."""
+    user = create_authenticated_user(client, "Sneha Kulkarni", "sneha.k@example.test", role="newcomer")
+    loc_payload = {
+        "city": "Pune",
+        "area": "Wakad",
+        "state": "Maharashtra",
+        "country": "India",
+        "latitude": 18.5987,
+        "longitude": 73.7654,
+        "display_name": "ABC Society",
+        "place_types": "residential,premise",
+        "google_place_id": "ChIJ_test_place_id_abc123",
+        "formatted_address": "ABC Society, Wakad, Pune, Maharashtra 411057, India",
+        "postal_code": "411057",
+        "location_source": "google_places",
+        "location_precision": "rooftop",
+    }
+
+    put_resp = client.put("/api/profile/me/location", json=loc_payload, headers=user["headers"])
+    assert put_resp.status_code == status.HTTP_200_OK
+    loc_data = put_resp.json()
+    assert loc_data["display_name"] == "ABC Society"
+    assert loc_data["place_types"] == "residential,premise"
+    assert loc_data["google_place_id"] == "ChIJ_test_place_id_abc123"
+    assert loc_data["city"] == "Pune"
+    assert loc_data["area"] == "Wakad"
+
+    # Full profile me check
+    me_resp = client.get("/api/profile/me", headers=user["headers"])
+    assert me_resp.status_code == status.HTTP_200_OK
+    full_data = me_resp.json()
+    assert full_data["location"] is not None
+    assert full_data["location"]["display_name"] == "ABC Society"
+    assert full_data["location"]["city"] == "Pune"
+    assert full_data["location"]["google_place_id"] == "ChIJ_test_place_id_abc123"
+
+    # Public profile check - coarse area/city only, never exposes display_name, address, or coords
+    pub_resp = client.get(f"/api/profile/users/{user['user']['id']}")
+    assert pub_resp.status_code == status.HTTP_200_OK
+    pub_data = pub_resp.json()
+    assert pub_data["location"]["city"] == "Pune"
+    assert pub_data["location"]["area"] == "Wakad"
+    assert "latitude" not in pub_data["location"]
+    assert "longitude" not in pub_data["location"]
+    assert "formatted_address" not in pub_data["location"]
+    assert "google_place_id" not in pub_data["location"]
+

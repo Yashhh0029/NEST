@@ -37,6 +37,8 @@ export interface Location {
   latitude?: number | null;
   longitude?: number | null;
   location_label: string;
+  display_name?: string | null;
+  place_types?: string | null;
   google_place_id?: string | null;
   formatted_address?: string | null;
   postal_code?: string | null;
@@ -55,6 +57,8 @@ export interface LocationCreateOrUpdatePayload {
   latitude?: number;
   longitude?: number;
   location_label?: string;
+  display_name?: string;
+  place_types?: string;
   google_place_id?: string;
   formatted_address?: string;
   postal_code?: string;

@@ -303,19 +303,20 @@ export function GoogleMap({
         const isSelected = selectedPlaceId === place.id;
 
         // Place teardrop pin icon - distinct from helper avatar circle
+        // Highlight selected place with distinct crimson/rose pin (#E11D48)
         const marker = new google.maps.Marker({
           position: placeLatLng,
           map,
           title: place.name,
           icon: {
             path: "M 0,0 C -2,-20 -10,-22 -10,-30 A 10,10 0 1,1 10,-30 C 10,-22 2,-20 0,0 z",
-            scale: isSelected ? 1.3 : 1.0,
-            fillColor: isSelected ? "#0D9488" : "#0F766E",
+            scale: isSelected ? 1.4 : 1.0,
+            fillColor: isSelected ? "#E11D48" : "#0F766E",
             fillOpacity: 1,
             strokeColor: "#FFFFFF",
-            strokeWeight: 1.5,
+            strokeWeight: isSelected ? 2.5 : 1.5,
           },
-          zIndex: isSelected ? 200 : 5,
+          zIndex: isSelected ? 300 : 5,
         });
 
 

@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { describe, it, expect, vi } from "vitest";
 import { ProfileHeader } from "@/components/profile/ProfileHeader";
 import { SkillBadgeList } from "@/components/profile/SkillBadgeList";
@@ -47,18 +48,59 @@ describe("Profile Components", () => {
   };
 
   it("renders profile header without exposing passwords or hashes", () => {
-    render(<ProfileHeader fullProfile={mockFullProfile} />);
+    render(
+      <MemoryRouter>
+        <ProfileHeader fullProfile={mockFullProfile} />
+      </MemoryRouter>
+    );
 
     expect(screen.getByText("Rohit Verma")).toBeInTheDocument();
     expect(screen.getByText("rohit@example.test")).toBeInTheDocument();
     expect(screen.getByText(/Whitefield Resident for 6 Years/i)).toBeInTheDocument();
     expect(screen.getByText(/Tech Lead at Google/i)).toBeInTheDocument();
     expect(screen.getByText("Whitefield, Bengaluru")).toBeInTheDocument();
+    expect(screen.getByText(/Edit Location/i)).toBeInTheDocument();
     expect(screen.getByText(/Accepting Connections/i)).toBeInTheDocument();
 
     // Verify sensitive data is never present
     expect(screen.queryByText(/password/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/hash/i)).not.toBeInTheDocument();
+  });
+
+  it("renders Location not set with Set Location CTA when location is null", () => {
+    const profileNoLoc: FullProfile = {
+      ...mockFullProfile,
+      location: null,
+    };
+
+    render(
+      <MemoryRouter>
+        <ProfileHeader fullProfile={profileNoLoc} />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("Location not set")).toBeInTheDocument();
+    expect(screen.getByText(/Set Location/i)).toBeInTheDocument();
+  });
+
+  it("renders exact display_name when set on location", () => {
+    const profileWithExactPlace: FullProfile = {
+      ...mockFullProfile,
+      location: {
+        ...mockFullProfile.location!,
+        display_name: "ABC Society",
+        area: "Wakad",
+        city: "Pune",
+      },
+    };
+
+    render(
+      <MemoryRouter>
+        <ProfileHeader fullProfile={profileWithExactPlace} />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("ABC Society, Wakad, Pune")).toBeInTheDocument();
   });
 
   it("renders skill badges and allows interactive removal", async () => {

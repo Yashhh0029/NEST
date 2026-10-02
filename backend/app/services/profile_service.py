@@ -151,6 +151,8 @@ def upsert_user_location(db: Session, user: User, loc_in: LocationCreate) -> Loc
             latitude=loc_in.latitude,
             longitude=loc_in.longitude,
             location_label=label,
+            display_name=loc_in.display_name,
+            place_types=loc_in.place_types,
             google_place_id=loc_in.google_place_id,
             formatted_address=loc_in.formatted_address,
             postal_code=loc_in.postal_code,
@@ -167,6 +169,8 @@ def upsert_user_location(db: Session, user: User, loc_in: LocationCreate) -> Loc
         loc.country = loc_in.country or "India"
         loc.latitude = loc_in.latitude
         loc.longitude = loc_in.longitude
+        loc.display_name = loc_in.display_name
+        loc.place_types = loc_in.place_types
         loc.google_place_id = loc_in.google_place_id
         loc.formatted_address = loc_in.formatted_address
         loc.postal_code = loc_in.postal_code

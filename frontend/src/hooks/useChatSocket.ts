@@ -28,8 +28,21 @@ export function useChatSocket({
     }
 
     try {
-      const baseUrl = ENV.API_URL.replace(/^http/, "ws");
-      const wsUrl = `${baseUrl}/ws/conversations/${conversationId}?token=${encodeURIComponent(token)}`;
+      let baseUrl = ENV.WS_URL;
+      if (!baseUrl) {
+        if (ENV.API_URL.startsWith("http://") || ENV.API_URL.startsWith("https://")) {
+          baseUrl = ENV.API_URL.replace(/^http/, "ws");
+        } else if (typeof window !== "undefined") {
+          const isSecure = window.location.protocol === "https:";
+          const wsProtocol = isSecure ? "wss:" : "ws:";
+          const host = window.location.host;
+          baseUrl = `${wsProtocol}//${host}${ENV.API_URL || ""}`;
+        } else {
+          baseUrl = "ws://127.0.0.1:8000";
+        }
+      }
+      const cleanBase = baseUrl.replace(/\/$/, "");
+      const wsUrl = `${cleanBase}/ws/conversations/${conversationId}?token=${encodeURIComponent(token)}`;
 
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;

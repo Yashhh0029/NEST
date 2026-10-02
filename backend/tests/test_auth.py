@@ -7,13 +7,14 @@ from app.models.user import User, UserRole
 
 
 def test_health_check(client: TestClient):
-    """Verify health endpoint reports online and database connected."""
-    response = client.get("/api/health")
-    assert response.status_code == status.HTTP_200_OK
-    data = response.json()
-    assert data["status"] == "ok"
-    assert data["database"] == "connected"
-    assert data["api"] == "online"
+    """Verify health endpoints (/api/health and /health) report online and database connected."""
+    for path in ["/api/health", "/health"]:
+        response = client.get(path)
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["status"] == "ok"
+        assert data["database"] == "connected"
+        assert data["api"] == "online"
 
 
 def test_root_endpoint(client: TestClient):

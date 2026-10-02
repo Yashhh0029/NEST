@@ -1,12 +1,18 @@
+import json
+import logging
 import os
 from typing import List, Union
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "NEST - AI Community Matching Platform"
     ENVIRONMENT: str = "development"
     API_V1_STR: str = "/api"
+    ENABLE_DOCS: bool = True
 
     # Database
     DATABASE_URL: str = "postgresql://postgres@127.0.0.1:5433/nest_db"
@@ -16,7 +22,7 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
 
-    # CORS
+    # CORS & Domains
     FRONTEND_URL: str = "http://localhost:5173"
     BACKEND_CORS_ORIGINS: List[str] = [
         "http://localhost:5173",
@@ -57,7 +63,45 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def assemble_db_url(cls, v: str) -> str:
+        if isinstance(v, str) and v.startswith("postgres://"):
+            return v.replace("postgres://", "postgresql://", 1)
+        return v
+
+    @field_validator("BACKEND_CORS_ORIGINS", mode="before")
+    @classmethod
+    def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
+        if isinstance(v, str):
+            v_stripped = v.strip()
+            if v_stripped.startswith("[") and v_stripped.endswith("]"):
+                try:
+                    parsed = json.loads(v_stripped)
+                    if isinstance(parsed, list):
+                        return [str(item).strip() for item in parsed if str(item).strip()]
+                except Exception:
+                    pass
+            return [i.strip() for i in v_stripped.split(",") if i.strip()]
+        elif isinstance(v, list):
+            return [str(i).strip() for i in v if str(i).strip()]
+        return []
+
     def model_post_init(self, __context):
+        # Auto-include FRONTEND_URL in CORS origins if specified
+        if self.FRONTEND_URL:
+            normalized_front = self.FRONTEND_URL.rstrip("/")
+            if normalized_front and normalized_front not in self.BACKEND_CORS_ORIGINS:
+                self.BACKEND_CORS_ORIGINS.append(normalized_front)
+
+        # Production safety warning for JWT_SECRET
+        if self.ENVIRONMENT == "production":
+            if "insecure" in self.JWT_SECRET.lower() or len(self.JWT_SECRET) < 32:
+                logger.warning(
+                    "SECURITY WARNING: Running in production with default/short JWT_SECRET! "
+                    "Ensure JWT_SECRET is overridden with a strong 256-bit secret."
+                )
+
         # Sync RESEND_API_KEY and EMAIL_API_KEY
         if self.RESEND_API_KEY and not self.EMAIL_API_KEY:
             self.EMAIL_API_KEY = self.RESEND_API_KEY

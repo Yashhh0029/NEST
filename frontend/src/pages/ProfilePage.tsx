@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { CardSkeleton } from "@/components/ui/Skeleton";
 import type { FullProfile } from "@/types/profile";
-import { Edit3, Sparkles, Award } from "lucide-react";
+import { Edit3, Sparkles, Award, MapPin } from "lucide-react";
 
 export function ProfilePage() {
   const [profileData, setProfileData] = useState<FullProfile | null>(null);
@@ -54,6 +54,26 @@ export function ProfilePage() {
 
       {/* Main Profile Header */}
       <ProfileHeader fullProfile={profileData} />
+
+      {/* Missing Location Guidance Banner */}
+      {!profileData.location && (
+        <div className="p-4 rounded-xl bg-amber-50/80 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-sm">
+          <div className="flex items-center gap-2.5 text-amber-900 dark:text-amber-200">
+            <MapPin className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
+            <div>
+              <p className="font-semibold">Complete your profile with your location</p>
+              <p className="text-xs text-amber-800/80 dark:text-amber-300/80">
+                Setting your locality connects you with nearby community helpers, newcomers, and resources.
+              </p>
+            </div>
+          </div>
+          <Link to="/profile/edit#location">
+            <Button size="sm" variant="primary" className="whitespace-nowrap">
+              Set Location Now
+            </Button>
+          </Link>
+        </div>
+      )}
 
       {/* Detailed Sections Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

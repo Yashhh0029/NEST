@@ -1,4 +1,6 @@
-from fastapi import FastAPI, Depends, status
+import logging
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Depends, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -19,15 +21,41 @@ from app.api.availability import router as availability_router
 from app.api.sessions import router as sessions_router
 from app.api.ws_chat import router as ws_router
 from app.core.config import settings
-from app.db.database import get_db
+from app.db.database import get_db, engine
+
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Production-grade application lifespan manager.
+    Handles startup checks and graceful cleanup on termination.
+    """
+    logger.info(f"Starting {settings.PROJECT_NAME} in [{settings.ENVIRONMENT}] mode.")
+    try:
+        # Pre-verify database connection on startup
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        logger.info("Database connection successfully established.")
+    except Exception as exc:
+        logger.warning(f"Database pre-flight check warning (will retry on requests): {exc}")
+    yield
+    logger.info(f"Shutting down {settings.PROJECT_NAME}. Disposing connection pools...")
+    engine.dispose()
+    logger.info("Shutdown complete.")
+
+
+docs_enabled = settings.ENABLE_DOCS
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="NEST — AI-Powered Community Matching Platform. Find Your People. Find Your Place.",
     version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
+    docs_url="/docs" if docs_enabled else None,
+    redoc_url="/redoc" if docs_enabled else None,
+    openapi_url="/openapi.json" if docs_enabled else None,
+    lifespan=lifespan,
 )
 
 # Configure CORS
@@ -66,21 +94,12 @@ def root():
         "name": settings.PROJECT_NAME,
         "tagline": "Find Your People. Find Your Place.",
         "version": "1.0.0",
-        "docs": "/docs",
+        "docs": "/docs" if docs_enabled else None,
         "status": "operational",
     }
 
 
-@app.get(
-    "/api/health",
-    tags=["System"],
-    summary="Health check with PostgreSQL verification",
-)
-def health_check(db: Session = Depends(get_db)):
-    """
-    Real health endpoint verifying application runtime and PostgreSQL connectivity.
-    Never returns false 'connected' if database is unreachable.
-    """
+def _execute_health_check(response: Response, db: Session):
     db_status = "disconnected"
     try:
         db.execute(text("SELECT 1"))
@@ -89,9 +108,38 @@ def health_check(db: Session = Depends(get_db)):
         db_status = f"error: {str(exc)}"
 
     is_healthy = db_status == "connected"
+    if not is_healthy:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+
     return {
         "status": "ok" if is_healthy else "degraded",
         "environment": settings.ENVIRONMENT,
         "database": db_status,
         "api": "online",
     }
+
+
+@app.get(
+    "/api/health",
+    tags=["System"],
+    summary="Health check with PostgreSQL verification",
+)
+def api_health_check(response: Response, db: Session = Depends(get_db)):
+    """
+    Standard API health endpoint verifying application runtime and PostgreSQL connectivity.
+    Returns HTTP 200 on success, HTTP 503 on database disconnect.
+    """
+    return _execute_health_check(response, db)
+
+
+@app.get(
+    "/health",
+    tags=["System"],
+    summary="Root health check for cloud load balancers and orchestrators",
+)
+def root_health_check(response: Response, db: Session = Depends(get_db)):
+    """
+    Root-level health check endpoint for container orchestrators (Render, AWS, GCP, Fly.io).
+    """
+    return _execute_health_check(response, db)
+

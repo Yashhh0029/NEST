@@ -13,6 +13,16 @@ const KNOWN_CITIES = [
   "Hyderabad",
   "Delhi",
   "Chennai",
+  "Kochi",
+  "Cochin",
+  "Kolkata",
+  "Gurgaon",
+  "Gurugram",
+  "Noida",
+  "Ahmedabad",
+  "Jaipur",
+  "Chandigarh",
+  "Thiruvananthapuram",
 ];
 
 const KNOWN_AREAS = [
@@ -27,8 +37,13 @@ const KNOWN_AREAS = [
   "Wakad",
   "Kothrud",
   "Viman Nagar",
+  "Kakkanad",
+  "Edappally",
+  "Fort Kochi",
   "Gachibowli",
   "Madhapur",
+  "Cyber City",
+  "Salt Lake",
 ];
 
 export function extractLocalPreview(text: string): LocalPreviewItem[] {

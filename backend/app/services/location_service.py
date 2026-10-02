@@ -63,14 +63,19 @@ def resolve_and_upsert_request_location(
     existing_req_loc = db.query(RequestLocation).filter(RequestLocation.request_id == request_id).first()
 
     if resolved:
-        final_city = resolved.city or city_hint
-        final_area = resolved.area or area_hint
+        if city_hint and resolved.city and area_hint and resolved.city.strip().lower() == area_hint.strip().lower():
+            final_city = city_hint
+            final_area = area_hint
+        else:
+            final_city = resolved.city or city_hint
+            final_area = resolved.area or area_hint
         final_state = resolved.state
         final_country = resolved.country or "India"
         final_postal = resolved.postal_code
         final_lat = resolved.latitude
         final_lon = resolved.longitude
         final_place_id = resolved.google_place_id
+        final_display_name = resolved.display_name or resolved.name
         final_formatted = resolved.formatted_address or formatted_address
         final_source = resolved.location_source
         final_precision = resolved.location_precision
@@ -84,12 +89,14 @@ def resolve_and_upsert_request_location(
         final_lat = latitude
         final_lon = longitude
         final_place_id = google_place_id
+        final_display_name = None
         final_formatted = formatted_address or ", ".join(filter(None, [area_hint, city_hint]))
         final_source = "nlp_unresolved"
         final_precision = "approximate"
 
     if existing_req_loc:
         existing_req_loc.google_place_id = final_place_id
+        existing_req_loc.display_name = final_display_name
         existing_req_loc.formatted_address = final_formatted
         existing_req_loc.city = final_city
         existing_req_loc.area = final_area
@@ -107,6 +114,7 @@ def resolve_and_upsert_request_location(
         new_req_loc = RequestLocation(
             request_id=request_id,
             google_place_id=final_place_id,
+            display_name=final_display_name,
             formatted_address=final_formatted,
             city=final_city,
             area=final_area,

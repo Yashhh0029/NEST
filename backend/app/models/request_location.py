@@ -24,6 +24,7 @@ class RequestLocation(Base):
         nullable=False,
     )
     google_place_id = Column(String(255), nullable=True, index=True)
+    display_name = Column(String(255), nullable=True)
     formatted_address = Column(String(500), nullable=True)
     city = Column(String(100), nullable=True, index=True)
     area = Column(String(100), nullable=True, index=True)

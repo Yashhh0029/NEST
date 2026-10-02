@@ -12,6 +12,8 @@ export interface AutocompleteResponse {
 export interface ResolvedLocation {
   google_place_id?: string | null;
   formatted_address?: string | null;
+  name?: string | null;
+  display_name?: string | null;
   city?: string | null;
   area?: string | null;
   state?: string | null;

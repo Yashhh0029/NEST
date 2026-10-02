@@ -43,6 +43,54 @@ CITY_MAPPINGS: Dict[str, Dict[str, str]] = {
         "country": "India",
         "aliases": ["chennai", "madras"],
     },
+    "kochi": {
+        "city": "Kochi",
+        "state": "Kerala",
+        "country": "India",
+        "aliases": ["kochi", "cochin", "ernakulam"],
+    },
+    "kolkata": {
+        "city": "Kolkata",
+        "state": "West Bengal",
+        "country": "India",
+        "aliases": ["kolkata", "calcutta"],
+    },
+    "gurgaon": {
+        "city": "Gurgaon",
+        "state": "Haryana",
+        "country": "India",
+        "aliases": ["gurgaon", "gurugram"],
+    },
+    "noida": {
+        "city": "Noida",
+        "state": "Uttar Pradesh",
+        "country": "India",
+        "aliases": ["noida", "greater noida"],
+    },
+    "ahmedabad": {
+        "city": "Ahmedabad",
+        "state": "Gujarat",
+        "country": "India",
+        "aliases": ["ahmedabad", "amdavad"],
+    },
+    "jaipur": {
+        "city": "Jaipur",
+        "state": "Rajasthan",
+        "country": "India",
+        "aliases": ["jaipur"],
+    },
+    "chandigarh": {
+        "city": "Chandigarh",
+        "state": "Chandigarh",
+        "country": "India",
+        "aliases": ["chandigarh", "mohali", "panchkula"],
+    },
+    "thiruvananthapuram": {
+        "city": "Thiruvananthapuram",
+        "state": "Kerala",
+        "country": "India",
+        "aliases": ["thiruvananthapuram", "trivandrum"],
+    },
 }
 
 AREA_TO_CITY: Dict[str, str] = {
@@ -79,6 +127,35 @@ AREA_TO_CITY: Dict[str, str] = {
     "shivaji nagar": "pune",
     "koregaon park": "pune",
     "kalyani nagar": "pune",
+    # Kochi
+    "kakkanad": "kochi",
+    "edappally": "kochi",
+    "kaloor": "kochi",
+    "aluva": "kochi",
+    "fort kochi": "kochi",
+    "panampilly nagar": "kochi",
+    # Hyderabad
+    "gachibowli": "hyderabad",
+    "madhapur": "hyderabad",
+    "kondapur": "hyderabad",
+    "hitec city": "hyderabad",
+    "jubilee hills": "hyderabad",
+    # Gurgaon
+    "cyber city": "gurgaon",
+    "dlf phase": "gurgaon",
+    "sohna road": "gurgaon",
+    "golf course road": "gurgaon",
+    # Noida
+    "sector 62": "noida",
+    "sector 18": "noida",
+    # Kolkata
+    "salt lake": "kolkata",
+    "new town": "kolkata",
+    # Chennai
+    "velachery": "chennai",
+    "omr": "chennai",
+    "adyar": "chennai",
+    "t nagar": "chennai",
 }
 
 AREA_CANONICAL_NAMES: Dict[str, str] = {
@@ -113,6 +190,29 @@ AREA_CANONICAL_NAMES: Dict[str, str] = {
     "shivaji nagar": "Shivaji Nagar",
     "koregaon park": "Koregaon Park",
     "kalyani nagar": "Kalyani Nagar",
+    "kakkanad": "Kakkanad",
+    "edappally": "Edappally",
+    "kaloor": "Kaloor",
+    "aluva": "Aluva",
+    "fort kochi": "Fort Kochi",
+    "panampilly nagar": "Panampilly Nagar",
+    "gachibowli": "Gachibowli",
+    "madhapur": "Madhapur",
+    "kondapur": "Kondapur",
+    "hitec city": "HITEC City",
+    "jubilee hills": "Jubilee Hills",
+    "cyber city": "Cyber City",
+    "dlf phase": "DLF Phase",
+    "sohna road": "Sohna Road",
+    "golf course road": "Golf Course Road",
+    "sector 62": "Sector 62",
+    "sector 18": "Sector 18",
+    "salt lake": "Salt Lake",
+    "new town": "New Town",
+    "velachery": "Velachery",
+    "omr": "OMR",
+    "adyar": "Adyar",
+    "t nagar": "T. Nagar",
 }
 
 NEEDS_CATEGORIES: Dict[str, List[Tuple[str, str]]] = {

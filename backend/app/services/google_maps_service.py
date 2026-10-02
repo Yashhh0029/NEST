@@ -75,42 +75,12 @@ class GoogleMapsService:
             return []
 
         if not self.is_configured:
-            # Query OpenStreetMap Nominatim for real Indian localities when Google is unconfigured
-            try:
-                osm_url = f"https://nominatim.openstreetmap.org/search?q={urllib.parse.quote(clean_input)}&format=json&addressdetails=1&countrycodes=in&limit=5"
-                headers = {"User-Agent": "NEST-Community-Platform/1.0"}
-                resp = requests.get(osm_url, headers=headers, timeout=4.0)
-                if resp.status_code == 200:
-                    osm_data = resp.json()
-                    preds: List[PlaceAutocompletePrediction] = []
-                    for item in osm_data:
-                        disp = item.get("display_name", "")
-                        addr = item.get("address", {})
-                        main = addr.get("suburb") or addr.get("neighbourhood") or addr.get("road") or item.get("name") or disp.split(",")[0]
-                        sec_parts = [addr.get("city") or addr.get("state_district"), addr.get("state"), "India"]
-                        sec = ", ".join(dict.fromkeys(filter(None, sec_parts))) or "India"
-                        lat = item.get("lat")
-                        lon = item.get("lon")
-                        pid = f"osm_{lat}_{lon}_{item.get('place_id')}"
-                        preds.append(
-                            PlaceAutocompletePrediction(
-                                place_id=pid,
-                                main_text=main,
-                                secondary_text=sec,
-                                description=disp,
-                            )
-                        )
-                    if preds:
-                        return preds
-            except Exception as e:
-                logger.warning("OSM autocomplete fallback error: %s", e)
-
             q_low = clean_input.lower()
             fallbacks = []
             if "hinjewadi" in q_low or "pune" in q_low or "kothrud" in q_low:
                 fallbacks.append(
                     PlaceAutocompletePrediction(
-                        place_id="osm_18.5074_73.8077_kothrud_pune",
+                        place_id="pc_kothrud_pune",
                         main_text="Kothrud",
                         secondary_text="Pune, Maharashtra, India",
                         description="Kothrud, Pune, Maharashtra, India",
@@ -207,32 +177,13 @@ class GoogleMapsService:
             return None
 
         if not self.is_configured:
-            if clean_place_id.startswith("osm_"):
-                try:
-                    parts = clean_place_id.split("_")
-                    lat = float(parts[1])
-                    lon = float(parts[2])
-                    rev = self.reverse_geocode(lat, lon)
-                    if rev:
-                        rev.google_place_id = clean_place_id
-                        return rev
-                    return ResolvedLocation(
-                        google_place_id=clean_place_id,
-                        latitude=lat,
-                        longitude=lon,
-                        city="Pune",
-                        area="Kothrud",
-                        formatted_address="Kothrud, Pune, Maharashtra, India",
-                        location_source="osm_place_details",
-                    )
-                except Exception as e:
-                    logger.warning("Failed parsing OSM place ID %s: %s", clean_place_id, e)
-
             p_low = clean_place_id.lower()
             if "hinjewadi" in p_low or "pune" in p_low:
                 return ResolvedLocation(
                     google_place_id=clean_place_id,
                     formatted_address="Hinjewadi, Pune, Maharashtra 411057, India",
+                    name="Hinjewadi",
+                    display_name="Hinjewadi",
                     latitude=18.5913,
                     longitude=73.7389,
                     city="Pune",
@@ -247,6 +198,8 @@ class GoogleMapsService:
                 return ResolvedLocation(
                     google_place_id=clean_place_id,
                     formatted_address="Indiranagar, Bengaluru, Karnataka 560038, India",
+                    name="Indiranagar",
+                    display_name="Indiranagar",
                     latitude=12.9716,
                     longitude=77.5946,
                     city="Bengaluru",
@@ -282,12 +235,16 @@ class GoogleMapsService:
             lat = loc_geo.get("latitude")
             lon = loc_geo.get("longitude")
             formatted = data.get("formattedAddress")
+            disp_obj = data.get("displayName", {})
+            disp_name = disp_obj.get("text") if isinstance(disp_obj, dict) else None
 
             city, area, state, country, postal = self._extract_address_components(data.get("addressComponents", []))
 
             resolved = ResolvedLocation(
                 google_place_id=clean_place_id,
                 formatted_address=formatted,
+                name=disp_name,
+                display_name=disp_name,
                 city=city,
                 area=area,
                 state=state,
@@ -393,10 +350,12 @@ class GoogleMapsService:
 
     def geocode_address(self, address: str) -> Optional[ResolvedLocation]:
         """
-        Forward geocode an address string in India using Google Geocoding API.
+        Forward geocode an address or locality in India using Google Places API (New) Text Search.
+        Does NOT use or depend on Google Geocoding API (Zero-billing, modern architecture).
+        Endpoint: POST https://places.googleapis.com/v1/places:searchText
         """
         clean_address = address.strip()
-        if not clean_address or not self.is_configured:
+        if not clean_address:
             return None
 
         cache_key = f"geocode:{clean_address.lower()}"
@@ -404,60 +363,113 @@ class GoogleMapsService:
         if cached is not None:
             return cached
 
-        url = "https://maps.googleapis.com/maps/api/geocode/json"
-        params = {
-            "address": clean_address,
-            "components": "country:IN",
-            "key": self.api_key,
+        if not self.is_configured:
+            # Deterministic development fallbacks when unconfigured
+            addr_low = clean_address.lower()
+            if "kothrud" in addr_low or "pune" in addr_low:
+                return ResolvedLocation(
+                    google_place_id="pc_kothrud_pune",
+                    formatted_address="Kothrud, Pune, Maharashtra, India",
+                    name="Kothrud",
+                    display_name="Kothrud",
+                    city="Pune",
+                    area="Kothrud",
+                    state="Maharashtra",
+                    country="India",
+                    postal_code="411038",
+                    latitude=18.5074,
+                    longitude=73.8077,
+                    location_precision="locality",
+                    location_source="google_places",
+                )
+            if "indiranagar" in addr_low or "bengaluru" in addr_low or "bangalore" in addr_low or "whitefield" in addr_low:
+                return ResolvedLocation(
+                    google_place_id="pc_indiranagar_blr",
+                    formatted_address="Indiranagar, Bengaluru, Karnataka, India",
+                    name="Indiranagar",
+                    display_name="Indiranagar",
+                    city="Bengaluru",
+                    area="Indiranagar",
+                    state="Karnataka",
+                    country="India",
+                    postal_code="560038",
+                    latitude=12.9716,
+                    longitude=77.5946,
+                    location_precision="locality",
+                    location_source="google_places",
+                )
+            return None
+
+        url = "https://places.googleapis.com/v1/places:searchText"
+        headers = {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": self.api_key,
+            "X-Goog-FieldMask": (
+                "places.id,places.displayName,places.formattedAddress,"
+                "places.location,places.addressComponents"
+            ),
+        }
+        payload = {
+            "textQuery": clean_address,
+            "maxResultCount": 1,
+            "regionCode": "in",
         }
 
         try:
-            resp = requests.get(url, params=params, timeout=5.0)
+            resp = requests.post(url, json=payload, headers=headers, timeout=6.0)
             if resp.status_code != 200:
-                logger.warning("Google Geocoding returned status %d", resp.status_code)
+                logger.warning(
+                    "Places API searchText geocoding returned status %d: %s",
+                    resp.status_code,
+                    resp.text[:200],
+                )
                 return None
 
             data = resp.json()
-            results = data.get("results", [])
-            if not results:
+            places = data.get("places", [])
+            if not places:
                 return None
 
-            top = results[0]
-            geometry = top.get("geometry", {})
-            loc = geometry.get("location", {})
-            lat = loc.get("lat")
-            lng = loc.get("lng")
-            precision = geometry.get("location_type", "approximate").lower()
+            top = places[0]
+            loc = top.get("location", {})
+            lat = loc.get("latitude")
+            lon = loc.get("longitude")
+            place_id = top.get("id")
+            formatted = top.get("formattedAddress")
+            disp_obj = top.get("displayName", {})
+            name = disp_obj.get("text") if isinstance(disp_obj, dict) else None
 
-            city, area, state, country, postal, formatted, place_id = (
-                self.parse_google_address_components_multi(results)
+            city, area, state, country, postal = self._extract_address_components(
+                top.get("addressComponents", [])
             )
 
             resolved = ResolvedLocation(
-                google_place_id=place_id or top.get("place_id"),
-                formatted_address=formatted or top.get("formatted_address"),
+                google_place_id=place_id,
+                formatted_address=formatted,
+                name=name,
+                display_name=name,
                 city=city,
                 area=area,
                 state=state,
                 country=country or "India",
                 postal_code=postal,
                 latitude=round(lat, 6) if lat is not None else None,
-                longitude=round(lng, 6) if lng is not None else None,
-                location_precision=precision,
-                location_source="google_geocoding",
+                longitude=round(lon, 6) if lon is not None else None,
+                location_precision="locality" if area is None else "neighborhood",
+                location_source="google_places",
             )
             self._set_in_cache(cache_key, resolved)
             return resolved
 
         except Exception as exc:
-            logger.warning("Google Geocoding failed gracefully: %s", exc)
+            logger.warning("Places API searchText geocoding failed gracefully: %s", exc)
             return None
 
     def reverse_geocode(self, latitude: float, longitude: float) -> Optional[ResolvedLocation]:
         """
         Reverse geocode GPS coordinates to human-readable area & city.
-        Uses multi-result Google Geocoding parser when available, with a resilient
-        deterministic fallback for Indian coordinates so 'Unknown City' is never shown.
+        Uses deterministic coordinate boundaries for Indian regions (Zero-billing,
+        zero Geocoding API, zero OSM/Nominatim).
         """
         if not (-90.0 <= latitude <= 90.0 and -180.0 <= longitude <= 180.0):
             return None
@@ -467,48 +479,8 @@ class GoogleMapsService:
         if cached is not None:
             return cached
 
-        # 1. Real Google Geocoding API if key configured
-        if self.is_configured:
-            url = "https://maps.googleapis.com/maps/api/geocode/json"
-            params = {
-                "latlng": f"{latitude},{longitude}",
-                "key": self.api_key,
-            }
-            try:
-                resp = requests.get(url, params=params, timeout=5.0)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    results = data.get("results", [])
-                    if results:
-                        city, area, state, country, postal, formatted, place_id = (
-                            self.parse_google_address_components_multi(results)
-                        )
-                        if city:
-                            resolved = ResolvedLocation(
-                                google_place_id=place_id,
-                                formatted_address=formatted,
-                                city=city,
-                                area=area,
-                                state=state,
-                                country=country or "India",
-                                postal_code=postal,
-                                latitude=round(latitude, 6),
-                                longitude=round(longitude, 6),
-                                location_precision="rooftop",
-                                location_source="google_reverse_geocoding",
-                            )
-                            self._set_in_cache(cache_key, resolved)
-                            return resolved
-            except Exception as exc:
-                logger.warning("Google Reverse Geocoding failed gracefully: %s", exc)
-
-        # 2. Real OpenStreetMap (Nominatim) reverse geocoding for zero-billing precision
-        osm_resolved = self.reverse_geocode_osm(latitude, longitude)
-        if osm_resolved:
-            self._set_in_cache(cache_key, osm_resolved)
-            return osm_resolved
-
-        # 3. Resilient offline fallback for Indian coordinates (e.g. 18.65, 73.80 -> Wakad / Nigdi, Pimpri-Chinchwad)
+        # Resilient offline coordinate boundary resolver for Indian coordinates
+        # (e.g. 18.65, 73.80 -> Nigdi, Pimpri-Chinchwad; Wakad, Pune; etc.)
         fallback = self.resolve_indian_coordinates(latitude, longitude)
         if fallback:
             self._set_in_cache(cache_key, fallback)
@@ -785,74 +757,6 @@ class GoogleMapsService:
             formatted = ", ".join(parts) if parts else "India"
 
         return city, area, state, country, postal, formatted, place_id
-
-    @staticmethod
-    def reverse_geocode_osm(latitude: float, longitude: float) -> Optional[ResolvedLocation]:
-        """
-        Reverse geocode GPS coordinates to real human-readable street, neighborhood, and city
-        using OpenStreetMap Nominatim with zero billing.
-        Strict Real-Data Rules:
-        - Never fabricates fake address components or fake street numbers.
-        - Preserves real road, suburb, neighborhood, and city as returned by OpenStreetMap.
-        """
-        url = "https://nominatim.openstreetmap.org/reverse"
-        params = {
-            "format": "json",
-            "lat": latitude,
-            "lon": longitude,
-            "addressdetails": 1,
-            "zoom": 18,
-        }
-        headers = {"User-Agent": "NEST-LocalDiscovery/1.0 (contact: support@nest-app.local)"}
-        try:
-            resp = requests.get(url, params=params, headers=headers, timeout=5.0)
-            if resp.status_code == 200:
-                data = resp.json()
-                if isinstance(data, dict) and "address" in data:
-                    addr = data.get("address", {})
-                    road = addr.get("road") or addr.get("pedestrian") or addr.get("path")
-                    suburb = addr.get("suburb") or addr.get("residential") or addr.get("neighbourhood") or addr.get("subdistrict")
-                    neighborhood = addr.get("neighbourhood") or addr.get("residential")
-                    city = (
-                        addr.get("city")
-                        or addr.get("town")
-                        or addr.get("village")
-                        or addr.get("municipality")
-                        or addr.get("county")
-                        or addr.get("state_district")
-                    )
-                    state = addr.get("state")
-                    country = addr.get("country") or "India"
-                    postal = addr.get("postcode")
-                    display_name = data.get("display_name")
-                    osm_type = data.get("osm_type", "way")
-                    osm_id = str(data.get("osm_id", ""))
-
-                    resolved_area = suburb or neighborhood or road
-                    if resolved_area and city and resolved_area.strip().lower() == city.strip().lower():
-                        resolved_area = road if road != city else None
-
-                    precision = "rooftop" if road else ("neighborhood" if suburb else "locality")
-
-                    return ResolvedLocation(
-                        google_place_id=f"osm_{osm_type}_{osm_id}" if osm_id else None,
-                        formatted_address=display_name,
-                        city=city,
-                        area=resolved_area,
-                        state=state,
-                        country=country,
-                        postal_code=postal,
-                        latitude=round(latitude, 6),
-                        longitude=round(longitude, 6),
-                        location_precision=precision,
-                        location_source="osm_reverse_geocoding",
-                        road=road,
-                        neighborhood=neighborhood,
-                        suburb=suburb,
-                    )
-        except Exception as exc:
-            logger.warning("OSM Nominatim reverse geocode failed gracefully: %s", exc)
-        return None
 
     @staticmethod
     def resolve_indian_coordinates(latitude: float, longitude: float) -> Optional[ResolvedLocation]:

@@ -1,4 +1,5 @@
 import type { FullProfile } from "@/types/profile";
+import { Link } from "react-router-dom";
 import { Badge } from "../ui/Badge";
 import { Card } from "../ui/Card";
 import { Briefcase, MapPin, Globe, CheckCircle2, XCircle } from "lucide-react";
@@ -70,14 +71,39 @@ export function ProfileHeader({ fullProfile }: ProfileHeaderProps) {
       {/* Meta Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-3 border-t border-gray-100 dark:border-brand-dark-border/60 text-sm">
         {/* Location */}
-        <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
-          <MapPin className="w-4 h-4 text-brand-primary shrink-0" />
-          <span>
-            {location
-              ? [location.area, location.city].filter(Boolean).join(", ")
-              : "Location not set"}
-          </span>
-        </div>
+        {location ? (
+          <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
+            <MapPin className="w-4 h-4 text-brand-primary shrink-0" />
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="font-medium text-gray-900 dark:text-gray-100">
+                {location.display_name && location.display_name !== location.city && location.display_name !== location.area
+                  ? `${location.display_name}, ${[location.area, location.city].filter(Boolean).join(", ")}`
+                  : [location.area, location.city].filter(Boolean).join(", ")}
+              </span>
+              <Link
+                to="/profile/edit#location"
+                className="text-xs text-brand-primary dark:text-teal-400 hover:underline font-normal inline-flex items-center gap-0.5 ml-1"
+              >
+                (Edit Location)
+              </Link>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <MapPin className="w-4 h-4 text-amber-500 shrink-0" />
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-gray-500 dark:text-gray-400 text-sm italic">
+                Location not set
+              </span>
+              <Link
+                to="/profile/edit#location"
+                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-xs font-semibold bg-brand-primary/10 text-brand-primary dark:bg-teal-400/20 dark:text-teal-300 hover:bg-brand-primary/20 transition-colors"
+              >
+                Set Location →
+              </Link>
+            </div>
+          </div>
+        )}
 
         {/* Occupation */}
         {profile?.occupation && (

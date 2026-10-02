@@ -30,6 +30,8 @@ class ResolveTextRequest(BaseModel):
 class ResolvedLocation(BaseModel):
     google_place_id: Optional[str] = None
     formatted_address: Optional[str] = None
+    name: Optional[str] = None
+    display_name: Optional[str] = None
     city: Optional[str] = None
     area: Optional[str] = None
     state: Optional[str] = None

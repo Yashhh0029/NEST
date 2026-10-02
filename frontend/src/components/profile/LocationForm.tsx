@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "../ui/Button";
 import { useToast } from "@/hooks/useToast";
 import type { LocationCreateOrUpdatePayload } from "@/types/profile";
@@ -22,6 +22,12 @@ export function LocationForm({
     initialValues || { city: "", country: "India" }
   );
 
+  useEffect(() => {
+    if (initialValues) {
+      setLocationData(initialValues);
+    }
+  }, [initialValues]);
+
   const { error: toastError } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -37,6 +43,14 @@ export function LocationForm({
       area: locationData.area?.trim() || undefined,
       state: locationData.state?.trim() || undefined,
       country: locationData.country?.trim() || "India",
+      display_name: locationData.display_name?.trim() || undefined,
+      place_types: locationData.place_types || undefined,
+      google_place_id: locationData.google_place_id || undefined,
+      formatted_address: locationData.formatted_address || undefined,
+      postal_code: locationData.postal_code || undefined,
+      private_unit: locationData.private_unit?.trim() || undefined,
+      location_source: locationData.location_source || "manual",
+      location_precision: locationData.location_precision || "locality",
     });
   };
 

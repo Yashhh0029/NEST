@@ -12,6 +12,8 @@ class LocationBase(BaseModel):
     latitude: Optional[float] = Field(None, description="Geographic latitude in degrees [-90, 90]")
     longitude: Optional[float] = Field(None, description="Geographic longitude in degrees [-180, 180]")
     location_label: Optional[str] = Field(default="Primary", max_length=100, description="Label for this location")
+    display_name: Optional[str] = Field(None, max_length=255, description="Exact place or landmark name")
+    place_types: Optional[str] = Field(None, max_length=255, description="Comma-separated Google Place types")
     google_place_id: Optional[str] = Field(None, max_length=255, description="Google Place ID")
     formatted_address: Optional[str] = Field(None, max_length=500, description="Human readable address")
     postal_code: Optional[str] = Field(None, max_length=20, description="Postal / PIN code")
@@ -19,7 +21,7 @@ class LocationBase(BaseModel):
     location_source: Optional[str] = Field(default="manual", max_length=50, description="Source of coordinates")
     location_precision: Optional[str] = Field(default="locality", max_length=50, description="Precision level")
 
-    @field_validator("city", "area", "state", "country", "location_label", "google_place_id", "formatted_address", "postal_code", "private_unit")
+    @field_validator("city", "area", "state", "country", "location_label", "display_name", "place_types", "google_place_id", "formatted_address", "postal_code", "private_unit")
     @classmethod
     def clean_strings(cls, v: Optional[str]) -> Optional[str]:
         if v is not None:
@@ -65,6 +67,7 @@ class RequestLocationResponse(BaseModel):
     id: uuid.UUID
     request_id: uuid.UUID
     google_place_id: Optional[str] = None
+    display_name: Optional[str] = None
     formatted_address: Optional[str] = None
     city: Optional[str] = None
     area: Optional[str] = None

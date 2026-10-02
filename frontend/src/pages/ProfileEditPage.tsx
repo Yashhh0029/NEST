@@ -48,6 +48,11 @@ export function ProfileEditPage() {
           setAvailability(data.profile.availability);
         }
         setSkills(data.skills || []);
+        if (window.location.hash === "#location") {
+          setTimeout(() => {
+            document.getElementById("location")?.scrollIntoView({ behavior: "smooth" });
+          }, 150);
+        }
       })
       .catch(() => toastError("Could not load profile."))
       .finally(() => setIsLoading(false));
@@ -235,32 +240,42 @@ export function ProfileEditPage() {
         </Card>
 
         {/* Section 2: Location Form */}
-        <Card className="p-6 sm:p-8 space-y-6">
-          <div className="flex items-center gap-2">
-            <MapPin className="w-5 h-5 text-brand-primary" />
-            <h2 className="text-xl font-bold font-heading text-gray-900 dark:text-gray-100">
-              Your Primary Location
-            </h2>
-          </div>
+        <div id="location">
+          <Card className="p-6 sm:p-8 space-y-6">
+            <div className="flex items-center gap-2">
+              <MapPin className="w-5 h-5 text-brand-primary" />
+              <h2 className="text-xl font-bold font-heading text-gray-900 dark:text-gray-100">
+                Your Primary Location
+              </h2>
+            </div>
 
-          <LocationForm
-            initialValues={
-              fullProfile?.location
-                ? {
-                    city: fullProfile.location.city,
-                    area: fullProfile.location.area || undefined,
-                    state: fullProfile.location.state || undefined,
-                    country: fullProfile.location.country,
-                    latitude: fullProfile.location.latitude || undefined,
-                    longitude: fullProfile.location.longitude || undefined,
-                  }
-                : undefined
-            }
-            onSubmit={handleSaveLocation}
-            isLoading={isSavingLocation}
-            submitLabel="Update Location"
-          />
-        </Card>
+            <LocationForm
+              initialValues={
+                fullProfile?.location
+                  ? {
+                      city: fullProfile.location.city,
+                      area: fullProfile.location.area || undefined,
+                      state: fullProfile.location.state || undefined,
+                      country: fullProfile.location.country,
+                      latitude: fullProfile.location.latitude || undefined,
+                      longitude: fullProfile.location.longitude || undefined,
+                      display_name: fullProfile.location.display_name || undefined,
+                      place_types: fullProfile.location.place_types || undefined,
+                      google_place_id: fullProfile.location.google_place_id || undefined,
+                      formatted_address: fullProfile.location.formatted_address || undefined,
+                      postal_code: fullProfile.location.postal_code || undefined,
+                      private_unit: fullProfile.location.private_unit || undefined,
+                      location_source: fullProfile.location.location_source || undefined,
+                      location_precision: fullProfile.location.location_precision || undefined,
+                    }
+                  : undefined
+              }
+              onSubmit={handleSaveLocation}
+              isLoading={isSavingLocation}
+              submitLabel="Update Location"
+            />
+          </Card>
+        </div>
 
         {/* Section 3: Skills & Expertise */}
         <Card className="p-6 sm:p-8 space-y-6">
