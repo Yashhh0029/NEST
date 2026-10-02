@@ -127,7 +127,7 @@ export function GoogleMap({
   useEffect(() => {
     if (!mapLoaded || !containerRef.current) return;
     const google = (window as any).google;
-    if (!google || !google.maps) return;
+    if (!google || !google.maps || typeof google.maps.Map !== "function") return;
 
     // Clear existing markers and circles
     markersRef.current.forEach((m) => m.setMap(null));

@@ -609,67 +609,7 @@ export const ResourcesPage: React.FC = () => {
       </div>
 
       {/* Main Content Area */}
-      {isLoading ? (
-        <div className="space-y-4">
-          <CardSkeleton />
-          <CardSkeleton />
-          <CardSkeleton />
-        </div>
-      ) : searchResult?.status === "PROVIDER_UNAVAILABLE" ? (
-        <Card className="p-8 text-center space-y-4">
-          <div className="w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 flex items-center justify-center mx-auto">
-            <AlertCircle className="w-6 h-6" />
-          </div>
-          <div className="space-y-1.5">
-            <h3 className="font-bold text-lg text-gray-900 dark:text-gray-100 font-heading">
-              Local Places Search Unavailable
-            </h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 max-w-md mx-auto">
-              Real Google Places Platform data is required for NEST Local Resource Discovery. Google Places integration is currently unavailable or unconfigured. NEST does not fabricate fake businesses or synthetic places.
-            </p>
-          </div>
-
-          {/* Diagnostic Setup Guidance for Developers/Admins */}
-          <div className="p-5 text-left bg-gray-50 dark:bg-brand-dark-muted/30 border border-gray-200 dark:border-brand-dark-border rounded-xl max-w-lg mx-auto space-y-3 text-xs text-gray-700 dark:text-gray-300">
-            <div className="flex items-center gap-2 font-semibold text-gray-800 dark:text-gray-200">
-              <KeyRound className="w-4 h-4 text-brand-primary" />
-              <span>How to enable Google Places Exploration:</span>
-            </div>
-            <ol className="list-decimal list-inside space-y-2 text-gray-600 dark:text-gray-400 font-mono text-[11px]">
-              <li>Add <code className="bg-white dark:bg-brand-dark-card px-1.5 py-0.5 rounded border">GOOGLE_MAPS_API_KEY</code> to <code className="font-sans font-semibold">backend/.env</code></li>
-              <li>Add <code className="bg-white dark:bg-brand-dark-card px-1.5 py-0.5 rounded border">VITE_GOOGLE_MAPS_API_KEY</code> to <code className="font-sans font-semibold">frontend/.env</code></li>
-              <li className="font-sans text-xs">Enable <span className="font-semibold text-gray-800 dark:text-gray-200">Places API (New)</span>, <span className="font-semibold text-gray-800 dark:text-gray-200">Maps JavaScript API</span>, and <span className="font-semibold text-gray-800 dark:text-gray-200">Geocoding API</span> in Google Cloud Console</li>
-            </ol>
-            <div className="pt-2 flex justify-end">
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => fetchResources()}
-                className="text-xs flex items-center gap-1.5"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                Retry Places Search
-              </Button>
-            </div>
-          </div>
-
-          {requestIdParam && (
-            <div className="pt-2">
-              <Link to={`/matching?request_id=${requestIdParam}`}>
-                <Button variant="primary" size="sm">
-                  Find Community Helpers
-                </Button>
-              </Link>
-            </div>
-          )}
-        </Card>
-      ) : searchResult?.resources.length === 0 ? (
-        <EmptyState
-          icon={<Compass className="w-8 h-8 text-gray-400" />}
-          title="No Local Places Found"
-          description="We couldn't find real places matching your query in this area. Try clearing filters, expanding the search area, or searching another category."
-        />
-      ) : viewMode === "map" ? (
+      {viewMode === "map" ? (
         <div className="space-y-4">
           {/* Real Community Helper Status (Zero Fake Markers) */}
           {isLoadingHelpers ? (
@@ -691,7 +631,6 @@ export const ResourcesPage: React.FC = () => {
               </Link>
             </div>
           ) : (
-
             <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 px-3.5 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/30 border border-indigo-200/80 dark:border-indigo-800 text-xs text-indigo-900 dark:text-indigo-200">
               <div className="flex items-center gap-2">
                 <Users className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
@@ -729,7 +668,6 @@ export const ResourcesPage: React.FC = () => {
               className="h-[440px] sm:h-[540px]"
             />
           </Card>
-
 
           {/* Desktop: Selected place preview card below map */}
           {selectedResource ? (
@@ -817,6 +755,66 @@ export const ResourcesPage: React.FC = () => {
             </div>
           )}
         </div>
+      ) : isLoading ? (
+        <div className="space-y-4">
+          <CardSkeleton />
+          <CardSkeleton />
+          <CardSkeleton />
+        </div>
+      ) : searchResult?.status === "PROVIDER_UNAVAILABLE" ? (
+        <Card className="p-8 text-center space-y-4">
+          <div className="w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 flex items-center justify-center mx-auto">
+            <AlertCircle className="w-6 h-6" />
+          </div>
+          <div className="space-y-1.5">
+            <h3 className="font-bold text-lg text-gray-900 dark:text-gray-100 font-heading">
+              Local Places Search Unavailable
+            </h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 max-w-md mx-auto">
+              Real Google Places Platform data is required for NEST Local Resource Discovery. Google Places integration is currently unavailable or unconfigured. NEST does not fabricate fake businesses or synthetic places.
+            </p>
+          </div>
+
+          {/* Diagnostic Setup Guidance for Developers/Admins */}
+          <div className="p-5 text-left bg-gray-50 dark:bg-brand-dark-muted/30 border border-gray-200 dark:border-brand-dark-border rounded-xl max-w-lg mx-auto space-y-3 text-xs text-gray-700 dark:text-gray-300">
+            <div className="flex items-center gap-2 font-semibold text-gray-800 dark:text-gray-200">
+              <KeyRound className="w-4 h-4 text-brand-primary" />
+              <span>How to enable Google Places Exploration:</span>
+            </div>
+            <ol className="list-decimal list-inside space-y-2 text-gray-600 dark:text-gray-400 font-mono text-[11px]">
+              <li>Add <code className="bg-white dark:bg-brand-dark-card px-1.5 py-0.5 rounded border">GOOGLE_MAPS_API_KEY</code> to <code className="font-sans font-semibold">backend/.env</code></li>
+              <li>Add <code className="bg-white dark:bg-brand-dark-card px-1.5 py-0.5 rounded border">VITE_GOOGLE_MAPS_API_KEY</code> to <code className="font-sans font-semibold">frontend/.env</code></li>
+              <li className="font-sans text-xs">Enable <span className="font-semibold text-gray-800 dark:text-gray-200">Places API (New)</span>, <span className="font-semibold text-gray-800 dark:text-gray-200">Maps JavaScript API</span>, and <span className="font-semibold text-gray-800 dark:text-gray-200">Geocoding API</span> in Google Cloud Console</li>
+            </ol>
+            <div className="pt-2 flex justify-end">
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => fetchResources()}
+                className="text-xs flex items-center gap-1.5"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Retry Places Search
+              </Button>
+            </div>
+          </div>
+
+          {requestIdParam && (
+            <div className="pt-2">
+              <Link to={`/matching?request_id=${requestIdParam}`}>
+                <Button variant="primary" size="sm">
+                  Find Community Helpers
+                </Button>
+              </Link>
+            </div>
+          )}
+        </Card>
+      ) : searchResult?.resources.length === 0 ? (
+        <EmptyState
+          icon={<Compass className="w-8 h-8 text-gray-400" />}
+          title="No Local Places Found"
+          description="We couldn't find real places matching your query in this area. Try clearing filters, expanding the search area, or searching another category."
+        />
       ) : (
         <div className="space-y-4">
           {searchResult?.resources.map((item) => (

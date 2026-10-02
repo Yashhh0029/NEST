@@ -6,8 +6,16 @@ export function loadGoogleMaps(): Promise<boolean> {
   }
 
   // Already loaded
-  if ((window as any).google && (window as any).google.maps) {
+  if ((window as any).google?.maps?.Map) {
     return Promise.resolve(true);
+  }
+
+  // JSDOM / Vitest test environment cannot load external script tags
+  const isJsdom =
+    navigator.userAgent.includes("jsdom") ||
+    Boolean((window as any).__vitest__);
+  if (isJsdom) {
+    return Promise.resolve(false);
   }
 
   if (loadPromise) {
@@ -24,13 +32,17 @@ export function loadGoogleMaps(): Promise<boolean> {
     // Check if script element already exists
     const existingScript = document.querySelector('script[src*="maps.googleapis.com/maps/api/js"]');
     if (existingScript) {
+      if ((window as any).google?.maps?.Map) {
+        resolve(true);
+        return;
+      }
       existingScript.addEventListener("load", () => resolve(true));
       existingScript.addEventListener("error", () => resolve(false));
       return;
     }
 
     const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey.trim())}&libraries=places,geometry&loading=async`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey.trim())}&libraries=places,geometry&v=weekly`;
     script.async = true;
     script.defer = true;
 
