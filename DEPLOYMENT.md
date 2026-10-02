@@ -198,7 +198,7 @@ docker compose ps
 
 ## 9. Production Security Checklist
 
-- [x] **Zero Hardcoded Secrets**: Verified via `git grep "AIzaSy"` (0 occurrences).
+- [x] **Zero Hardcoded Secrets**: Verified via secret pattern audit (0 tracked keys).
 - [x] **Ignored Environment Files**: `backend/.env`, `frontend/.env`, and `.env` are in `.gitignore`.
 - [x] **Docker Image Cleanliness**: Dedicated `.dockerignore` files prevent local credentials or build caches from leaking into images.
 - [x] **Unprivileged Container User**: Backend Docker container runs under unprivileged `nestuser` (UID 1000).
