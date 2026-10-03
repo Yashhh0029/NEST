@@ -3,12 +3,8 @@ import uuid
 from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from app.core.email_validator import EMAIL_REGEX, validate_email_address
 from app.models.user import UserRole
-
-EMAIL_REGEX = re.compile(
-    r"^[a-zA-Z0-9_+-]+(?:\.[a-zA-Z0-9_+-]+)*@"
-    r"(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$"
-)
 
 
 class UserRegister(BaseModel):
@@ -28,10 +24,7 @@ class UserRegister(BaseModel):
     @field_validator("email")
     @classmethod
     def validate_and_normalize_email(cls, v: str) -> str:
-        cleaned = v.strip().lower()
-        if not EMAIL_REGEX.match(cleaned):
-            raise ValueError("Invalid email address format")
-        return cleaned
+        return validate_email_address(v, allow_disposable=False)
 
     @field_validator("password")
     @classmethod
@@ -52,10 +45,7 @@ class UserLogin(BaseModel):
     @field_validator("email")
     @classmethod
     def validate_and_normalize_email(cls, v: str) -> str:
-        cleaned = v.strip().lower()
-        if not EMAIL_REGEX.match(cleaned):
-            raise ValueError("Invalid email address format")
-        return cleaned
+        return validate_email_address(v, allow_disposable=True)
 
 
 class UserResponse(BaseModel):
@@ -103,10 +93,7 @@ class ResendVerificationRequest(BaseModel):
     @field_validator("email")
     @classmethod
     def validate_and_normalize_email(cls, v: str) -> str:
-        cleaned = v.strip().lower()
-        if not EMAIL_REGEX.match(cleaned):
-            raise ValueError("Invalid email address format")
-        return cleaned
+        return validate_email_address(v, allow_disposable=True)
 
 
 class ResendVerificationResponse(BaseModel):

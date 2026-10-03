@@ -51,6 +51,11 @@ def clean_test_data():
             else:
                 db.query(Embedding).filter(Embedding.owner_type == "profile").delete(synchronize_session=False)
             db.commit()
+        except Exception:
+            try:
+                db.rollback()
+            except Exception:
+                pass
         finally:
             db.close()
 
@@ -59,17 +64,21 @@ def clean_test_data():
     test_email_provider.clear()
 
     # Deactivate real non-test users during test
-    db_ctx = SessionLocal()
-    real_users = db_ctx.query(User).filter(
-        ~User.email.like("%@example.test"),
-        ~User.email.like("%@nest.local"),
-        ~User.email.like("%@example.com"),
-    ).all()
-    real_user_ids = [u.id for u in real_users]
-    if real_user_ids:
-        db_ctx.query(User).filter(User.id.in_(real_user_ids)).update({"is_active": False}, synchronize_session=False)
-        db_ctx.commit()
-    db_ctx.close()
+    real_user_ids = []
+    try:
+        db_ctx = SessionLocal()
+        real_users = db_ctx.query(User).filter(
+            ~User.email.like("%@example.test"),
+            ~User.email.like("%@nest.local"),
+            ~User.email.like("%@example.com"),
+        ).all()
+        real_user_ids = [u.id for u in real_users]
+        if real_user_ids:
+            db_ctx.query(User).filter(User.id.in_(real_user_ids)).update({"is_active": False}, synchronize_session=False)
+            db_ctx.commit()
+        db_ctx.close()
+    except Exception:
+        pass
 
     yield
 
@@ -77,10 +86,13 @@ def clean_test_data():
     test_email_provider.clear()
     # Reactivate real non-test users after test
     if real_user_ids:
-        db_ctx = SessionLocal()
-        db_ctx.query(User).filter(User.id.in_(real_user_ids)).update({"is_active": True}, synchronize_session=False)
-        db_ctx.commit()
-        db_ctx.close()
+        try:
+            db_ctx = SessionLocal()
+            db_ctx.query(User).filter(User.id.in_(real_user_ids)).update({"is_active": True}, synchronize_session=False)
+            db_ctx.commit()
+            db_ctx.close()
+        except Exception:
+            pass
 
 
 def create_authenticated_user(client: TestClient, name: str, email: str, role: str = "newcomer"):

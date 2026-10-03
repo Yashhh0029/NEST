@@ -31,6 +31,29 @@ def test_malformed_email_rejected_on_registration(client: TestClient):
         assert resp.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
 
+def test_disposable_email_rejected_on_registration(client: TestClient):
+    """Verify that known disposable and temporary email domains are rejected."""
+    disposable_emails = [
+        "fakeuser@mailinator.com",
+        "tempuser@tempmail.com",
+        "burner@guerrillamail.com",
+        "subdomain@sub.mailinator.com",
+        "trash@trashmail.com",
+        "quick@10minutemail.com",
+        "drop@yopmail.com",
+    ]
+    for email in disposable_emails:
+        resp = client.post("/api/auth/register", json={
+            "name": "Disposable User",
+            "email": email,
+            "password": "Password123!",
+            "role": "newcomer",
+        })
+        assert resp.status_code in [status.HTTP_422_UNPROCESSABLE_ENTITY, status.HTTP_400_BAD_REQUEST]
+        err_text = resp.text.lower()
+        assert "disposable" in err_text or "temporary" in err_text
+
+
 def test_registration_creates_unverified_account_and_dispatches_email(client: TestClient):
     """Verify registration creates an unverified account, securely hashes token, and sends verification email."""
     test_email_provider.clear()
@@ -375,3 +398,26 @@ def test_google_auth_rejects_invalid_issuer(client: TestClient):
         resp = client.post("/api/auth/google", json={"id_token": "token_from_evil_issuer"})
         assert resp.status_code == status.HTTP_401_UNAUTHORIZED
         assert "invalid google token issuer" in resp.json()["detail"].lower()
+
+
+def test_production_verification_url_uses_frontend_url(client: TestClient, monkeypatch):
+    """Verify that verification links strictly use the configured FRONTEND_URL without duplicate slashes."""
+    test_email_provider.clear()
+    prod_frontend = "https://nest-seven-silk.vercel.app/"
+    monkeypatch.setattr(settings, "FRONTEND_URL", prod_frontend)
+
+    email = "url.test@example.test"
+    resp = client.post("/api/auth/register", json={
+        "name": "URL Test",
+        "email": email,
+        "password": "Password123!",
+        "role": "newcomer",
+    })
+    assert resp.status_code == status.HTTP_201_CREATED
+
+    sent = test_email_provider.sent_emails[0]
+    expected_prefix = "https://nest-seven-silk.vercel.app/verify-email?token="
+    assert expected_prefix in sent.html_body
+    assert expected_prefix in sent.text_body
+    # Ensure no double slashes before path
+    assert "https://nest-seven-silk.vercel.app//verify-email" not in sent.html_body

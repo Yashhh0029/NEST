@@ -91,7 +91,11 @@ export function LoginPage() {
         }
       }
 
-      if (msg === "EMAIL_NOT_VERIFIED") {
+      const isUnverified =
+        msg.includes("EMAIL_NOT_VERIFIED") ||
+        msg.toLowerCase().includes("verify your email");
+
+      if (isUnverified) {
         setUnverifiedEmail(data.email);
         setResendCooldown(45);
       } else {

@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from app.core.config import settings
+from app.core.email_validator import validate_email_address
 from app.core.security import create_access_token, hash_password, verify_password
 from app.models.user import User, UserRole
 from app.schemas.auth import Token, UserLogin, UserRegister, UserResponse
@@ -14,8 +15,15 @@ logger = logging.getLogger(__name__)
 
 
 def register_user(db: Session, user_in: UserRegister) -> User:
-    """Register a new user after verifying email uniqueness and hashing password."""
-    norm_email = user_in.email.strip().lower()
+    """Register a new user after verifying email uniqueness, blocking disposable domains, and hashing password."""
+    try:
+        norm_email = validate_email_address(user_in.email, allow_disposable=False)
+    except ValueError as ve:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(ve),
+        )
+
     existing_user = db.query(User).filter(User.email == norm_email).first()
     if existing_user:
         raise HTTPException(
@@ -44,7 +52,8 @@ def register_user(db: Session, user_in: UserRegister) -> User:
     db.commit()
     db.refresh(new_user)
 
-    verification_url = f"{settings.FRONTEND_URL}/verify-email?token={raw_token}"
+    frontend_base = settings.FRONTEND_URL.rstrip("/")
+    verification_url = f"{frontend_base}/verify-email?token={raw_token}"
     try:
         sent = send_verification_email(
             to_email=new_user.email,
@@ -54,12 +63,15 @@ def register_user(db: Session, user_in: UserRegister) -> User:
         if not sent:
             raise RuntimeError("Email provider dispatch returned failure.")
     except Exception as exc:
-        logger.error(f"Failed to dispatch verification email to {new_user.email}: {exc}")
+        logger.error("Failed to dispatch verification email to %s: %s", new_user.email, type(exc).__name__)
         db.delete(new_user)
         db.commit()
+        clean_err = str(exc)
+        if "token=" in clean_err:
+            clean_err = "Email dispatch failed."
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"We couldn't send the verification email. {str(exc)}",
+            detail=f"We couldn't send the verification email. {clean_err}",
         )
 
     return new_user
@@ -92,7 +104,7 @@ def authenticate_user(db: Session, credentials: UserLogin) -> User:
     if not user.email_verified:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="EMAIL_NOT_VERIFIED",
+            detail="Please verify your email before logging in. (EMAIL_NOT_VERIFIED)",
         )
 
     return user
@@ -205,7 +217,8 @@ def resend_verification_email(db: Session, email: str) -> dict:
     db.commit()
     db.refresh(user)
 
-    verification_url = f"{settings.FRONTEND_URL}/verify-email?token={raw_token}"
+    frontend_base = settings.FRONTEND_URL.rstrip("/")
+    verification_url = f"{frontend_base}/verify-email?token={raw_token}"
     try:
         sent = send_verification_email(
             to_email=user.email,
@@ -215,10 +228,13 @@ def resend_verification_email(db: Session, email: str) -> dict:
         if not sent:
             raise RuntimeError("Email provider dispatch returned failure.")
     except Exception as exc:
-        logger.error(f"Failed to resend verification email to {user.email}: {exc}")
+        logger.error("Failed to resend verification email to %s: %s", user.email, type(exc).__name__)
+        clean_err = str(exc)
+        if "token=" in clean_err:
+            clean_err = "Email dispatch failed."
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"We couldn't send the verification email. {str(exc)}",
+            detail=f"We couldn't send the verification email. {clean_err}",
         )
 
     return generic_success

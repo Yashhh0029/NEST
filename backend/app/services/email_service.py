@@ -45,12 +45,12 @@ class TestEmailProvider(BaseEmailProvider):
 
 
 class SMTPProvider(BaseEmailProvider):
-    """Transactional email provider using standard SMTP/TLS."""
+    """Transactional email provider using standard SMTP/TLS (supporting ports 587, 465, 25)."""
 
     def send(self, message: EmailMessage) -> bool:
         if not settings.SMTP_HOST:
-            logger.warning("[SMTPProvider] SMTP_HOST not configured. Email dispatch skipped.")
-            return False
+            logger.error("[SMTPProvider] SMTP_HOST not configured. Email dispatch aborted.")
+            raise RuntimeError("SMTP email provider is not configured. Please set SMTP_HOST in environment variables.")
 
         from_addr = message.from_email or settings.EMAIL_FROM
         mime_msg = MIMEMultipart("alternative")
@@ -64,17 +64,24 @@ class SMTPProvider(BaseEmailProvider):
         mime_msg.attach(part2)
 
         try:
-            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
+            # Port 465 uses SSL directly (SMTPS); Port 587/25 uses STARTTLS
+            if settings.SMTP_PORT == 465:
+                server = smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10)
+            else:
+                server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10)
                 if settings.SMTP_TLS:
                     server.starttls()
+
+            with server:
                 if settings.SMTP_USER and settings.SMTP_PASSWORD:
                     server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
                 server.sendmail(from_addr, [message.to_email], mime_msg.as_string())
-            logger.info(f"[SMTPProvider] Successfully dispatched email to {message.to_email}")
+            logger.info(f"[SMTPProvider] Successfully dispatched email to recipient")
             return True
         except Exception as exc:
-            logger.error(f"[SMTPProvider] Failed to dispatch email to {message.to_email}: {exc}")
-            raise
+            # Never log SMTP passwords or raw email tokens
+            logger.error("[SMTPProvider] Failed to dispatch email: %s", type(exc).__name__)
+            raise RuntimeError(f"SMTP delivery failed: {type(exc).__name__}")
 
 
 class ResendProvider(BaseEmailProvider):
@@ -83,8 +90,8 @@ class ResendProvider(BaseEmailProvider):
     def send(self, message: EmailMessage) -> bool:
         api_key = settings.EMAIL_API_KEY or settings.RESEND_API_KEY
         if not api_key:
-            err_msg = "Resend provider selected, but RESEND_API_KEY is not configured in backend/.env"
-            logger.error(f"[ResendProvider] {err_msg}")
+            err_msg = "Resend provider selected, but RESEND_API_KEY is not configured in environment variables."
+            logger.error("[ResendProvider] %s", err_msg)
             raise RuntimeError(err_msg)
 
         url = "https://api.resend.com/emails"
@@ -110,22 +117,23 @@ class ResendProvider(BaseEmailProvider):
                 resp_json = json.loads(resp_bytes.decode("utf-8")) if resp_bytes else {}
                 msg_id = resp_json.get("id")
                 if 200 <= resp.status < 300:
-                    logger.info(f"[ResendProvider] Dispatched email to {message.to_email} (Resend ID: {msg_id})")
+                    logger.info(f"[ResendProvider] Dispatched email (Resend ID: {msg_id})")
                     return True
-                logger.error(f"[ResendProvider] Unexpected status {resp.status} sending to {message.to_email}")
+                logger.error(f"[ResendProvider] Unexpected status {resp.status}")
                 raise RuntimeError(f"Resend API returned unexpected status {resp.status}")
         except urllib.error.HTTPError as exc:
             err_body = exc.read().decode("utf-8", errors="ignore")
-            logger.error(f"[ResendProvider] HTTP error {exc.code} for {message.to_email}: {err_body}")
+            logger.error(f"[ResendProvider] HTTP error {exc.code}")
             try:
                 err_json = json.loads(err_body)
-                resend_msg = err_json.get("message") or err_json.get("name") or err_body
+                resend_msg = err_json.get("message") or err_json.get("name") or "Dispatch rejected by provider"
             except Exception:
-                resend_msg = err_body
-            raise RuntimeError(f"Resend API error ({exc.code}): {resend_msg}")
+                resend_msg = "Email dispatch rejected by provider"
+            # Never leak tokens or credentials
+            raise RuntimeError(f"Email delivery error ({exc.code}): {resend_msg}")
         except Exception as exc:
-            logger.error(f"[ResendProvider] Failed to send to {message.to_email}: {exc}")
-            raise
+            logger.error("[ResendProvider] Failed to send email: %s", type(exc).__name__)
+            raise RuntimeError(f"Email delivery failed: {type(exc).__name__}")
 
 
 class SendGridProvider(BaseEmailProvider):
@@ -187,6 +195,8 @@ def get_email_provider() -> BaseEmailProvider:
             return test_email_provider
         return SMTPProvider()
     else:
+        if settings.ENVIRONMENT == "production":
+            raise RuntimeError(f"Unsupported EMAIL_PROVIDER '{provider_type}' in production.")
         return test_email_provider
 
 
