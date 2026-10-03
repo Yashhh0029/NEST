@@ -564,7 +564,11 @@ def search_local_resources(
         if req_loc:
             search_lat = req_loc.latitude
             search_lon = req_loc.longitude
-            locality_label = ", ".join(filter(None, [req_loc.area, req_loc.city]))
+            parts = []
+            for part in [req_loc.display_name, req_loc.area, req_loc.city]:
+                if part and part.strip() and part.strip() not in parts:
+                    parts.append(part.strip())
+            locality_label = ", ".join(parts) if parts else None
 
         if not locality_label:
             locality_label = ", ".join(filter(None, [req.area, req.city]))

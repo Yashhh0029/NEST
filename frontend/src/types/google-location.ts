@@ -33,6 +33,7 @@ export interface RequestLocationResponse {
   id: string;
   request_id: string;
   google_place_id?: string | null;
+  display_name?: string | null;
   formatted_address?: string | null;
   city?: string | null;
   area?: string | null;

@@ -107,7 +107,7 @@ export function PlaceAutocomplete({
             if (predictions.length > 0) setIsOpen(true);
           }}
           placeholder={placeholder}
-          className="w-full pl-10 pr-9 py-2.5 bg-white dark:bg-brand-dark-surface border border-gray-300 dark:border-brand-dark-border rounded-xl text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-primary/40 focus:border-brand-primary transition-colors disabled:opacity-50"
+          className="w-full pl-10 pr-9 py-2.5 bg-white dark:bg-brand-dark-surface border border-gray-300 dark:border-brand-dark-border rounded-xl text-sm font-semibold text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-primary/40 focus:border-brand-primary transition-colors disabled:opacity-50"
         />
 
         {query && (

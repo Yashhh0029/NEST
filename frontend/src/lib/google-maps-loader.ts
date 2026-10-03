@@ -1,3 +1,5 @@
+import { ENV } from "@/config/env";
+
 let loadPromise: Promise<boolean> | null = null;
 
 export function loadGoogleMaps(): Promise<boolean> {
@@ -22,8 +24,9 @@ export function loadGoogleMaps(): Promise<boolean> {
     return loadPromise;
   }
 
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-  if (!apiKey || typeof apiKey !== "string" || apiKey.trim() === "" || apiKey === "your_google_maps_api_key_here") {
+  const rawKey = ENV.GOOGLE_MAPS_API_KEY || (import.meta as any).env.VITE_GOOGLE_MAPS_API_KEY || "";
+  const apiKey = String(rawKey).replace(/^["']|["']$/g, "").trim();
+  if (!apiKey || apiKey === "your_google_maps_api_key_here") {
     // Graceful fallback when no key is configured
     return Promise.resolve(false);
   }

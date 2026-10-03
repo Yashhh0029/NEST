@@ -19,6 +19,7 @@ export default {
           light: "#FAFAF7",
           dark: "#0B1210",
           "dark-card": "#13211D",
+          "dark-surface": "#182C26",
           "dark-border": "#1F352E",
           "dark-muted": "#2A453C",
         },

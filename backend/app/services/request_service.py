@@ -58,6 +58,7 @@ def create_user_request(db: Session, user: User, req_in: RequestCreate) -> Reque
         latitude=req_in.target_latitude,
         longitude=req_in.target_longitude,
         formatted_address=req_in.target_formatted_address,
+        display_name=req_in.target_display_name,
     )
 
     return new_request

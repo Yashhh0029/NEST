@@ -159,6 +159,7 @@ export const ResourcesPage: React.FC = () => {
             res.longitude != null
           ) {
             const label =
+              res.display_name ||
               res.formatted_address ||
               [res.area, res.city].filter(Boolean).join(", ") ||
               "Request Target Location";
@@ -168,6 +169,15 @@ export const ResourcesPage: React.FC = () => {
               label,
             });
             setExploreLocationLabel(label);
+            if (res.display_name) {
+              setSelectedPlace({
+                id: res.google_place_id || "request_target",
+                name: res.display_name,
+                formattedAddress: res.formatted_address,
+                latitude: res.latitude,
+                longitude: res.longitude,
+              });
+            }
           }
         })
         .catch(() => {

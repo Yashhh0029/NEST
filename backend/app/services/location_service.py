@@ -22,6 +22,7 @@ def resolve_and_upsert_request_location(
     latitude: Optional[float] = None,
     longitude: Optional[float] = None,
     formatted_address: Optional[str] = None,
+    display_name: Optional[str] = None,
 ) -> Optional[RequestLocation]:
     """
     Resolve and persist the target location for a request.
@@ -29,7 +30,7 @@ def resolve_and_upsert_request_location(
     
     1. If google_place_id provided: fetches canonical details from Google.
     2. Else if coordinates provided: reverse geocodes coordinates.
-    3. Else if city_hint or area_hint provided: forward geocodes location query.
+    3. Else if display_name or city_hint or area_hint provided: forward geocodes location query.
     4. If Google is unavailable: stores hints without fabricating coordinates.
     """
     req = db.query(Request).filter(Request.id == request_id).first()
@@ -50,13 +51,14 @@ def resolve_and_upsert_request_location(
                 longitude=longitude,
                 city=city_hint,
                 area=area_hint,
-                formatted_address=formatted_address or ", ".join(filter(None, [area_hint, city_hint])),
+                display_name=display_name,
+                formatted_address=formatted_address or ", ".join(filter(None, [display_name, area_hint, city_hint])),
                 location_source="browser_geolocation",
                 location_precision="rooftop",
             )
 
-    if not resolved and (city_hint or area_hint):
-        query = ", ".join(filter(None, [area_hint, city_hint, "India"]))
+    if not resolved and (display_name or city_hint or area_hint):
+        query = ", ".join(filter(None, [display_name, area_hint, city_hint, "India"]))
         resolved = google_maps_service.geocode_address(query)
 
     # Find or create RequestLocation
@@ -74,8 +76,8 @@ def resolve_and_upsert_request_location(
         final_postal = resolved.postal_code
         final_lat = resolved.latitude
         final_lon = resolved.longitude
-        final_place_id = resolved.google_place_id
-        final_display_name = resolved.display_name or resolved.name
+        final_place_id = resolved.google_place_id or google_place_id
+        final_display_name = display_name or resolved.display_name or resolved.name
         final_formatted = resolved.formatted_address or formatted_address
         final_source = resolved.location_source
         final_precision = resolved.location_precision
@@ -89,10 +91,10 @@ def resolve_and_upsert_request_location(
         final_lat = latitude
         final_lon = longitude
         final_place_id = google_place_id
-        final_display_name = None
-        final_formatted = formatted_address or ", ".join(filter(None, [area_hint, city_hint]))
-        final_source = "nlp_unresolved"
-        final_precision = "approximate"
+        final_display_name = display_name
+        final_formatted = formatted_address or ", ".join(filter(None, [display_name, area_hint, city_hint]))
+        final_source = "nlp_unresolved" if (latitude is None) else "client_provided"
+        final_precision = "rooftop" if (latitude is not None) else "approximate"
 
     if existing_req_loc:
         existing_req_loc.google_place_id = final_place_id

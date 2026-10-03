@@ -4,11 +4,13 @@ import { Button } from "../ui/Button";
 import { UnderstandingChips } from "./UnderstandingChips";
 import { extractLocalPreview, type LocalPreviewItem } from "@/lib/nlp-preview";
 import { requestsService } from "@/services/requests";
-import { reverseGeocodeCoordinates } from "@/services/location";
+import { reverseGeocodeCoordinates, getPlaceDetails } from "@/services/location";
+import { PlaceAutocomplete } from "@/components/location/PlaceAutocomplete";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useToast } from "@/hooks/useToast";
 import type { ExtractedRequest } from "@/types/request";
-import { Send, Sparkles, Navigation, MapPin, Loader2 } from "lucide-react";
+import type { PlaceAutocompletePrediction } from "@/types/google-location";
+import { Send, Sparkles, Navigation, MapPin, Loader2, Target, X } from "lucide-react";
 
 interface CurrentGeoLocation {
   city: string;
@@ -16,6 +18,16 @@ interface CurrentGeoLocation {
   state?: string;
   latitude: number;
   longitude: number;
+}
+
+interface TargetPlaceDetails {
+  placeId?: string | null;
+  name?: string | null;
+  formattedAddress?: string | null;
+  area?: string | null;
+  city?: string | null;
+  lat?: number | null;
+  lng?: number | null;
 }
 
 export function RequestBox() {
@@ -109,7 +121,34 @@ export function RequestBox() {
     );
   };
 
-  const targetCity = backendExtracted?.location?.city || localPreviews.find((p) => p.type === "location")?.label;
+  // Explicit target destination place (e.g. society/building like Megapolis Mystic)
+  const [targetPlace, setTargetPlace] = useState<TargetPlaceDetails | null>(null);
+  const [showTargetInput, setShowTargetInput] = useState(false);
+
+  const handleSelectTargetPlace = async (prediction: PlaceAutocompletePrediction) => {
+    try {
+      const details = await getPlaceDetails(prediction.place_id);
+      setTargetPlace({
+        placeId: prediction.place_id,
+        name: details.display_name || details.name || prediction.main_text,
+        formattedAddress: details.formatted_address,
+        area: details.area || undefined,
+        city: details.city || undefined,
+        lat: details.latitude || undefined,
+        lng: details.longitude || undefined,
+      });
+      setShowTargetInput(false);
+    } catch {
+      setTargetPlace({
+        placeId: prediction.place_id,
+        name: prediction.main_text,
+        formattedAddress: prediction.description,
+      });
+      setShowTargetInput(false);
+    }
+  };
+
+  const targetCity = targetPlace?.city || backendExtracted?.location?.city || localPreviews.find((p) => p.type === "location")?.label;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -123,8 +162,13 @@ export function RequestBox() {
     try {
       const created = await requestsService.createRequest({
         text: cleanText,
-        target_city: backendExtracted?.location?.city || undefined,
-        target_area: backendExtracted?.location?.area || undefined,
+        target_city: targetPlace?.city || backendExtracted?.location?.city || undefined,
+        target_area: targetPlace?.area || backendExtracted?.location?.area || undefined,
+        target_display_name: targetPlace?.name || undefined,
+        target_google_place_id: targetPlace?.placeId || undefined,
+        target_latitude: targetPlace?.lat || undefined,
+        target_longitude: targetPlace?.lng || undefined,
+        target_formatted_address: targetPlace?.formattedAddress || undefined,
       });
       toastSuccess("Request created successfully! Finding community matches...");
       navigate(`/requests/${created.id}`);
@@ -151,8 +195,18 @@ export function RequestBox() {
             What do you need help with?
           </label>
 
-          {/* Browser Geolocation Trigger */}
-          <div className="flex items-center gap-2">
+          {/* Location Actions: GPS & Exact Destination */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setShowTargetInput(!showTargetInput)}
+              className="inline-flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-teal-400 py-1 px-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 transition-colors cursor-pointer"
+              title="Pinpoint an exact society, building, or landmark destination"
+            >
+              <Target className="w-3.5 h-3.5 text-brand-primary" />
+              <span>{targetPlace ? `Target: ${targetPlace.name}` : "Set Target Place"}</span>
+            </button>
+
             <button
               type="button"
               onClick={handleDetectLocation}
@@ -165,10 +219,51 @@ export function RequestBox() {
               ) : (
                 <Navigation className="w-3.5 h-3.5 text-brand-primary" />
               )}
-              <span>{currentGeo ? `Current: ${currentGeo.city}` : "Detect Current Location (GPS)"}</span>
+              <span>{currentGeo ? `Current: ${currentGeo.city}` : "Detect Current (GPS)"}</span>
             </button>
           </div>
         </div>
+
+        {/* Target Destination Search Dropdown */}
+        {showTargetInput && (
+          <div className="mb-3 p-2.5 rounded-xl bg-slate-50 dark:bg-brand-dark-surface border border-brand-primary/30">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1">
+                <Target className="w-3.5 h-3.5 text-brand-primary" />
+                Select exact target society, building, or PG:
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowTargetInput(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xs"
+              >
+                Cancel
+              </button>
+            </div>
+            <PlaceAutocomplete
+              placeholder="e.g. Megapolis Mystic, Hinjewadi Phase 3..."
+              onSelectPrediction={handleSelectTargetPlace}
+            />
+          </div>
+        )}
+
+        {/* Selected Target Place Badge */}
+        {targetPlace && (
+          <div className="mb-2 py-1.5 px-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/50 flex items-center justify-between gap-2 text-xs text-emerald-800 dark:text-emerald-200">
+            <div className="flex items-center gap-1.5 truncate">
+              <Target className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span>Exact Destination: <strong>{targetPlace.name}</strong> {targetPlace.area ? `(${targetPlace.area})` : ""}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setTargetPlace(null)}
+              className="text-emerald-600 hover:text-emerald-800 dark:hover:text-emerald-100 p-0.5 rounded cursor-pointer"
+              title="Remove target place"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
 
         <textarea
           id="natural-request-input"

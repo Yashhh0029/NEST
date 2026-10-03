@@ -163,13 +163,13 @@ export function LocationPicker({
 
       {/* Selected Location Summary Chip */}
       {hasLocation && (
-        <div className="p-3 rounded-xl bg-teal-50/70 dark:bg-brand-dark-muted/20 border border-teal-200/60 dark:border-brand-dark-border flex items-center justify-between gap-3 text-xs">
+        <div className="p-3.5 rounded-xl bg-teal-50/80 dark:bg-brand-dark-card border border-teal-200/80 dark:border-brand-dark-border flex items-center justify-between gap-3 text-xs shadow-sm">
           <div className="flex items-start gap-2.5 min-w-0">
             <div className="w-6 h-6 rounded-full bg-brand-primary/10 dark:bg-brand-primary/20 text-brand-primary flex items-center justify-center shrink-0 mt-0.5">
               <Check className="w-3.5 h-3.5" />
             </div>
             <div className="min-w-0">
-              <p className="font-semibold text-gray-900 dark:text-gray-100 truncate text-sm">
+              <p className="font-bold text-gray-900 dark:text-gray-100 truncate text-sm">
                 {primaryDisplay}
                 {secondaryDisplay && (
                   <span className="text-xs font-normal text-gray-600 dark:text-gray-400 ml-1.5">
@@ -177,16 +177,62 @@ export function LocationPicker({
                   </span>
                 )}
               </p>
-              <div className="flex items-center gap-2 mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
-                <span className="capitalize">Source: {value.location_source?.replace("_", " ") || "Manual"}</span>
+              <div className="flex items-center gap-2 mt-0.5 text-[11px] text-gray-600 dark:text-gray-300">
+                <span className="capitalize font-medium">Source: {value.location_source?.replace("_", " ") || "Manual"}</span>
                 {value.latitude != null && value.longitude != null && (
-                  <span className="font-mono text-[10px] text-teal-700 dark:text-teal-400">
-                    ({value.latitude.toFixed(2)}°, {value.longitude.toFixed(2)}°)
+                  <span className="font-mono text-[10px] text-teal-800 dark:text-teal-300 font-semibold">
+                    ({value.latitude.toFixed(4)}°, {value.longitude.toFixed(4)}°)
                   </span>
                 )}
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Exact Selected Google Place Identity */}
+      {(value.display_name || value.google_place_id) && (
+        <div className="p-3.5 rounded-xl bg-teal-50/50 dark:bg-brand-dark-card border border-teal-200 dark:border-teal-800/60 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-teal-800 dark:text-teal-300 flex items-center gap-1.5">
+              <Check className="w-3.5 h-3.5 text-brand-primary" />
+              Preserved Google Place Identity
+            </span>
+            {value.google_place_id && (
+              <span className="text-[10px] font-mono text-gray-500 dark:text-gray-400 truncate max-w-[150px]">
+                ID: {value.google_place_id.slice(0, 14)}...
+              </span>
+            )}
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-800 dark:text-gray-200 mb-1">
+              Selected Place / Building / Society Name
+            </label>
+            <input
+              type="text"
+              aria-label="Selected Place Name"
+              value={value.display_name || ""}
+              disabled={disabled}
+              onChange={(e) => onChange({ ...value, display_name: e.target.value })}
+              placeholder="e.g. Megapolis Mystic, Hinjewadi"
+              className="w-full px-3 py-2 bg-white dark:bg-brand-dark-surface border border-teal-300 dark:border-teal-700/60 rounded-lg text-sm font-semibold text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-brand-primary"
+            />
+          </div>
+          {value.formatted_address && (
+            <div>
+              <label className="block text-[11px] font-medium text-gray-600 dark:text-gray-400 mb-0.5">
+                Full Formatted Address
+              </label>
+              <input
+                type="text"
+                aria-label="Formatted Address"
+                value={value.formatted_address || ""}
+                disabled={disabled}
+                onChange={(e) => onChange({ ...value, formatted_address: e.target.value })}
+                className="w-full px-3 py-1.5 bg-white dark:bg-brand-dark-surface border border-gray-300 dark:border-brand-dark-border rounded-lg text-xs font-medium text-gray-800 dark:text-gray-200 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-brand-primary"
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -197,7 +243,7 @@ export function LocationPicker({
             targetLocation={{
               latitude: value.latitude,
               longitude: value.longitude,
-              label: [value.area, value.city].filter(Boolean).join(", "),
+              label: value.display_name || [value.area, value.city].filter(Boolean).join(", "),
             }}
             className="h-44 sm:h-52 w-full"
           />
@@ -207,7 +253,7 @@ export function LocationPicker({
       {/* Location Details Inputs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
         <div>
-          <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+          <label className="block text-xs font-bold text-gray-800 dark:text-gray-200 mb-1">
             City <span className="text-red-500">*</span>
           </label>
           <input
@@ -217,12 +263,12 @@ export function LocationPicker({
             disabled={disabled}
             onChange={(e) => onChange({ ...value, city: e.target.value, location_source: "manual" })}
             placeholder="e.g. Pune, Bengaluru, Nagpur"
-            className="w-full px-3 py-2 bg-white dark:bg-brand-dark-surface border border-gray-300 dark:border-brand-dark-border rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-brand-primary"
+            className="w-full px-3 py-2 bg-white dark:bg-brand-dark-card border border-gray-300 dark:border-brand-dark-border rounded-lg text-sm font-semibold text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-brand-primary"
           />
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+          <label className="block text-xs font-bold text-gray-800 dark:text-gray-200 mb-1">
             Area / Neighborhood
           </label>
           <input
@@ -232,7 +278,7 @@ export function LocationPicker({
             disabled={disabled}
             onChange={(e) => onChange({ ...value, area: e.target.value })}
             placeholder="e.g. Kothrud, Whitefield, Dharampeth"
-            className="w-full px-3 py-2 bg-white dark:bg-brand-dark-surface border border-gray-300 dark:border-brand-dark-border rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-brand-primary"
+            className="w-full px-3 py-2 bg-white dark:bg-brand-dark-card border border-gray-300 dark:border-brand-dark-border rounded-lg text-sm font-semibold text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-brand-primary"
           />
         </div>
       </div>
@@ -249,7 +295,7 @@ export function LocationPicker({
             disabled={disabled}
             onChange={(e) => onChange({ ...value, state: e.target.value })}
             placeholder="e.g. Maharashtra, Karnataka"
-            className="w-full px-3 py-2 bg-white dark:bg-brand-dark-surface border border-gray-300 dark:border-brand-dark-border rounded-lg text-xs text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-brand-primary"
+            className="w-full px-3 py-2 bg-white dark:bg-brand-dark-card border border-gray-300 dark:border-brand-dark-border rounded-lg text-xs font-medium text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-brand-primary"
           />
         </div>
 
@@ -262,7 +308,7 @@ export function LocationPicker({
             aria-label="Country"
             value={value.country || "India"}
             disabled
-            className="w-full px-3 py-2 bg-gray-100 dark:bg-brand-dark-muted/30 border border-gray-200 dark:border-brand-dark-border rounded-lg text-xs text-gray-600 dark:text-gray-400 cursor-not-allowed"
+            className="w-full px-3 py-2 bg-gray-100 dark:bg-brand-dark-muted/40 border border-gray-200 dark:border-brand-dark-border rounded-lg text-xs font-medium text-gray-700 dark:text-gray-300 cursor-not-allowed"
           />
         </div>
       </div>
@@ -279,7 +325,7 @@ export function LocationPicker({
           disabled={disabled}
           onChange={(e) => onChange({ ...value, private_unit: e.target.value })}
           placeholder="e.g. Flat 402, Building B (Optional, kept private)"
-          className="w-full px-3 py-2 bg-white dark:bg-brand-dark-surface border border-gray-300 dark:border-brand-dark-border rounded-lg text-xs text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-brand-primary"
+          className="w-full px-3 py-2 bg-white dark:bg-brand-dark-card border border-gray-300 dark:border-brand-dark-border rounded-lg text-xs font-medium text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-brand-primary"
         />
       </div>
     </div>

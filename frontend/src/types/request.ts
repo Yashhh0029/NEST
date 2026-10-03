@@ -47,6 +47,7 @@ export interface RequestCreatePayload {
   preferred_days_of_week?: number[] | null;
   target_city?: string | null;
   target_area?: string | null;
+  target_display_name?: string | null;
   target_google_place_id?: string | null;
   target_latitude?: number | null;
   target_longitude?: number | null;

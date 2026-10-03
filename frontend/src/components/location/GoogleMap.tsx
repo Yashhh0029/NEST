@@ -94,6 +94,7 @@ export function GoogleMap({
   const activeInfoWindowRef = useRef<any>(null);
   const lastSearchedCenterRef = useRef<{ lat: number; lng: number } | null>(null);
   const [mapLoaded, setMapLoaded] = useState<boolean | null>(null);
+  const [authError, setAuthError] = useState<boolean>(false);
   const [showSearchThisArea, setShowSearchThisArea] = useState<boolean>(false);
 
   const hasTargetCoords =
@@ -101,6 +102,19 @@ export function GoogleMap({
 
   useEffect(() => {
     let isMounted = true;
+
+    // Listen for Google Maps authorization failure
+    const prevAuth = (window as any).gm_authFailure;
+    (window as any).gm_authFailure = () => {
+      console.error(
+        "Google Maps JavaScript API Authentication Failed (gm_authFailure). " +
+        "Ensure your API key has Website Restrictions allowing https://nest-seven-silk.vercel.app/* and Maps JavaScript API is enabled."
+      );
+      if (isMounted) {
+        setAuthError(true);
+      }
+      if (typeof prevAuth === "function") prevAuth();
+    };
 
     loadGoogleMaps().then((loaded) => {
       if (isMounted) {
@@ -548,6 +562,43 @@ export function GoogleMap({
               ))}
             </div>
           )}
+        </div>
+      );
+    }
+
+    if (authError) {
+      return (
+        <div
+          className={`w-full rounded-2xl border border-red-200 dark:border-red-900/60 bg-red-50/50 dark:bg-brand-dark-surface p-6 sm:p-8 flex flex-col items-center justify-center text-center space-y-4 ${className}`}
+        >
+          <div className="w-12 h-12 rounded-2xl bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-400 flex items-center justify-center shadow-sm">
+            <MapPin className="w-6 h-6" />
+          </div>
+
+          <div className="space-y-1.5 max-w-md">
+            <h3 className="font-bold text-base sm:text-lg text-gray-900 dark:text-gray-100 font-heading">
+              Google Maps Authorization Required
+            </h3>
+            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+              Google Maps was blocked for this domain (<code className="font-mono font-semibold">https://nest-seven-silk.vercel.app</code>).
+            </p>
+          </div>
+
+          <div className="w-full max-w-md text-left bg-white dark:bg-brand-dark-card border border-gray-200 dark:border-brand-dark-border rounded-xl p-4 space-y-2.5 text-xs">
+            <div className="flex items-center gap-2 font-semibold text-gray-800 dark:text-gray-200">
+              <KeyRound className="w-4 h-4 text-brand-primary" />
+              <span>Google Cloud Console Action Required:</span>
+            </div>
+            <ol className="list-decimal list-inside space-y-1.5 text-gray-600 dark:text-gray-400 font-mono text-[11px]">
+              <li>Go to <strong>APIs & Services → Credentials</strong></li>
+              <li>Edit your <strong>Browser Key</strong> (used in <code className="bg-gray-100 dark:bg-brand-dark-muted px-1 py-0.5 rounded">VITE_GOOGLE_MAPS_API_KEY</code>)</li>
+              <li>Under <strong>Website restrictions</strong>, add:</li>
+              <li className="pl-4 font-bold text-teal-700 dark:text-teal-400">
+                https://nest-seven-silk.vercel.app/*
+              </li>
+              <li>Under <strong>API restrictions</strong>, ensure <strong>Maps JavaScript API</strong> and <strong>Places API (New)</strong> are enabled</li>
+            </ol>
+          </div>
         </div>
       );
     }

@@ -18,6 +18,7 @@ class RequestCreate(BaseModel):
     # Target location override / explicit map selection
     target_city: Optional[str] = Field(None, max_length=100, description="Explicit target city where help is needed")
     target_area: Optional[str] = Field(None, max_length=100, description="Explicit target area/neighborhood")
+    target_display_name: Optional[str] = Field(None, max_length=255, description="Exact place name or building e.g. Megapolis Mystic")
     target_google_place_id: Optional[str] = Field(None, max_length=255, description="Google Place ID of target destination")
     target_latitude: Optional[float] = Field(None, ge=-90.0, le=90.0, description="Target destination latitude")
     target_longitude: Optional[float] = Field(None, ge=-180.0, le=180.0, description="Target destination longitude")
