@@ -24,6 +24,12 @@ class FindMatchesRequest(BaseModel):
     limit: Optional[int] = Field(10, ge=1, le=50)
     weights: Optional[MatchWeightsInput] = None
     min_score: Optional[float] = Field(0.0, ge=0.0, le=1.0)
+    max_distance_km: Optional[float] = Field(
+        None,
+        ge=0.5,
+        le=500.0,
+        description="Configurable matching radius in km (default: 4.0 km when request has target place coordinates)",
+    )
 
 
 class MatchScores(BaseModel):

@@ -67,6 +67,7 @@ export interface FindMatchesPayload {
   limit?: number;
   weights?: MatchScoreWeights;
   min_score?: number;
+  max_distance_km?: number;
 }
 
 export interface TargetLocationSummary {

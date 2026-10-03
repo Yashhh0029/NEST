@@ -36,4 +36,5 @@ def find_matches(
         weights=payload.weights,
         limit=payload.limit or 10,
         min_score=payload.min_score or 0.0,
+        max_distance_km=payload.max_distance_km,
     )

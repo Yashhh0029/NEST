@@ -162,6 +162,8 @@ export function GoogleMap({
       const map = new google.maps.Map(containerRef.current, {
         center: defaultCenter,
         zoom: hasTargetCoords ? 13 : 5,
+        gestureHandling: "greedy",
+        zoomControl: true,
         mapTypeControl: false,
         streetViewControl: false,
         fullscreenControl: true,

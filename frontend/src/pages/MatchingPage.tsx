@@ -85,6 +85,7 @@ export function MatchingPage() {
           request_id: requestId,
           weights: weightsToUse,
           limit: 10,
+          max_distance_km: 4.0,
         });
         setData(res);
         if (res.matches.length > 0) {
