@@ -84,6 +84,88 @@ class SMTPProvider(BaseEmailProvider):
             raise RuntimeError(f"SMTP delivery failed: {type(exc).__name__}")
 
 
+def parse_sender_info(raw_sender: Optional[str], default_name: str = "NEST") -> tuple[str, str]:
+    """Extract (email, name) from sender string which may be 'Name <email>' or just 'email'."""
+    if not raw_sender:
+        return ("", default_name)
+    cleaned = raw_sender.strip().strip("'\"")
+    if "<" in cleaned and ">" in cleaned:
+        name_part = cleaned.split("<")[0].strip().strip("'\"")
+        email_part = cleaned.split("<")[1].split(">")[0].strip()
+        return (email_part, name_part or default_name)
+    return (cleaned, default_name)
+
+
+class BrevoProvider(BaseEmailProvider):
+    """Transactional email provider via Brevo (formerly Sendinblue) v3 REST API."""
+
+    def send(self, message: EmailMessage) -> bool:
+        api_key = settings.BREVO_API_KEY
+        if not api_key:
+            err_msg = "Brevo provider selected, but BREVO_API_KEY is not configured in environment variables."
+            logger.error("[BrevoProvider] %s", err_msg)
+            raise RuntimeError(err_msg)
+
+        sender_email, parsed_name = parse_sender_info(
+            message.from_email or settings.EMAIL_FROM,
+            default_name=settings.EMAIL_FROM_NAME or "NEST",
+        )
+        sender_name = settings.EMAIL_FROM_NAME or parsed_name or "NEST"
+
+        if not sender_email:
+            err_msg = "Brevo email dispatch failed: EMAIL_FROM is not configured."
+            logger.error("[BrevoProvider] %s", err_msg)
+            raise RuntimeError(err_msg)
+
+        url = "https://api.brevo.com/v3/smtp/email"
+        headers = {
+            "api-key": api_key,
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "NEST-Platform/1.0",
+        }
+        payload = {
+            "sender": {
+                "name": sender_name,
+                "email": sender_email,
+            },
+            "to": [
+                {"email": message.to_email}
+            ],
+            "subject": message.subject,
+            "htmlContent": message.html_body,
+        }
+        if message.text_body:
+            payload["textContent"] = message.text_body
+
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                resp_bytes = resp.read()
+                resp_json = json.loads(resp_bytes.decode("utf-8")) if resp_bytes else {}
+                msg_id = resp_json.get("messageId") or resp_json.get("id")
+                if 200 <= resp.status < 300:
+                    logger.info(f"[BrevoProvider] Dispatched email (Brevo MessageId: {msg_id})")
+                    return True
+                logger.error(f"[BrevoProvider] Unexpected status {resp.status}")
+                raise RuntimeError(f"Brevo API returned unexpected status {resp.status}")
+        except urllib.error.HTTPError as exc:
+            err_body = exc.read().decode("utf-8", errors="ignore")
+            logger.error(f"[BrevoProvider] HTTP error {exc.code}")
+            try:
+                err_json = json.loads(err_body)
+                brevo_msg = err_json.get("message") or err_json.get("code") or "Dispatch rejected by provider"
+            except Exception:
+                brevo_msg = "Email dispatch rejected by provider"
+            # Never leak tokens or credentials
+            raise RuntimeError(f"Email delivery error ({exc.code}): {brevo_msg}")
+        except Exception as exc:
+            logger.error("[BrevoProvider] Failed to send email: %s", type(exc).__name__)
+            raise RuntimeError(f"Email delivery failed: {type(exc).__name__}")
+
+
 class ResendProvider(BaseEmailProvider):
     """Transactional email provider via Resend HTTP REST API."""
 
@@ -185,6 +267,8 @@ def get_email_provider() -> BaseEmailProvider:
 
     if provider_type == "test":
         return test_email_provider
+    elif provider_type == "brevo":
+        return BrevoProvider()
     elif provider_type == "resend":
         return ResendProvider()
     elif provider_type == "sendgrid":

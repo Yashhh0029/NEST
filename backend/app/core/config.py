@@ -44,8 +44,10 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: str = ""
 
     # Transactional Email (Email Verification)
-    EMAIL_PROVIDER: str = "smtp"  # "smtp", "resend", "sendgrid", "test"
+    EMAIL_PROVIDER: str = "smtp"  # "smtp", "brevo", "resend", "sendgrid", "test"
     EMAIL_FROM: str = "NEST Verification <onboarding@resend.dev>"
+    EMAIL_FROM_NAME: str = "NEST"
+    BREVO_API_KEY: str = ""
     EMAIL_API_KEY: str = ""
     RESEND_API_KEY: str = ""
     SMTP_HOST: str = ""
@@ -77,7 +79,14 @@ class Settings(BaseSettings):
             return v.strip().strip("'\"")
         return v
 
-    @field_validator("EMAIL_FROM", "RESEND_API_KEY", "EMAIL_API_KEY", mode="before")
+    @field_validator(
+        "EMAIL_FROM",
+        "EMAIL_FROM_NAME",
+        "BREVO_API_KEY",
+        "RESEND_API_KEY",
+        "EMAIL_API_KEY",
+        mode="before",
+    )
     @classmethod
     def clean_email_settings(cls, v: str) -> str:
         if isinstance(v, str):
@@ -122,8 +131,10 @@ class Settings(BaseSettings):
         elif self.EMAIL_API_KEY and not self.RESEND_API_KEY:
             self.RESEND_API_KEY = self.EMAIL_API_KEY
 
-        # If API key is present and provider is still default smtp without host, auto-select resend
-        if self.EMAIL_API_KEY and self.EMAIL_PROVIDER == "smtp" and not self.SMTP_HOST:
+        # If API key is present and provider is still default smtp without host, auto-select provider
+        if self.BREVO_API_KEY and self.EMAIL_PROVIDER == "smtp" and not self.SMTP_HOST:
+            self.EMAIL_PROVIDER = "brevo"
+        elif self.EMAIL_API_KEY and self.EMAIL_PROVIDER == "smtp" and not self.SMTP_HOST:
             self.EMAIL_PROVIDER = "resend"
 
         # In sandbox/fallback, if using Resend and default placeholder domain, fallback to Resend sandbox sender

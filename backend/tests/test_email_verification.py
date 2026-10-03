@@ -421,3 +421,143 @@ def test_production_verification_url_uses_frontend_url(client: TestClient, monke
     assert expected_prefix in sent.text_body
     # Ensure no double slashes before path
     assert "https://nest-seven-silk.vercel.app//verify-email" not in sent.html_body
+
+
+def test_brevo_provider_selection_in_production(monkeypatch):
+    """Verify that EMAIL_PROVIDER=brevo successfully instantiates BrevoProvider in production without raising unsupported error."""
+    from app.services.email_service import BrevoProvider, get_email_provider
+
+    monkeypatch.setattr(settings, "ENVIRONMENT", "production")
+    monkeypatch.setattr(settings, "EMAIL_PROVIDER", "brevo")
+    monkeypatch.setattr(settings, "BREVO_API_KEY", "xkeysib-mock-production-key")
+
+    provider = get_email_provider()
+    assert isinstance(provider, BrevoProvider)
+
+
+def test_brevo_request_construction_and_successful_dispatch(monkeypatch):
+    """Verify that BrevoProvider builds proper JSON payload with sender name/email, headers, and dispatches to Brevo API."""
+    import io
+    import json
+    import urllib.request
+    from app.services.email_service import BrevoProvider, EmailMessage
+
+    monkeypatch.setattr(settings, "BREVO_API_KEY", "test-brevo-key-123")
+    monkeypatch.setattr(settings, "EMAIL_FROM", "verified@nest-app.org")
+    monkeypatch.setattr(settings, "EMAIL_FROM_NAME", "NEST")
+
+    captured_req = []
+
+    class MockResponse:
+        def __init__(self):
+            self.status = 201
+
+        def read(self):
+            return json.dumps({"messageId": "<test-msg-123@smtp-relay.brevo.com>"}).encode("utf-8")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            pass
+
+    def mock_urlopen(req, timeout=10):
+        captured_req.append(req)
+        return MockResponse()
+
+    monkeypatch.setattr(urllib.request, "urlopen", mock_urlopen)
+
+    provider = BrevoProvider()
+    msg = EmailMessage(
+        to_email="recipient@example.test",
+        subject="Verify your email address — NEST",
+        html_body="<p>Click here to verify</p>",
+        text_body="Click here to verify",
+    )
+    result = provider.send(msg)
+    assert result is True
+    assert len(captured_req) == 1
+
+    req = captured_req[0]
+    assert req.full_url == "https://api.brevo.com/v3/smtp/email"
+    assert req.headers["Api-key"] == "test-brevo-key-123"
+    assert req.headers["Content-type"] == "application/json"
+    assert req.headers["Accept"] == "application/json"
+
+    data = json.loads(req.data.decode("utf-8"))
+    assert data["sender"]["email"] == "verified@nest-app.org"
+    assert data["sender"]["name"] == "NEST"
+    assert data["to"] == [{"email": "recipient@example.test"}]
+    assert data["subject"] == "Verify your email address — NEST"
+    assert data["htmlContent"] == "<p>Click here to verify</p>"
+    assert data["textContent"] == "Click here to verify"
+
+
+def test_brevo_missing_api_key_raises_error(monkeypatch):
+    """Verify that BrevoProvider raises a descriptive error when BREVO_API_KEY is missing."""
+    from app.services.email_service import BrevoProvider, EmailMessage
+
+    monkeypatch.setattr(settings, "BREVO_API_KEY", "")
+    provider = BrevoProvider()
+    msg = EmailMessage(
+        to_email="test@example.test",
+        subject="Subject",
+        html_body="Body",
+        text_body="Body",
+    )
+    with pytest.raises(RuntimeError) as exc_info:
+        provider.send(msg)
+    assert "BREVO_API_KEY is not configured" in str(exc_info.value)
+
+
+def test_brevo_api_http_error_handling(monkeypatch):
+    """Verify that Brevo HTTP errors are handled gracefully without exposing API keys."""
+    import io
+    import urllib.error
+    import urllib.request
+    from app.services.email_service import BrevoProvider, EmailMessage
+
+    monkeypatch.setattr(settings, "BREVO_API_KEY", "secret-key-do-not-leak")
+    monkeypatch.setattr(settings, "EMAIL_FROM", "verified@nest-app.org")
+
+    def mock_urlopen_error(req, timeout=10):
+        err_stream = io.BytesIO(b'{"code": "unauthorized", "message": "Key not found"}')
+        raise urllib.error.HTTPError(
+            url="https://api.brevo.com/v3/smtp/email",
+            code=401,
+            msg="Unauthorized",
+            hdrs={},
+            fp=err_stream,
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", mock_urlopen_error)
+
+    provider = BrevoProvider()
+    msg = EmailMessage(
+        to_email="test@example.test",
+        subject="Subject",
+        html_body="Body",
+        text_body="Body",
+    )
+    with pytest.raises(RuntimeError) as exc_info:
+        provider.send(msg)
+
+    err_str = str(exc_info.value)
+    assert "Email delivery error (401)" in err_str
+    assert "Key not found" in err_str
+    # Crucial security check: Secret key must NEVER appear in exception
+    assert "secret-key-do-not-leak" not in err_str
+
+
+def test_brevo_sender_parsing_with_name_and_angle_brackets():
+    """Verify parse_sender_info handles formatted sender 'Name <email>' and plain 'email'."""
+    from app.services.email_service import parse_sender_info
+
+    email, name = parse_sender_info("NEST Team <noreply@nestapp.org>", default_name="Default")
+    assert email == "noreply@nestapp.org"
+    assert name == "NEST Team"
+
+    email2, name2 = parse_sender_info("just_email@nestapp.org", default_name="NEST")
+    assert email2 == "just_email@nestapp.org"
+    assert name2 == "NEST"
+

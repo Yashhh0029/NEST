@@ -33,8 +33,12 @@ services:
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: EMAIL_PROVIDER
-        value: resend
+        sync: false
+      - key: BREVO_API_KEY
+        sync: false
       - key: RESEND_API_KEY
         sync: false
       - key: EMAIL_FROM
+        sync: false
+      - key: EMAIL_FROM_NAME
         sync: false
