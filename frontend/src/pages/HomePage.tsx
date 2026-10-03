@@ -38,7 +38,7 @@ export function HomePage() {
   }, []);
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto py-2 sm:py-6 px-4">
+    <div className="space-y-8 max-w-5xl mx-auto py-2 sm:py-6 px-0 sm:px-4">
       {/* Welcome Banner */}
       <Reveal direction="down">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

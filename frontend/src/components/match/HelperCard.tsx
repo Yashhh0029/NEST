@@ -171,7 +171,7 @@ export function HelperCard({
       )}
 
       {/* Connection Action */}
-      <div className="pt-2 flex items-center justify-between">
+      <div className="pt-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
         <span className="text-[11px] text-gray-400">
           {connectionStatus === "ACCEPTED"
             ? "Connection active"
@@ -202,6 +202,7 @@ export function HelperCard({
             onClick={handleConnectClick}
             disabled={isConnecting || helper.is_available_for_help === false}
             isLoading={isConnecting}
+            className="w-full sm:w-auto"
             leftIcon={
               isConnecting ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />

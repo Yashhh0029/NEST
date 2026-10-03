@@ -179,7 +179,7 @@ export const SessionCard: React.FC<Props> = ({
               <span className="text-purple-700 font-bold">Both Parties Confirmed Complete</span>
             )}
           </div>
-          <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
             <div
               className={`p-2 rounded flex items-center gap-1.5 ${
                 isRequesterDone ? "bg-green-50 text-green-700 font-medium" : "bg-gray-50 text-gray-500"

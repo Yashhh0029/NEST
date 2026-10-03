@@ -106,8 +106,8 @@ export const CommunityPage: React.FC = () => {
 
       {/* Search & Location Filters */}
       <div className="bg-white dark:bg-brand-dark-card border border-gray-200 dark:border-brand-dark-border rounded-2xl p-4 sm:p-5 shadow-sm space-y-4">
-        <form onSubmit={handleSearchSubmit} className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
+        <form onSubmit={handleSearchSubmit} className="flex flex-col lg:flex-row gap-2.5 sm:gap-3">
+          <div className="relative flex-1 min-w-0">
             <Search className="absolute left-3.5 top-3 w-4 h-4 text-gray-400" />
             <input
               type="text"
@@ -127,8 +127,8 @@ export const CommunityPage: React.FC = () => {
             )}
           </div>
 
-          <div className="flex gap-2">
-            <div className="relative w-36">
+          <div className="grid grid-cols-2 sm:flex sm:items-center gap-2">
+            <div className="relative w-full sm:w-32 md:w-36">
               <MapPin className="absolute left-2.5 top-3 w-3.5 h-3.5 text-gray-400" />
               <input
                 type="text"
@@ -138,7 +138,7 @@ export const CommunityPage: React.FC = () => {
                 className="w-full pl-8 pr-2 py-2.5 rounded-xl border border-gray-200 dark:border-brand-dark-border bg-gray-50 dark:bg-brand-dark text-xs text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-primary"
               />
             </div>
-            <div className="relative w-36">
+            <div className="relative w-full sm:w-32 md:w-36">
               <input
                 type="text"
                 value={areaFilter}
@@ -147,7 +147,7 @@ export const CommunityPage: React.FC = () => {
                 className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-brand-dark-border bg-gray-50 dark:bg-brand-dark text-xs text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-primary"
               />
             </div>
-            <Button type="submit" size="sm" className="px-4 text-xs">
+            <Button type="submit" size="sm" className="col-span-2 sm:col-span-1 px-4 text-xs h-[38px] justify-center">
               Search
             </Button>
           </div>

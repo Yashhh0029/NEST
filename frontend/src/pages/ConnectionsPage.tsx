@@ -156,10 +156,10 @@ export function ConnectionsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-200 dark:border-brand-dark-border space-x-1">
+      <div className="flex border-b border-gray-200 dark:border-brand-dark-border space-x-1 overflow-x-auto no-scrollbar">
         <button
           onClick={() => setActiveTab("incoming")}
-          className={`px-4 py-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 min-h-[44px] ${
+          className={`px-4 py-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 min-h-[44px] whitespace-nowrap shrink-0 ${
             activeTab === "incoming"
               ? "border-brand-primary text-brand-primary dark:text-teal-400"
               : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 hover:border-gray-300"
@@ -176,7 +176,7 @@ export function ConnectionsPage() {
 
         <button
           onClick={() => setActiveTab("sent")}
-          className={`px-4 py-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 min-h-[44px] ${
+          className={`px-4 py-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 min-h-[44px] whitespace-nowrap shrink-0 ${
             activeTab === "sent"
               ? "border-brand-primary text-brand-primary dark:text-teal-400"
               : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 hover:border-gray-300"
@@ -193,7 +193,7 @@ export function ConnectionsPage() {
 
         <button
           onClick={() => setActiveTab("active")}
-          className={`px-4 py-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 min-h-[44px] ${
+          className={`px-4 py-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 min-h-[44px] whitespace-nowrap shrink-0 ${
             activeTab === "active"
               ? "border-brand-primary text-brand-primary dark:text-teal-400"
               : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 hover:border-gray-300"

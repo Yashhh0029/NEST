@@ -502,7 +502,7 @@ export const ResourcesPage: React.FC = () => {
             <MapPin className="w-5 h-5" />
           </div>
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
               <span className="text-[11px] font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
                 {requestIdParam
                   ? "Request Destination"
@@ -536,10 +536,10 @@ export const ResourcesPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+        <div className="flex items-center gap-2 self-stretch sm:self-center justify-end shrink-0">
           {isChangingLocation ? (
-            <div className="flex items-center gap-2 w-full sm:w-80">
-              <div className="flex-1">
+            <div className="flex items-center gap-2 w-full sm:w-80 min-w-0">
+              <div className="flex-1 min-w-0">
                 <PlaceAutocomplete
                   onSelectPrediction={handleSelectExplorePrediction}
                   placeholder="Search any society or locality (e.g. Megapolis Mystic, Kakkanad)..."
@@ -734,7 +734,7 @@ export const ResourcesPage: React.FC = () => {
               onSelectPlace={(place) => handleSelectPlaceOnMap(place.id)}
               onSearchThisArea={handleSearchThisArea}
               isSearchingArea={isLoading}
-              className="h-[440px] sm:h-[540px]"
+              className="h-[340px] sm:h-[460px] md:h-[540px]"
             />
           </Card>
 

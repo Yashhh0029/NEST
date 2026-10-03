@@ -91,8 +91,8 @@ export const ReportModal: React.FC<ReportModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white dark:bg-brand-dark-card border border-gray-200 dark:border-brand-dark-border rounded-2xl p-6 max-w-lg w-full shadow-2xl space-y-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+      <div className="bg-white dark:bg-brand-dark-card border border-gray-200 dark:border-brand-dark-border rounded-2xl p-4 sm:p-6 max-w-lg w-full max-h-[calc(100dvh-2rem)] overflow-y-auto shadow-2xl space-y-4">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 flex items-center justify-center shrink-0">
             <Flag className="w-5 h-5" />
@@ -171,13 +171,14 @@ export const ReportModal: React.FC<ReportModalProps> = ({
               </div>
             )}
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100 dark:border-brand-dark-border">
+            <div className="flex flex-col-reverse sm:flex-row items-center justify-end gap-2 pt-2 border-t border-gray-100 dark:border-brand-dark-border">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={onClose}
                 disabled={isSubmitting}
+                className="w-full sm:w-auto"
               >
                 Cancel
               </Button>
@@ -186,9 +187,10 @@ export const ReportModal: React.FC<ReportModalProps> = ({
                 variant="primary"
                 size="sm"
                 disabled={isSubmitting}
+                className="w-full sm:w-auto"
               >
                 {isSubmitting ? (
-                  <span className="flex items-center gap-1.5">
+                  <span className="flex items-center justify-center gap-1.5">
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                     Submitting...
                   </span>

@@ -177,7 +177,7 @@ export function LocationPicker({
                   </span>
                 )}
               </p>
-              <div className="flex items-center gap-2 mt-0.5 text-[11px] text-gray-600 dark:text-gray-300">
+              <div className="flex items-center gap-2 mt-0.5 text-[11px] text-gray-600 dark:text-gray-300 flex-wrap">
                 <span className="capitalize font-medium">Source: {value.location_source?.replace("_", " ") || "Manual"}</span>
                 {value.latitude != null && value.longitude != null && (
                   <span className="font-mono text-[10px] text-teal-800 dark:text-teal-300 font-semibold">
@@ -193,9 +193,9 @@ export function LocationPicker({
       {/* Exact Selected Google Place Identity */}
       {(value.display_name || value.google_place_id) && (
         <div className="p-3.5 rounded-xl bg-teal-50/50 dark:bg-brand-dark-card border border-teal-200 dark:border-teal-800/60 space-y-2.5">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-1 flex-wrap">
             <span className="text-xs font-bold text-teal-800 dark:text-teal-300 flex items-center gap-1.5">
-              <Check className="w-3.5 h-3.5 text-brand-primary" />
+              <Check className="w-3.5 h-3.5 text-brand-primary shrink-0" />
               Preserved Google Place Identity
             </span>
             {value.google_place_id && (

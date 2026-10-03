@@ -341,78 +341,81 @@ export function ChatPage() {
   const partner = conversation.partner;
 
   return (
-    <div className="max-w-3xl mx-auto flex flex-col h-[calc(100vh-8rem)] min-h-[500px] bg-white dark:bg-brand-dark-card rounded-2xl border border-gray-200 dark:border-brand-dark-border shadow-soft overflow-hidden">
+    <div className="max-w-3xl mx-auto flex flex-col h-[calc(100dvh-9rem)] sm:h-[calc(100vh-8rem)] min-h-[380px] sm:min-h-[500px] bg-white dark:bg-brand-dark-card rounded-2xl border border-gray-200 dark:border-brand-dark-border shadow-soft overflow-hidden">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-gray-200 dark:border-brand-dark-border bg-gray-50/70 dark:bg-brand-dark-muted/20 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+      <div className="px-3 sm:px-4 py-2.5 sm:py-3 border-b border-gray-200 dark:border-brand-dark-border bg-gray-50/70 dark:bg-brand-dark-muted/20 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <Link
             to="/connections"
-            className="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-brand-dark-muted transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+            className="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-brand-dark-muted transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center shrink-0"
             title="Back to Connections"
           >
             <ArrowLeft className="w-5 h-5" />
           </Link>
 
-          <div className="w-10 h-10 rounded-xl bg-teal-100 dark:bg-brand-dark-muted text-brand-primary dark:text-teal-300 flex items-center justify-center font-bold font-heading text-base">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-teal-100 dark:bg-brand-dark-muted text-brand-primary dark:text-teal-300 flex items-center justify-center font-bold font-heading text-sm sm:text-base shrink-0">
             {partner?.name?.charAt(0) || "U"}
           </div>
 
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="font-bold text-sm sm:text-base text-gray-900 dark:text-gray-100 font-heading">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <h2 className="font-bold text-xs sm:text-base text-gray-900 dark:text-gray-100 font-heading truncate max-w-[110px] sm:max-w-[200px]">
                 {partner?.name || "Community Member"}
               </h2>
-              <Badge variant="primary" size="sm">
-                Connected
-              </Badge>
+              <span className="hidden sm:inline-flex">
+                <Badge variant="primary" size="sm">
+                  Connected
+                </Badge>
+              </span>
             </div>
-            <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-              {partner?.headline && <span>{partner.headline}</span>}
-              {(partner?.city || partner?.area) && (
-                <span className="flex items-center gap-0.5">
-                  <MapPin className="w-3 h-3 text-brand-primary" />
-                  {[partner.area, partner.city].filter(Boolean).join(", ")}
+            <div className="flex items-center gap-1 text-[11px] sm:text-xs text-gray-500 dark:text-gray-400 truncate">
+              {(partner?.city || partner?.area) ? (
+                <span className="flex items-center gap-0.5 truncate">
+                  <MapPin className="w-3 h-3 text-brand-primary shrink-0" />
+                  <span className="truncate">{[partner.area, partner.city].filter(Boolean).join(", ")}</span>
                 </span>
-              )}
+              ) : partner?.headline ? (
+                <span className="truncate">{partner.headline}</span>
+              ) : null}
             </div>
           </div>
         </div>
 
         {/* Header Right Actions */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           {/* Multilingual Translation Preference */}
-          <div className="flex items-center gap-1.5 bg-white dark:bg-brand-dark-card border border-gray-200 dark:border-brand-dark-border px-2.5 py-1 rounded-xl shadow-2xs text-xs">
+          <div className="flex items-center gap-1 bg-white dark:bg-brand-dark-card border border-gray-200 dark:border-brand-dark-border px-1.5 sm:px-2.5 py-1 rounded-xl shadow-2xs text-xs">
             <Languages className="w-3.5 h-3.5 text-brand-primary shrink-0" />
-            <span className="hidden md:inline text-[11px] text-gray-500 dark:text-gray-400 font-medium">Translate to:</span>
+            <span className="hidden md:inline text-[11px] text-gray-500 dark:text-gray-400 font-medium">Translate:</span>
             <select
               value={targetLang}
               onChange={(e) => setTargetLang(e.target.value)}
-              className="bg-transparent text-xs font-semibold text-gray-800 dark:text-gray-200 focus:outline-none cursor-pointer"
+              className="bg-transparent text-[11px] sm:text-xs font-semibold text-gray-800 dark:text-gray-200 focus:outline-none cursor-pointer max-w-[58px] sm:max-w-none"
               title="Select target language for message translation"
             >
-              <option value="en">English</option>
-              <option value="hi">Hindi (हिंदी)</option>
-              <option value="ml">Malayalam (മലയാളം)</option>
-              <option value="mr">Marathi (मराठी)</option>
-              <option value="ta">Tamil (தமிழ்)</option>
-              <option value="te">Telugu (తెలుగు)</option>
-              <option value="kn">Kannada (ಕನ್ನಡ)</option>
-              <option value="bn">Bengali (বাংলা)</option>
-              <option value="gu">Gujarati (ગુજરાતી)</option>
-              <option value="pa">Punjabi (ਪੰਜਾਬੀ)</option>
-              <option value="ur">Urdu (اردو)</option>
+              <option value="en">EN</option>
+              <option value="hi">HI (हिंदी)</option>
+              <option value="ml">ML (മലയാളം)</option>
+              <option value="mr">MR (मराठी)</option>
+              <option value="ta">TA (தமிழ்)</option>
+              <option value="te">TE (తెలుగు)</option>
+              <option value="kn">KN (ಕನ್ನಡ)</option>
+              <option value="bn">BN (বাংলা)</option>
+              <option value="gu">GU (ગુજરાતી)</option>
+              <option value="pa">PA (ਪੰਜਾਬੀ)</option>
+              <option value="ur">UR (اردو)</option>
             </select>
           </div>
 
           {partner && (
-            <div className="flex items-center gap-1 sm:gap-2 mr-1">
+            <div className="flex items-center gap-0.5 sm:gap-1">
               <button
                 type="button"
                 onClick={() => {
                   setReportingMessageId(undefined);
                   setShowReportModal(true);
                 }}
-                className="px-2 py-1 rounded-lg text-gray-500 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-gray-100 dark:hover:bg-brand-dark-muted transition-colors flex items-center gap-1 text-xs"
+                className="p-1.5 sm:px-2 sm:py-1 rounded-lg text-gray-500 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-gray-100 dark:hover:bg-brand-dark-muted transition-colors flex items-center gap-1 text-xs min-h-[36px] min-w-[36px] sm:min-h-0 sm:min-w-0 justify-center"
                 title="Report user"
               >
                 <Flag className="w-3.5 h-3.5" />
@@ -421,7 +424,7 @@ export function ChatPage() {
               <button
                 type="button"
                 onClick={() => setShowBlockModal(true)}
-                className="px-2 py-1 rounded-lg text-gray-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-gray-100 dark:hover:bg-brand-dark-muted transition-colors flex items-center gap-1 text-xs"
+                className="p-1.5 sm:px-2 sm:py-1 rounded-lg text-gray-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-gray-100 dark:hover:bg-brand-dark-muted transition-colors flex items-center gap-1 text-xs min-h-[36px] min-w-[36px] sm:min-h-0 sm:min-w-0 justify-center"
                 title="Block user"
               >
                 <ShieldAlert className="w-3.5 h-3.5" />
@@ -432,18 +435,18 @@ export function ChatPage() {
 
           {/* Live status badge */}
           <div
-            className="flex items-center gap-1.5 text-xs text-gray-400 border-l border-gray-200 dark:border-brand-dark-border pl-2.5"
+            className="flex items-center gap-1 text-xs text-gray-400 border-l border-gray-200 dark:border-brand-dark-border pl-1.5 sm:pl-2.5"
             title={isConnected ? "Real-time socket active" : "REST polling mode"}
           >
             {isConnected ? (
               <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium text-[11px]">
                 <Wifi className="w-3.5 h-3.5" />
-                Live
+                <span className="hidden sm:inline">Live</span>
               </span>
             ) : (
               <span className="flex items-center gap-1 text-gray-400 text-[11px]">
                 <WifiOff className="w-3.5 h-3.5" />
-                REST
+                <span className="hidden sm:inline">REST</span>
               </span>
             )}
           </div>

@@ -75,8 +75,8 @@ export const AskQuestionModal: React.FC<AskQuestionModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white dark:bg-brand-dark-card border border-gray-200 dark:border-brand-dark-border rounded-2xl p-6 max-w-xl w-full shadow-2xl space-y-5">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+      <div className="bg-white dark:bg-brand-dark-card border border-gray-200 dark:border-brand-dark-border rounded-2xl p-4 sm:p-6 max-w-xl w-full max-h-[calc(100dvh-2rem)] overflow-y-auto shadow-2xl space-y-4 sm:space-y-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-teal-100 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 flex items-center justify-center shrink-0">
@@ -185,20 +185,20 @@ export const AskQuestionModal: React.FC<AskQuestionModalProps> = ({
             <p className="text-[11px] text-gray-400 mt-1">Minimum 20 characters</p>
           </div>
 
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-100 dark:border-brand-dark-border">
+          <div className="flex flex-col-reverse sm:flex-row items-center justify-end gap-2.5 pt-3 border-t border-gray-100 dark:border-brand-dark-border">
             <Button
               type="button"
               variant="outline"
               onClick={onClose}
               disabled={isSubmitting}
-              className="text-xs"
+              className="w-full sm:w-auto text-xs"
             >
               Cancel
             </Button>
             <Button
               type="submit"
               disabled={isSubmitting || title.trim().length < 10 || body.trim().length < 20}
-              className="text-xs flex items-center gap-1.5"
+              className="w-full sm:w-auto text-xs flex items-center justify-center gap-1.5"
             >
               {isSubmitting ? (
                 <>

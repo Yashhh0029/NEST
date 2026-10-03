@@ -51,7 +51,7 @@ export function Modal({
     >
       <div
         className={cn(
-          "w-full bg-white dark:bg-brand-dark-card border border-gray-200 dark:border-brand-dark-border rounded-card p-6 shadow-xl relative animate-in fade-in zoom-in-95 duration-150",
+          "w-full max-h-[calc(100dvh-2rem)] overflow-y-auto bg-white dark:bg-brand-dark-card border border-gray-200 dark:border-brand-dark-border rounded-2xl p-4 sm:p-6 shadow-xl relative animate-in fade-in zoom-in-95 duration-150 overscroll-contain",
           maxWidths[maxWidth]
         )}
         onClick={(e) => e.stopPropagation()}

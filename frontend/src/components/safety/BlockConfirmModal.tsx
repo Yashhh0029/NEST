@@ -55,8 +55,8 @@ export const BlockConfirmModal: React.FC<BlockConfirmModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white dark:bg-brand-dark-card border border-gray-200 dark:border-brand-dark-border rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+      <div className="bg-white dark:bg-brand-dark-card border border-gray-200 dark:border-brand-dark-border rounded-2xl p-4 sm:p-6 max-w-md w-full max-h-[calc(100dvh-2rem)] overflow-y-auto shadow-2xl space-y-4">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0">
             <AlertTriangle className="w-5 h-5" />
@@ -81,12 +81,13 @@ export const BlockConfirmModal: React.FC<BlockConfirmModalProps> = ({
           </p>
         )}
 
-        <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-100 dark:border-brand-dark-border">
+        <div className="flex flex-col-reverse sm:flex-row items-center justify-end gap-2.5 pt-3 border-t border-gray-100 dark:border-brand-dark-border">
           <Button
             variant="outline"
             size="sm"
             onClick={onClose}
             disabled={isSubmitting}
+            className="w-full sm:w-auto"
           >
             Cancel
           </Button>
@@ -95,10 +96,10 @@ export const BlockConfirmModal: React.FC<BlockConfirmModalProps> = ({
             size="sm"
             onClick={handleConfirm}
             disabled={isSubmitting}
-            className="bg-red-600 hover:bg-red-700 text-white border-transparent"
+            className="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white border-transparent"
           >
             {isSubmitting ? (
-              <span className="flex items-center gap-1.5">
+              <span className="flex items-center justify-center gap-1.5">
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 Blocking...
               </span>
