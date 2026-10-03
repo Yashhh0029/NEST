@@ -80,19 +80,20 @@ def clean_test_data():
     except Exception:
         pass
 
-    yield
-
-    _cleanup()
-    test_email_provider.clear()
-    # Reactivate real non-test users after test
-    if real_user_ids:
-        try:
-            db_ctx = SessionLocal()
-            db_ctx.query(User).filter(User.id.in_(real_user_ids)).update({"is_active": True}, synchronize_session=False)
-            db_ctx.commit()
-            db_ctx.close()
-        except Exception:
-            pass
+    try:
+        yield
+    finally:
+        _cleanup()
+        test_email_provider.clear()
+        # Reactivate real non-test users after test
+        if real_user_ids:
+            try:
+                db_ctx = SessionLocal()
+                db_ctx.query(User).filter(User.id.in_(real_user_ids)).update({"is_active": True}, synchronize_session=False)
+                db_ctx.commit()
+                db_ctx.close()
+            except Exception:
+                pass
 
 
 def create_authenticated_user(client: TestClient, name: str, email: str, role: str = "newcomer"):
