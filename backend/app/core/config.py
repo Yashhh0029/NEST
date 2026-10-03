@@ -45,7 +45,7 @@ class Settings(BaseSettings):
 
     # Transactional Email (Email Verification)
     EMAIL_PROVIDER: str = "smtp"  # "smtp", "resend", "sendgrid", "test"
-    EMAIL_FROM: str = "NEST Community <noreply@nest-community.org>"
+    EMAIL_FROM: str = "NEST Verification <onboarding@resend.dev>"
     EMAIL_API_KEY: str = ""
     RESEND_API_KEY: str = ""
     SMTP_HOST: str = ""
@@ -119,8 +119,8 @@ class Settings(BaseSettings):
         if self.EMAIL_API_KEY and self.EMAIL_PROVIDER == "smtp" and not self.SMTP_HOST:
             self.EMAIL_PROVIDER = "resend"
 
-        # If resend is active and EMAIL_FROM has unverified domain, default to Resend sandbox sender
-        if self.EMAIL_PROVIDER == "resend" and "noreply@nest-community.org" in self.EMAIL_FROM:
+        # In sandbox/fallback, if using Resend and default placeholder domain, fallback to Resend sandbox sender
+        if self.EMAIL_PROVIDER == "resend" and (not self.EMAIL_FROM or "noreply@nest-community.org" in self.EMAIL_FROM):
             self.EMAIL_FROM = "NEST Verification <onboarding@resend.dev>"
 
 
