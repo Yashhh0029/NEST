@@ -22,6 +22,9 @@ if config.config_file_name is not None:
 db_url = settings.DATABASE_URL
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
+# Neon connection pooler compatibility: use direct connection for DDL migrations if pooler URL is provided
+if "-pooler." in db_url:
+    db_url = db_url.replace("-pooler.", ".")
 config.set_main_option("sqlalchemy.url", db_url)
 
 # Add our model's MetaData object for 'autogenerate' support
@@ -58,6 +61,8 @@ def run_migrations_online() -> None:
 
         with context.begin_transaction():
             context.run_migrations()
+
+    connectable.dispose()
 
 
 if context.is_offline_mode():

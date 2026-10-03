@@ -20,8 +20,13 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema."""
-    # Ensure vector extension is present
-    op.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+    # Ensure vector extension is present without blocking catalog locks
+    conn = op.get_bind()
+    has_vector = conn.execute(
+        sa.text("SELECT 1 FROM pg_extension WHERE extname = 'vector'")
+    ).scalar()
+    if not has_vector:
+        op.execute("CREATE EXTENSION IF NOT EXISTS vector;")
 
     # Create embeddings table
     op.create_table('embeddings',
