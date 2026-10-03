@@ -16,6 +16,8 @@ declare global {
   }
 }
 
+import { ENV } from "@/config/env";
+
 export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
   text = "continue_with",
   className = "",
@@ -28,7 +30,7 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
   const [loading, setLoading] = useState(false);
   const [isConfigured, setIsConfigured] = useState(false);
 
-  const clientId = (import.meta as any).env.VITE_GOOGLE_CLIENT_ID || "";
+  const clientId = ENV.GOOGLE_CLIENT_ID;
 
   useEffect(() => {
     if (!clientId) {
@@ -42,6 +44,18 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
       if (window.google?.accounts?.id && containerRef.current) {
         window.google.accounts.id.initialize({
           client_id: clientId,
+          auto_select: false,
+          itp_support: true,
+          error_callback: (err: any) => {
+            console.warn("Google Identity Services error:", err);
+            if (err?.type === "popup_closed" || err?.type === "popup_failed_to_open") {
+              toast(
+                "Sign-in popup was blocked or closed. If using Brave or an adblocker, please disable Shields or allow popups for this site.",
+                "warning",
+                "Popup Blocked"
+              );
+            }
+          },
           callback: async (response: any) => {
             if (response.credential) {
               setLoading(true);
@@ -51,7 +65,12 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
                 onSuccess?.();
                 navigate("/home");
               } catch (err: any) {
-                error(err.response?.data?.detail || "Google Sign-In failed.", "Authentication Error");
+                const detail =
+                  err.response?.data?.detail ||
+                  (err.message === "Network Error"
+                    ? "Cannot reach backend server. Please verify network."
+                    : "Google Sign-In verification failed.");
+                error(detail, "Authentication Error");
               } finally {
                 setLoading(false);
               }
@@ -59,26 +78,34 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
           },
         });
 
-        window.google.accounts.id.renderButton(containerRef.current, {
-          theme: "outline",
-          size: "large",
-          type: "standard",
-          shape: "pill",
-          text,
-          width: 280,
-        });
+        if (containerRef.current) {
+          containerRef.current.innerHTML = "";
+          window.google.accounts.id.renderButton(containerRef.current, {
+            theme: "outline",
+            size: "large",
+            type: "standard",
+            shape: "pill",
+            text,
+            width: 280,
+          });
+        }
       }
     };
 
     if (window.google?.accounts?.id) {
       initializeGoogle();
     } else {
-      const script = document.createElement("script");
-      script.src = "https://accounts.google.com/gsi/client";
-      script.async = true;
-      script.defer = true;
-      script.onload = initializeGoogle;
-      document.body.appendChild(script);
+      const existingScript = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
+      if (existingScript) {
+        existingScript.addEventListener("load", initializeGoogle);
+      } else {
+        const script = document.createElement("script");
+        script.src = "https://accounts.google.com/gsi/client";
+        script.async = true;
+        script.defer = true;
+        script.onload = initializeGoogle;
+        document.body.appendChild(script);
+      }
     }
   }, [clientId, googleLogin, navigate, onSuccess, text, toast]);
 

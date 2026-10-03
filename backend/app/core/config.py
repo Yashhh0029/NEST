@@ -70,6 +70,13 @@ class Settings(BaseSettings):
             return v.replace("postgres://", "postgresql://", 1)
         return v
 
+    @field_validator("GOOGLE_CLIENT_ID", mode="before")
+    @classmethod
+    def clean_client_id(cls, v: str) -> str:
+        if isinstance(v, str):
+            return v.strip().strip("'\"")
+        return v
+
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     @classmethod
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
