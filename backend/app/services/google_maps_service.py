@@ -556,6 +556,74 @@ class GoogleMapsService:
         self._set_in_cache(cache_key, fallback)
         return fallback
 
+    def search_places_nearby(
+        self,
+        latitude: float,
+        longitude: float,
+        radius_meters: float = 1000.0,
+        included_types: Optional[List[str]] = None,
+        max_result_count: int = 20,
+    ) -> List[Dict[str, Any]]:
+        """
+        Search for real places using Google Places API (New) Nearby Search.
+        Endpoint: POST https://places.googleapis.com/v1/places:searchNearby
+        Uses strict circular locationRestriction around the center coordinates.
+        """
+        if not self.is_configured or latitude is None or longitude is None:
+            return []
+
+        clean_radius = max(50.0, min(float(radius_meters), 50000.0))
+        types_key = ",".join(sorted(included_types or []))
+        cache_key = f"places_nearby:{round(latitude, 4)},{round(longitude, 4)}:{round(clean_radius)}:{types_key}:{max_result_count}"
+        cached = self._get_from_cache(cache_key)
+        if cached is not None:
+            return cached
+
+        url = "https://places.googleapis.com/v1/places:searchNearby"
+        headers = {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": self.api_key,
+            "X-Goog-FieldMask": (
+                "places.id,places.displayName,places.formattedAddress,"
+                "places.location,places.rating,places.userRatingCount,"
+                "places.priceLevel,places.primaryType,places.types,"
+                "places.regularOpeningHours,places.googleMapsUri,places.websiteUri,"
+                "places.nationalPhoneNumber"
+            ),
+        }
+        payload: Dict[str, Any] = {
+            "maxResultCount": min(max(max_result_count, 1), 20),
+            "locationRestriction": {
+                "circle": {
+                    "center": {
+                        "latitude": latitude,
+                        "longitude": longitude,
+                    },
+                    "radius": clean_radius,
+                }
+            },
+        }
+        if included_types:
+            payload["includedTypes"] = included_types
+
+        try:
+            resp = requests.post(url, json=payload, headers=headers, timeout=6.0)
+            if resp.status_code != 200:
+                logger.warning(
+                    "Google Places searchNearby returned status %d: %s",
+                    resp.status_code,
+                    resp.text[:200],
+                )
+                return []
+
+            data = resp.json()
+            places = data.get("places", [])
+            self._set_in_cache(cache_key, places)
+            return places
+        except Exception as exc:
+            logger.warning("Google Places searchNearby call failed gracefully: %s", exc)
+            return []
+
     def search_places_text(
         self,
         text_query: str,
@@ -564,7 +632,7 @@ class GoogleMapsService:
         radius_meters: float = 5000.0,
         included_type: Optional[str] = None,
         open_now: Optional[bool] = None,
-        max_result_count: int = 10,
+        max_result_count: int = 20,
     ) -> List[Dict[str, Any]]:
         """
         Search for real places using Google Places API (New) Text Search.

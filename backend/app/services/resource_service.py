@@ -34,8 +34,16 @@ CATEGORIES_REGISTRY: Dict[str, Dict[str, Any]] = {
         "display_name": "Accommodation & PGs",
         "icon": "Home",
         "description": "PGs, hostels, shared flats, co-living rentals, and temporary stays",
-        "default_query_terms": ["paying guest", "pg accommodation", "hostel", "co-living", "room rental"],
-        "google_included_type": None,  # Text query is far more accurate for Indian PGs/hostels
+        "default_query_terms": ["PG", "paying guest", "hostel", "co-living", "room rental"],
+        "google_included_type": None,
+        "nearby_included_types": [
+            "guest_house",
+            "hostel",
+            "lodging",
+            "hotel",
+            "extended_stay_hotel",
+            "bed_and_breakfast",
+        ],
         "nlp_need_categories": ["accommodation"],
     },
     "food": {
@@ -45,6 +53,7 @@ CATEGORIES_REGISTRY: Dict[str, Dict[str, Any]] = {
         "description": "Tiffin services, meal delivery, mess, dabba services, and home-cooked food",
         "default_query_terms": ["tiffin service", "mess food", "dabba service", "meal delivery"],
         "google_included_type": "meal_delivery",
+        "nearby_included_types": ["restaurant", "meal_delivery", "meal_takeaway", "cafe"],
         "nlp_need_categories": ["food"],
     },
     "restaurants": {
@@ -54,6 +63,7 @@ CATEGORIES_REGISTRY: Dict[str, Dict[str, Any]] = {
         "description": "Local eateries, dining spots, pure-veg restaurants, and cafes",
         "default_query_terms": ["restaurant", "eatery", "cafe", "dhaba", "dining"],
         "google_included_type": "restaurant",
+        "nearby_included_types": ["restaurant", "cafe", "fast_food_restaurant"],
         "nlp_need_categories": ["food"],
     },
     "hospitals": {
@@ -63,6 +73,7 @@ CATEGORIES_REGISTRY: Dict[str, Dict[str, Any]] = {
         "description": "General hospitals, emergency trauma care, and healthcare centers",
         "default_query_terms": ["hospital", "emergency hospital", "healthcare center"],
         "google_included_type": "hospital",
+        "nearby_included_types": ["hospital"],
         "nlp_need_categories": ["healthcare"],
     },
     "clinics": {
@@ -72,6 +83,7 @@ CATEGORIES_REGISTRY: Dict[str, Dict[str, Any]] = {
         "description": "Local physician clinics, diagnostic centers, dental clinics, and dispensaries",
         "default_query_terms": ["clinic", "doctor clinic", "medical center", "diagnostic clinic"],
         "google_included_type": "medical_clinic",
+        "nearby_included_types": ["medical_clinic", "dental_clinic"],
         "nlp_need_categories": ["healthcare"],
     },
     "pharmacies": {
@@ -81,6 +93,7 @@ CATEGORIES_REGISTRY: Dict[str, Dict[str, Any]] = {
         "description": "24/7 pharmacies, medical stores, and chemists",
         "default_query_terms": ["pharmacy", "chemist", "medical store", "drugstore"],
         "google_included_type": "pharmacy",
+        "nearby_included_types": ["pharmacy"],
         "nlp_need_categories": ["healthcare"],
     },
     "banks": {
@@ -90,6 +103,7 @@ CATEGORIES_REGISTRY: Dict[str, Dict[str, Any]] = {
         "description": "Nationalized and private bank branches and customer service centers",
         "default_query_terms": ["bank branch", "bank"],
         "google_included_type": "bank",
+        "nearby_included_types": ["bank"],
         "nlp_need_categories": ["documentation"],
     },
     "atms": {
@@ -99,6 +113,7 @@ CATEGORIES_REGISTRY: Dict[str, Dict[str, Any]] = {
         "description": "Cash withdrawal machines and multi-bank ATM kiosks",
         "default_query_terms": ["atm", "cash machine"],
         "google_included_type": "atm",
+        "nearby_included_types": ["atm"],
         "nlp_need_categories": ["documentation"],
     },
     "grocery": {
@@ -108,6 +123,7 @@ CATEGORIES_REGISTRY: Dict[str, Dict[str, Any]] = {
         "description": "Supermarkets, local kirana stores, and daily essentials",
         "default_query_terms": ["supermarket", "grocery store", "kirana store"],
         "google_included_type": "supermarket",
+        "nearby_included_types": ["supermarket", "grocery_store"],
         "nlp_need_categories": ["food"],
     },
     "public_transport": {
@@ -117,6 +133,7 @@ CATEGORIES_REGISTRY: Dict[str, Dict[str, Any]] = {
         "description": "Metro stations, bus stops, railway stations, and transit hubs",
         "default_query_terms": ["metro station", "bus stop", "transit station", "railway station"],
         "google_included_type": "transit_station",
+        "nearby_included_types": ["transit_station", "bus_stop", "subway_station", "train_station"],
         "nlp_need_categories": ["transport"],
     },
     "gyms": {
@@ -126,6 +143,7 @@ CATEGORIES_REGISTRY: Dict[str, Dict[str, Any]] = {
         "description": "Fitness centers, gymnasiums, crossfit, and yoga studios",
         "default_query_terms": ["gym", "fitness center", "workout gym"],
         "google_included_type": "gym",
+        "nearby_included_types": ["gym", "fitness_center"],
         "nlp_need_categories": [],
     },
     "coworking": {
@@ -135,6 +153,7 @@ CATEGORIES_REGISTRY: Dict[str, Dict[str, Any]] = {
         "description": "Shared workspaces, hot desks, private cabins, and startup hubs",
         "default_query_terms": ["coworking space", "shared office", "workspace"],
         "google_included_type": None,
+        "nearby_included_types": None,
         "nlp_need_categories": ["jobs"],
     },
     "education": {
@@ -144,6 +163,7 @@ CATEGORIES_REGISTRY: Dict[str, Dict[str, Any]] = {
         "description": "Schools, colleges, coaching institutes, and libraries",
         "default_query_terms": ["coaching institute", "college", "school", "library"],
         "google_included_type": "school",
+        "nearby_included_types": ["university", "school", "library"],
         "nlp_need_categories": ["education"],
     },
     "government_services": {
@@ -153,6 +173,7 @@ CATEGORIES_REGISTRY: Dict[str, Dict[str, Any]] = {
         "description": "Post offices, Aadhaar seva kendras, ward offices, and police stations",
         "default_query_terms": ["post office", "police station", "aadhaar center", "seva kendra"],
         "google_included_type": "local_government_office",
+        "nearby_included_types": ["local_government_office", "police", "post_office", "fire_station"],
         "nlp_need_categories": ["documentation"],
     },
     "repairs": {
@@ -162,6 +183,7 @@ CATEGORIES_REGISTRY: Dict[str, Dict[str, Any]] = {
         "description": "Appliance repairs, electricians, plumbers, vehicle repair centers",
         "default_query_terms": ["appliance repair", "electrician", "plumber", "vehicle repair"],
         "google_included_type": None,
+        "nearby_included_types": None,
         "nlp_need_categories": ["local guidance"],
     },
 }
@@ -233,7 +255,7 @@ def rank_and_explain_resources(
         # Distance calculation
         dist_km: Optional[float] = None
         if lat is not None and lon is not None:
-            dist_km = round(haversine_km(search_lat, search_lon, lat, lon), 2)
+            dist_km = round(haversine_km(search_lat, search_lon, lat, lon), 3)
 
         # Rating and review count: MUST remain None if unavailable (no fake defaults)
         rating_raw = p.get("rating")
@@ -258,14 +280,17 @@ def rank_and_explain_resources(
         # ----------------------------------------------------
         reasons: List[str] = []
 
-        # 1. Distance score (45%)
+        # 1. Distance score (60% - Proximity is paramount for nearby discovery)
         if dist_km is not None:
-            dist_score = max(0.0, 1.0 - (dist_km / max(radius_km, 1.0)))
-            reasons.append(f"{dist_km} km away from target area")
+            dist_score = max(0.0, 1.0 - (dist_km / max(radius_km, 0.05)))
+            if dist_km < 1.0:
+                reasons.append(f"{int(round(dist_km * 1000))} m away from target")
+            else:
+                reasons.append(f"{dist_km:.2f} km away from target")
         else:
             dist_score = 0.5
 
-        # 2. Preference & keyword relevance score (35%)
+        # 2. Preference & keyword relevance score (20%)
         matched_prefs: List[str] = []
         name_lower = (name or "").lower()
         addr_lower = (formatted_address or "").lower()
@@ -301,7 +326,7 @@ def rank_and_explain_resources(
             conf_score = 0.2
 
         final_score = round(
-            (0.45 * dist_score) + (0.35 * rel_score) + (0.15 * rating_score) + (0.05 * conf_score),
+            (0.60 * dist_score) + (0.20 * rel_score) + (0.15 * rating_score) + (0.05 * conf_score),
             3,
         )
 
@@ -522,13 +547,13 @@ def search_local_resources(
     query: Optional[str] = None,
     latitude: Optional[float] = None,
     longitude: Optional[float] = None,
-    radius_meters: int = 5000,
+    radius_meters: Optional[int] = None,
     min_lat: Optional[float] = None,
     max_lat: Optional[float] = None,
     min_lon: Optional[float] = None,
     max_lon: Optional[float] = None,
     provider: Optional[str] = None,
-    limit: int = 10,
+    limit: int = 50,
     maps_service: GoogleMapsService = google_maps_service,
 ) -> ResourceSearchResponse:
     """
@@ -539,9 +564,10 @@ def search_local_resources(
     - Strictly uses request target location or explicit manual search coordinates.
     - Public place coordinates are returned for map display; user coordinates are never exposed.
     """
-    # 1. Resolve search origin coordinates and context
+    # 1. Resolve search origin coordinates, target name, and context
     search_lat: Optional[float] = latitude
     search_lon: Optional[float] = longitude
+    target_name: Optional[str] = None
     locality_label: Optional[str] = None
     preferences: List[str] = []
     effective_category: str = "accommodation"
@@ -564,6 +590,7 @@ def search_local_resources(
         if req_loc:
             search_lat = req_loc.latitude
             search_lon = req_loc.longitude
+            target_name = req_loc.display_name
             parts = []
             for part in [req_loc.display_name, req_loc.area, req_loc.city]:
                 if part and part.strip() and part.strip() not in parts:
@@ -610,19 +637,15 @@ def search_local_resources(
             parts = [p for p in [rev.road, rev.area, rev.city] if p]
             locality_label = ", ".join(dict.fromkeys(parts)) or rev.formatted_address or "Pune, Maharashtra"
 
+    if not target_name and locality_label:
+        target_name = locality_label.split(",")[0].strip()
 
-    # 2. Build text query
-    query_terms: List[str] = []
+    # 2. Build target-anchored query for supplementary text search
     if query and query.strip():
-        query_terms.append(query.strip())
+        effective_query = f"{query.strip()} near {target_name or locality_label}"
     else:
-        default_kw = category_meta["default_query_terms"][0]
-        query_terms.append(default_kw)
-
-    if locality_label:
-        query_terms.append(f"in {locality_label}")
-
-    effective_query = " ".join(query_terms)
+        primary_term = category_meta["default_query_terms"][0]
+        effective_query = f"{primary_term} near {target_name or locality_label}"
 
     # 3. Provider selection logic
     use_osm = False
@@ -643,7 +666,7 @@ def search_local_resources(
                 ),
                 category=effective_category,
                 query=effective_query,
-                radius_meters=radius_meters,
+                radius_meters=radius_meters or 1000,
                 provider="google_places",
             )
 
@@ -654,7 +677,7 @@ def search_local_resources(
             query=query,
             latitude=search_lat,
             longitude=search_lon,
-            radius_meters=float(radius_meters),
+            radius_meters=float(radius_meters or 5000),
             locality_label=locality_label,
             min_lat=min_lat,
             max_lat=max_lat,
@@ -673,37 +696,77 @@ def search_local_resources(
             ),
             category=effective_category,
             query=effective_query,
-            radius_meters=radius_meters,
+            radius_meters=radius_meters or 5000,
             provider="openstreetmap",
         )
 
-    # 4B. Execute Google Places API (New) search
-    raw_places = maps_service.search_places_text(
-        text_query=effective_query,
-        latitude=search_lat,
-        longitude=search_lon,
-        radius_meters=float(radius_meters),
-        included_type=category_meta.get("google_included_type"),
-        max_result_count=max(limit, 10),
-    )
+    # 4B. Execute Google Places API (New) with Progressive Radius Search (Requirements 2, 4, 5, 6, 7)
+    # Progressive steps: 100m -> 250m -> 500m -> 1km
+    if radius_meters is not None:
+        radius_stages = [radius_meters]
+    else:
+        radius_stages = [100, 250, 500, 1000]
 
-    # Adaptive radius expansion: If fewer than 3 results and radius <= 5000, try 10000m
-    effective_radius = radius_meters
-    if len(raw_places) < 3 and radius_meters <= 5000:
-        expanded_radius = 10000.0
-        expanded_places = maps_service.search_places_text(
+    nearby_types = category_meta.get("nearby_included_types")
+    accumulated_raw_places: List[Dict[str, Any]] = []
+    seen_place_ids: set = set()
+    effective_radius = radius_stages[-1]
+
+    for stage_r in radius_stages:
+        effective_radius = stage_r
+
+        # A. Google Places API (New) Nearby Search around exact target coordinates (places:searchNearby)
+        stage_nearby: List[Dict[str, Any]] = []
+        if nearby_types:
+            stage_nearby = maps_service.search_places_nearby(
+                latitude=search_lat,
+                longitude=search_lon,
+                radius_meters=float(stage_r),
+                included_types=nearby_types,
+                max_result_count=20,
+            )
+
+        # B. Supplementary Target-Anchored Text Search (places:searchText)
+        stage_text: List[Dict[str, Any]] = maps_service.search_places_text(
             text_query=effective_query,
             latitude=search_lat,
             longitude=search_lon,
-            radius_meters=expanded_radius,
+            radius_meters=float(stage_r),
             included_type=category_meta.get("google_included_type"),
-            max_result_count=max(limit, 10),
+            max_result_count=20,
         )
-        if len(expanded_places) > len(raw_places):
-            raw_places = expanded_places
-            effective_radius = int(expanded_radius)
 
-    if not raw_places:
+        # C. Deduplicate strictly by Google place_id (Requirement 7)
+        for p in stage_nearby + stage_text:
+            pid = p.get("id") or p.get("google_place_id")
+            if pid and pid not in seen_place_ids:
+                seen_place_ids.add(pid)
+                accumulated_raw_places.append(p)
+
+        # D. Count places within this progressive radius window
+        window_km = (float(stage_r) * 1.25) / 1000.0
+        places_within_stage = 0
+        for p in accumulated_raw_places:
+            loc = p.get("location", {})
+            plat = loc.get("latitude") if isinstance(loc, dict) else None
+            plon = loc.get("longitude") if isinstance(loc, dict) else None
+            if plat is not None and plon is not None:
+                d_km = haversine_km(search_lat, search_lon, plat, plon)
+                if d_km <= window_km:
+                    places_within_stage += 1
+
+        # Check progressive expansion stopping criteria
+        if len(radius_stages) > 1:
+            if stage_r == 100 and places_within_stage >= 3:
+                break
+            elif stage_r == 250 and places_within_stage >= 3:
+                break
+            elif stage_r == 500 and places_within_stage >= 5:
+                break
+            elif stage_r >= 1000 and places_within_stage >= 5:
+                break
+
+    if not accumulated_raw_places:
         return ResourceSearchResponse(
             status="NO_RESULTS",
             total=0,
@@ -715,13 +778,29 @@ def search_local_resources(
             ),
             category=effective_category,
             query=effective_query,
-            radius_meters=effective_radius,
+            radius_meters=int(effective_radius),
             provider="google_places",
         )
 
-    # 5. Rank and normalize results
+    # Filter places within the effective radius window (so distant places don't replace local ones)
+    effective_window_km = (float(effective_radius) * 1.25) / 1000.0
+    valid_places: List[Dict[str, Any]] = []
+    for p in accumulated_raw_places:
+        loc = p.get("location", {})
+        plat = loc.get("latitude") if isinstance(loc, dict) else None
+        plon = loc.get("longitude") if isinstance(loc, dict) else None
+        if plat is not None and plon is not None:
+            d_km = haversine_km(search_lat, search_lon, plat, plon)
+            if d_km <= effective_window_km:
+                valid_places.append(p)
+        else:
+            valid_places.append(p)
+
+    places_to_rank = valid_places if valid_places else accumulated_raw_places
+
+    # 5. Rank and normalize results with proximity prioritization
     ranked_resources = rank_and_explain_resources(
-        resources=raw_places,
+        resources=places_to_rank,
         search_lat=search_lat,
         search_lon=search_lon,
         radius_meters=float(effective_radius),
@@ -729,7 +808,9 @@ def search_local_resources(
         preferences=preferences,
     )
 
-    trimmed_resources = ranked_resources[:limit]
+    # Return valid deduplicated places without arbitrary limit truncation (Requirement 3)
+    max_output = max(limit, 50)
+    trimmed_resources = ranked_resources[:max_output]
 
     return ResourceSearchResponse(
         status="SUCCESS",
@@ -742,7 +823,7 @@ def search_local_resources(
         ),
         category=effective_category,
         query=effective_query,
-        radius_meters=effective_radius,
+        radius_meters=int(effective_radius),
         provider="google_places",
     )
 

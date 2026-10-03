@@ -105,7 +105,7 @@ export const ResourcesPage: React.FC = () => {
     longitude: number;
     label?: string;
   } | null>(null);
-  const [exploreRadius, setExploreRadius] = useState<number>(5000);
+  const [exploreRadius, setExploreRadius] = useState<number>(1000);
   const [exploreLocationLabel, setExploreLocationLabel] = useState<string>("");
   const [viewportBounds, setViewportBounds] = useState<ViewportBounds | null>(null);
   const [isChangingLocation, setIsChangingLocation] = useState<boolean>(false);
@@ -207,7 +207,7 @@ export const ResourcesPage: React.FC = () => {
         category: selectedCategory || undefined,
         query: searchQuery.trim() || undefined,
         provider: providerMode,
-        limit: 15,
+        limit: 50,
       };
 
       if (exploreCenter?.latitude != null && exploreCenter?.longitude != null) {
@@ -580,29 +580,54 @@ export const ResourcesPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Target Location Context Banner */}
+      {/* Target Location Context Banner with Radius Controls */}
       {searchResult?.search_center?.label && (
-        <div className="flex flex-wrap items-center justify-between gap-2 p-3.5 rounded-xl bg-teal-50/70 dark:bg-brand-dark-muted/40 border border-teal-200/60 dark:border-brand-dark-border text-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-teal-50/70 dark:bg-brand-dark-muted/40 border border-teal-200/60 dark:border-brand-dark-border text-xs">
           <div className="flex items-center gap-2 text-teal-950 dark:text-teal-200 font-medium">
             <Compass className="w-4 h-4 text-brand-primary shrink-0" />
             <span>
-              Searching places near{" "}
+              Searching near{" "}
               <strong className="font-bold text-gray-950 dark:text-white">
                 {searchResult.search_center.label}
               </strong>{" "}
-              (within {(searchResult.radius_meters / 1000).toFixed(0)} km)
+              within{" "}
+              <span className="font-bold text-brand-primary">
+                {searchResult.radius_meters < 1000
+                  ? `${searchResult.radius_meters} m`
+                  : `${(searchResult.radius_meters / 1000).toFixed(1)} km`}
+              </span>
             </span>
           </div>
 
-          {requestIdParam && (
-            <Link
-              to={`/matching?request_id=${requestIdParam}`}
-              className="text-brand-primary hover:underline font-bold flex items-center gap-1"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>View People Matches</span>
-            </Link>
-          )}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[11px] text-gray-500 dark:text-gray-400 font-semibold mr-1">
+              Radius:
+            </span>
+            {[100, 250, 500, 1000, 2000].map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setExploreRadius(r)}
+                className={`px-2 py-0.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  exploreRadius === r
+                    ? "bg-brand-primary text-white shadow-sm"
+                    : "bg-white dark:bg-brand-dark-card border border-gray-200 dark:border-brand-dark-border text-gray-700 dark:text-gray-300 hover:border-brand-primary"
+                }`}
+              >
+                {r < 1000 ? `${r}m` : `${r / 1000}km`}
+              </button>
+            ))}
+
+            {requestIdParam && (
+              <Link
+                to={`/matching?request_id=${requestIdParam}`}
+                className="ml-2 text-brand-primary hover:underline font-bold flex items-center gap-1"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Helper Matches</span>
+              </Link>
+            )}
+          </div>
         </div>
       )}
 
