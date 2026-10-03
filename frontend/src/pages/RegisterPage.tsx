@@ -18,7 +18,8 @@ const registerSchema = z.object({
   password: z
     .string()
     .min(8, "Password must be at least 8 characters")
-    .regex(/[0-9]/, "Password must contain at least one number"),
+    .regex(/[0-9]/, "Password must contain at least one number")
+    .regex(/[A-Za-z]/, "Password must contain at least one letter"),
   role: z.enum(["newcomer", "helper", "both"] as const),
 });
 
@@ -78,6 +79,7 @@ export function RegisterPage() {
 
   // Password strength checks
   const hasMinLength = passwordValue.length >= 8;
+  const hasLetter = /[A-Za-z]/.test(passwordValue);
   const hasNumber = /[0-9]/.test(passwordValue);
   const hasSpecial = /[^A-Za-z0-9]/.test(passwordValue);
 
@@ -276,6 +278,14 @@ export function RegisterPage() {
               >
                 {hasMinLength ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
                 <span>At least 8 characters</span>
+              </div>
+              <div
+                className={`flex items-center gap-1.5 ${
+                  hasLetter ? "text-brand-success" : "text-gray-400"
+                }`}
+              >
+                {hasLetter ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
+                <span>Contains a letter</span>
               </div>
               <div
                 className={`flex items-center gap-1.5 ${

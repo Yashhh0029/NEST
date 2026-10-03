@@ -77,6 +77,13 @@ class Settings(BaseSettings):
             return v.strip().strip("'\"")
         return v
 
+    @field_validator("EMAIL_FROM", "RESEND_API_KEY", "EMAIL_API_KEY", mode="before")
+    @classmethod
+    def clean_email_settings(cls, v: str) -> str:
+        if isinstance(v, str):
+            return v.strip().strip("'\"")
+        return v
+
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     @classmethod
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
