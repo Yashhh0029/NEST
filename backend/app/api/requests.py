@@ -17,6 +17,7 @@ from app.services.request_service import (
     create_user_request,
     delete_user_request,
     get_nearby_requests_for_helper,
+    get_request_with_privacy,
     get_user_request_by_id,
     get_user_requests,
     update_user_request,
@@ -100,9 +101,8 @@ def get_request(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> RequestResponse:
-    """Get single request by ID with ownership enforcement."""
-    req = get_user_request_by_id(db, current_user, request_id)
-    return RequestResponse.model_validate(req)
+    """Get single request by ID with privacy preservation for community helpers."""
+    return get_request_with_privacy(db, current_user, request_id)
 
 
 @router.patch(

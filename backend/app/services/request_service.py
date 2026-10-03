@@ -61,6 +61,14 @@ def create_user_request(db: Session, user: User, req_in: RequestCreate) -> Reque
         display_name=req_in.target_display_name,
     )
 
+    # Dispatch automatic nearby community notifications in parallel
+    try:
+        from app.services.notification_service import notify_nearby_helpers_for_request
+        notify_nearby_helpers_for_request(db, new_request)
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("Automatic nearby community notification dispatch warning: %s", exc)
+
     return new_request
 
 
@@ -90,6 +98,53 @@ def get_user_request_by_id(
             detail="You do not have permission to access this request.",
         )
     return req
+
+
+def get_request_with_privacy(
+    db: Session, user: User, request_id: uuid.UUID
+):
+    """
+    Retrieve request details with privacy preservation:
+    - Request owner sees their full request details including exact target location.
+    - Eligible community helpers see the request, but exact coordinates and private addresses are strictly masked.
+    - Blocked users receive 403 Forbidden.
+    """
+    from app.schemas.request import RequestResponse
+    from app.services.safety_service import is_blocked_bidirectional
+
+    req = db.query(Request).filter(Request.id == request_id).first()
+    if not req:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Request not found.",
+        )
+
+    # Request owner has full visibility
+    if req.user_id == user.id:
+        return RequestResponse.model_validate(req)
+
+    # Enforce safety blocking rules
+    if is_blocked_bidirectional(db, user.id, req.user_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to access this request.",
+        )
+
+    # Validate active verified community member status
+    if not user.is_active or not user.email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only active verified members may access community requests.",
+        )
+
+    # Build response with masked private coordinates
+    resp = RequestResponse.model_validate(req)
+    if resp.target_location:
+        resp.target_location.latitude = None
+        resp.target_location.longitude = None
+        resp.target_location.formatted_address = None
+
+    return resp
 
 
 def update_user_request(

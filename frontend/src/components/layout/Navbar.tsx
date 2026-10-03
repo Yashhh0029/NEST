@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuthStore } from "@/store/useAuthStore";
 import { ThemeToggle } from "./ThemeToggle";
+import { NotificationBell } from "./NotificationBell";
 import {
   Compass,
   LogOut,
@@ -118,6 +119,7 @@ export function Navbar() {
               </nav>
 
               <div className="flex items-center gap-1 sm:gap-2">
+                <NotificationBell />
                 <ThemeToggle />
 
                 {/* Sign Out (Desktop) */}

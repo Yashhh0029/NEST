@@ -14,6 +14,7 @@ from app.models.connection import Connection, ConnectionStatus
 from app.models.conversation import Conversation, Message
 from app.models.embedding import Embedding
 from app.models.location import Location
+from app.models.notification import Notification, NotificationType
 from app.models.profile import Profile
 from app.models.request import Request, RequestSavedResource
 from app.models.request_location import RequestLocation
@@ -50,6 +51,8 @@ __all__ = [
     "Message",
     "ModerationAction",
     "ModerationActionType",
+    "Notification",
+    "NotificationType",
     "Profile",
     "QuestionCategory",
     "QuestionStatus",

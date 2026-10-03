@@ -18,6 +18,7 @@ from app.api.safety import router as safety_router
 from app.api.community import router as community_router
 from app.api.intelligence import router as intelligence_router
 from app.api.availability import router as availability_router
+from app.api.notifications import router as notifications_router
 from app.api.sessions import router as sessions_router
 from app.api.ws_chat import router as ws_router
 from app.core.config import settings
@@ -83,6 +84,7 @@ app.include_router(safety_router, prefix=settings.API_V1_STR)
 app.include_router(community_router, prefix=settings.API_V1_STR)
 app.include_router(intelligence_router, prefix=settings.API_V1_STR)
 app.include_router(availability_router, prefix=settings.API_V1_STR)
+app.include_router(notifications_router, prefix=settings.API_V1_STR)
 app.include_router(sessions_router, prefix=settings.API_V1_STR)
 app.include_router(ws_router)
 

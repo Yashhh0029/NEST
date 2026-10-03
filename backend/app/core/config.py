@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     EMAIL_VERIFICATION_TOKEN_EXPIRE_HOURS: int = 24
     EMAIL_RESEND_COOLDOWN_SECONDS: int = 60
 
+    # Nearby Community Notifications (Default radius: 5.0 km)
+    NEARBY_COMMUNITY_NOTIFICATION_RADIUS_KM: float = 5.0
+
     model_config = SettingsConfigDict(
         env_file=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env"),
         env_file_encoding="utf-8",
