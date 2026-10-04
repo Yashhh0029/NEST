@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.models.location import Location
 from app.models.profile import Profile
 from app.models.skill import Skill, UserSkill
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.auth import UserResponse
 from app.schemas.location import LocationCreate, LocationResponse
 from app.schemas.profile import (
@@ -94,6 +94,10 @@ def upsert_profile(db: Session, user: User, profile_in: ProfileUpdate) -> Profil
             profile.availability = profile_in.availability
         profile.updated_at = now
 
+    if profile_in.role is not None and profile_in.role in [UserRole.NEWCOMER, UserRole.HELPER, UserRole.BOTH]:
+        user.role = profile_in.role
+        db.add(user)
+
     db.commit()
     db.refresh(profile)
     return profile
@@ -103,6 +107,10 @@ def patch_profile(db: Session, user: User, patch_in: ProfilePatch) -> Profile:
     """Partially update an existing profile or create one with provided fields."""
     profile = db.query(Profile).filter(Profile.user_id == user.id).first()
     now = datetime.now(timezone.utc)
+
+    if patch_in.role is not None and patch_in.role in [UserRole.NEWCOMER, UserRole.HELPER, UserRole.BOTH]:
+        user.role = patch_in.role
+        db.add(user)
 
     if not profile:
         profile = Profile(
@@ -122,6 +130,7 @@ def patch_profile(db: Session, user: User, patch_in: ProfilePatch) -> Profile:
         db.add(profile)
     else:
         update_data = patch_in.model_dump(exclude_unset=True)
+        update_data.pop("role", None)
         for field, value in update_data.items():
             setattr(profile, field, value)
         profile.updated_at = now

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { profileService } from "@/services/profile";
+import { useAuthStore } from "@/store/useAuthStore";
 import { useToast } from "@/hooks/useToast";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
@@ -9,15 +10,17 @@ import { Button } from "@/components/ui/Button";
 import { LocationForm } from "@/components/profile/LocationForm";
 import { SkillBadgeList } from "@/components/profile/SkillBadgeList";
 import type { FullProfile, LocationCreateOrUpdatePayload, UserSkill } from "@/types/profile";
-import { ArrowLeft, Save, User, MapPin, Award } from "lucide-react";
+import { ArrowLeft, Save, User, MapPin, Award, Users } from "lucide-react";
 
 export function ProfileEditPage() {
   const [fullProfile, setFullProfile] = useState<FullProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isSavingLocation, setIsSavingLocation] = useState(false);
+  const [isSavingRole, setIsSavingRole] = useState(false);
 
   // Form states
+  const [communityRole, setCommunityRole] = useState<"newcomer" | "helper" | "both">("newcomer");
   const [headline, setHeadline] = useState("");
   const [bio, setBio] = useState("");
   const [occupation, setOccupation] = useState("");
@@ -30,12 +33,19 @@ export function ProfileEditPage() {
   const [skills, setSkills] = useState<UserSkill[]>([]);
 
   const { success: toastSuccess, error: toastError } = useToast();
+  const { setUser } = useAuthStore();
 
   useEffect(() => {
     profileService
       .getMyProfile()
       .then((data) => {
         setFullProfile(data);
+        if (data.user?.role) {
+          const r = data.user.role;
+          if (r === "newcomer" || r === "helper" || r === "both") {
+            setCommunityRole(r);
+          }
+        }
         if (data.profile) {
           setHeadline(data.profile.headline || "");
           setBio(data.profile.bio || "");
@@ -58,6 +68,20 @@ export function ProfileEditPage() {
       .finally(() => setIsLoading(false));
   }, []);
 
+  const handleSaveRole = async () => {
+    setIsSavingRole(true);
+    try {
+      const updatedUser = await profileService.updateMyRole(communityRole);
+      setFullProfile((prev) => (prev ? { ...prev, user: { ...prev.user, role: updatedUser.role } } : null));
+      setUser(updatedUser);
+      toastSuccess(`Community role updated to ${communityRole}!`, "Role Updated");
+    } catch {
+      toastError("Failed to update community role.");
+    } finally {
+      setIsSavingRole(false);
+    }
+  };
+
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSavingProfile(true);
@@ -68,6 +92,7 @@ export function ProfileEditPage() {
         .filter(Boolean);
 
       const updated = await profileService.updateMyProfile({
+        role: communityRole,
         headline: headline.trim() || undefined,
         bio: bio.trim() || undefined,
         occupation: occupation.trim() || undefined,
@@ -145,6 +170,89 @@ export function ProfileEditPage() {
       </div>
 
       <div className="space-y-8">
+        {/* Community Role Section */}
+        <Card className="p-6 sm:p-8 space-y-5 border border-teal-100 dark:border-brand-dark-border shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 dark:border-brand-dark-border pb-4">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-teal-50 dark:bg-brand-dark-card flex items-center justify-center text-brand-primary dark:text-teal-300">
+                <Users className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold font-heading text-gray-900 dark:text-gray-100">
+                  Community Role
+                </h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  Choose how you participate in NEST. Helpers and members with Both roles receive nearby help alerts.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              <span className="text-xs text-gray-500 dark:text-gray-400">Current role:</span>
+              <span className="text-xs px-3 py-1 rounded-full font-bold uppercase tracking-wider bg-teal-50 dark:bg-brand-dark-card text-brand-primary dark:text-teal-300 border border-teal-200 dark:border-teal-800">
+                {fullProfile?.user?.role || "newcomer"}
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {[
+              {
+                id: "newcomer" as const,
+                title: "Newcomer",
+                description: "Looking for local guidance, accommodation, and settling into a new city.",
+              },
+              {
+                id: "helper" as const,
+                title: "Helper",
+                description: "Offering local guidance and community support to newcomers in your area.",
+              },
+              {
+                id: "both" as const,
+                title: "Both",
+                description: "Both seeking assistance and open to helping others in your neighborhood.",
+              },
+            ].map((option) => (
+              <label
+                key={option.id}
+                className={`relative flex flex-col p-4 rounded-xl border cursor-pointer transition-all ${
+                  communityRole === option.id
+                    ? "border-brand-primary bg-teal-50/60 dark:bg-teal-950/20 ring-2 ring-brand-primary/20 shadow-xs"
+                    : "border-gray-200 dark:border-brand-dark-border hover:bg-gray-50 dark:hover:bg-brand-dark-card"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="font-semibold text-sm text-gray-900 dark:text-gray-100">
+                    {option.title}
+                  </span>
+                  <input
+                    type="radio"
+                    name="communityRole"
+                    value={option.id}
+                    checked={communityRole === option.id}
+                    onChange={() => setCommunityRole(option.id)}
+                    className="w-4 h-4 accent-brand-primary cursor-pointer"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+                  {option.description}
+                </p>
+              </label>
+            ))}
+          </div>
+
+          <div className="flex justify-end pt-1">
+            <Button
+              type="button"
+              onClick={handleSaveRole}
+              isLoading={isSavingRole}
+              disabled={communityRole === fullProfile?.user?.role}
+              leftIcon={<Save className="w-4 h-4" />}
+            >
+              Update Community Role
+            </Button>
+          </div>
+        </Card>
+
         {/* Section 1: Basic Profile Details */}
         <Card className="p-6 sm:p-8 space-y-6">
           <div className="flex items-center gap-2">

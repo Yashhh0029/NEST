@@ -186,31 +186,28 @@ def notify_nearby_helpers_for_request(
     created_notifications: List[Notification] = []
 
     for helper in candidate_helpers:
-        # Pick helper's primary location or closest valid location
-        helper_loc = (
+        # Evaluate all locations with valid coordinates for the helper and find the closest to target
+        helper_locations = (
             db.query(Location)
-            .filter(Location.user_id == helper.id, Location.location_label == "Primary")
-            .first()
-        )
-        if not helper_loc or helper_loc.latitude is None or helper_loc.longitude is None:
-            helper_loc = (
-                db.query(Location)
-                .filter(
-                    Location.user_id == helper.id,
-                    Location.latitude.isnot(None),
-                    Location.longitude.isnot(None),
-                )
-                .first()
+            .filter(
+                Location.user_id == helper.id,
+                Location.latitude.isnot(None),
+                Location.longitude.isnot(None),
             )
-
-        if not helper_loc or helper_loc.latitude is None or helper_loc.longitude is None:
+            .all()
+        )
+        if not helper_locations:
             continue
 
+        best_loc = min(
+            helper_locations,
+            key=lambda l: haversine_km(target_lat, target_lon, float(l.latitude), float(l.longitude)),
+        )
         dist_km = haversine_km(
             target_lat,
             target_lon,
-            float(helper_loc.latitude),
-            float(helper_loc.longitude),
+            float(best_loc.latitude),
+            float(best_loc.longitude),
         )
 
         # Exact radius boundary check (e.g. <= 5.0 KM)

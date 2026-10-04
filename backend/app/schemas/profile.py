@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel, ConfigDict, Field
+from app.models.user import UserRole
 from app.schemas.auth import UserResponse
 from app.schemas.location import LocationResponse
 from app.schemas.skill import UserSkillResponse
@@ -30,10 +31,11 @@ class ProfileCreate(ProfileBase):
 
 
 class ProfileUpdate(ProfileBase):
-    pass
+    role: Optional[UserRole] = Field(None, description="Community role: newcomer, helper, or both")
 
 
 class ProfilePatch(BaseModel):
+    role: Optional[UserRole] = Field(None, description="Community role: newcomer, helper, or both")
     headline: Optional[str] = None
     bio: Optional[str] = None
     occupation: Optional[str] = None
@@ -43,6 +45,10 @@ class ProfilePatch(BaseModel):
     help_description: Optional[str] = None
     needs_description: Optional[str] = None
     availability: Optional[bool] = None
+
+
+class RoleUpdate(BaseModel):
+    role: UserRole = Field(..., description="Community role: newcomer, helper, or both")
 
 
 class ProfileResponse(ProfileBase):

@@ -3,7 +3,8 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.core.dependencies import get_current_user, get_db, get_optional_current_user
-from app.models.user import User
+from app.models.user import User, UserRole
+from app.schemas.auth import UserResponse
 from app.schemas.location import LocationCreate, LocationResponse
 from app.schemas.profile import (
     FullProfileResponse,
@@ -11,6 +12,7 @@ from app.schemas.profile import (
     ProfileResponse,
     ProfileUpdate,
     PublicProfileResponse,
+    RoleUpdate,
 )
 from app.schemas.skill import SkillCreate, UserSkillResponse
 from app.services.profile_service import (
@@ -82,6 +84,30 @@ def patch_my_profile(
     """Partially update user profile."""
     profile = patch_profile(db, current_user, patch_in)
     return ProfileResponse.model_validate(profile)
+
+
+@router.put(
+    "/me/role",
+    response_model=UserResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Update current user community role",
+    description="Updates user role between newcomer, helper, and both.",
+)
+def update_my_role(
+    role_in: RoleUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> UserResponse:
+    """Update current user community role."""
+    if role_in.role not in [UserRole.NEWCOMER, UserRole.HELPER, UserRole.BOTH]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Role must be newcomer, helper, or both.",
+        )
+    current_user.role = role_in.role
+    db.commit()
+    db.refresh(current_user)
+    return UserResponse.model_validate(current_user)
 
 
 # ==========================================

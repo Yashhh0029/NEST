@@ -21,6 +21,11 @@ export const profileService = {
     return res.data;
   },
 
+  async updateMyRole(role: "newcomer" | "helper" | "both"): Promise<any> {
+    const res = await api.put<any>("/api/profile/me/role", { role });
+    return res.data;
+  },
+
   async patchMyProfile(payload: ProfileUpdatePayload): Promise<Profile> {
     const res = await api.patch<Profile>("/api/profile/me", payload);
     return res.data;

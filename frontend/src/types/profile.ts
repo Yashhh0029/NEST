@@ -17,6 +17,7 @@ export interface Profile {
 }
 
 export interface ProfileUpdatePayload {
+  role?: "newcomer" | "helper" | "both";
   headline?: string;
   bio?: string;
   occupation?: string;

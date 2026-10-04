@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { Bell, CheckCheck, MapPin, ExternalLink, Loader2 } from "lucide-react";
 import { notificationService, type NotificationItem } from "@/services/notifications";
 
+import { ENV } from "@/config/env";
+
 export function NotificationBell() {
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -36,7 +38,37 @@ export function NotificationBell() {
   useEffect(() => {
     fetchUnreadCount();
     const interval = setInterval(fetchUnreadCount, 30000);
-    return () => clearInterval(interval);
+
+    // WebSocket real-time subscription
+    let ws: WebSocket | null = null;
+    const token = sessionStorage.getItem("nest_access_token");
+    if (token) {
+      try {
+        const base = ENV.API_URL || window.location.origin;
+        const wsUrl = base.replace(/^http/, "ws") + `/api/notifications/ws?token=${token}`;
+        ws = new WebSocket(wsUrl);
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === "NEW_NOTIFICATION" && data.notification) {
+              setNotifications((prev) => [data.notification, ...prev]);
+              setUnreadCount((c) => c + 1);
+            }
+          } catch {
+            // ignore
+          }
+        };
+      } catch {
+        // ignore ws failure, polling interval serves as fallback
+      }
+    }
+
+    return () => {
+      clearInterval(interval);
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
+    };
   }, []);
 
   const handleToggle = () => {
