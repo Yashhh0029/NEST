@@ -25,7 +25,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ loading: true });
     try {
       const tokenData = await authService.login(payload);
-      const user = await authService.getMe();
+      const user = tokenData.user || (await authService.getMe());
       set({
         accessToken: tokenData.access_token,
         user,
@@ -42,7 +42,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ loading: true });
     try {
       const tokenData = await authService.googleLogin(credential);
-      const user = await authService.getMe();
+      const user = tokenData.user || (await authService.getMe());
       set({
         accessToken: tokenData.access_token,
         user,

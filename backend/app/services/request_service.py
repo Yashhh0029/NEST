@@ -137,6 +137,20 @@ def get_request_with_privacy(
             detail="Only active verified members may access community requests.",
         )
 
+    # An unrelated newcomer has no authorization to view another newcomer's private request
+    from app.models.connection import Connection
+    is_connected = db.query(Connection).filter(
+        Connection.request_id == req.id,
+        Connection.helper_id == user.id,
+    ).first() is not None
+
+    user_role_val = user.role.value if hasattr(user.role, "value") else str(user.role)
+    if user_role_val not in ("helper", "both", "admin") and not is_connected:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to access this request.",
+        )
+
     # Build response with masked private coordinates
     resp = RequestResponse.model_validate(req)
     if resp.target_location:

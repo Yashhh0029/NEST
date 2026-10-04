@@ -174,7 +174,7 @@ def generate_match_reasons(
                 MatchReason(
                     category="location",
                     title="Immediate Neighborhood",
-                    explanation=f"Located in {loc_area_str}, only {distance_km} km away from your target location (within 4 km matching radius).",
+                    explanation=f"Located in {loc_area_str}, only {distance_km} km away from your target location.",
                 )
             )
         elif distance_km <= 20.0:
@@ -503,18 +503,7 @@ def find_candidate_matches(
     )
 
     # Configurable Helper ↔ Request Matching Radius
-    # Default = 4.0 KM (approx 4,000 meters) when matching against an explicit target place/location
-    has_explicit_target_coords = (
-        req_target_loc is not None
-        and req_target_loc.latitude is not None
-        and req_target_loc.longitude is not None
-    )
-    if max_distance_km is not None:
-        effective_max_distance_km: Optional[float] = max_distance_km
-    elif has_explicit_target_coords or (req_lat is not None and req_lon is not None):
-        effective_max_distance_km = 4.0
-    else:
-        effective_max_distance_km = None
+    effective_max_distance_km: Optional[float] = max_distance_km
 
     # Extract keywords from request
     req_keywords: List[str] = []
@@ -641,11 +630,12 @@ def find_candidate_matches(
         )
 
         # Helper ↔ Request Matching Radius
-        # When matching around a target place, eligible helpers must be within the matching radius (default 4.0 km)
+        # When matching around a target place, eligible helpers must be within the matching radius
         if effective_max_distance_km is not None:
-            if distance_km is not None and distance_km > effective_max_distance_km:
-                continue
-            if cand_city and req_city and cand_city.strip().lower() != req_city.strip().lower():
+            if distance_km is not None:
+                if distance_km > effective_max_distance_km:
+                    continue
+            elif cand_city and req_city and cand_city.strip().lower() != req_city.strip().lower():
                 continue
 
         # Experience compatibility

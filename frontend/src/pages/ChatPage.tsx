@@ -368,15 +368,19 @@ export function ChatPage() {
                 </Badge>
               </span>
             </div>
-            <div className="flex items-center gap-1 text-[11px] sm:text-xs text-gray-500 dark:text-gray-400 truncate">
-              {(partner?.city || partner?.area) ? (
-                <span className="flex items-center gap-0.5 truncate">
+            <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-gray-500 dark:text-gray-400 truncate">
+              {partner?.headline && (
+                <span className="truncate">{partner.headline}</span>
+              )}
+              {partner?.headline && (partner?.city || partner?.area) && (
+                <span className="text-gray-300 dark:text-gray-600">•</span>
+              )}
+              {(partner?.city || partner?.area) && (
+                <span className="flex items-center gap-0.5 truncate shrink-0">
                   <MapPin className="w-3 h-3 text-brand-primary shrink-0" />
                   <span className="truncate">{[partner.area, partner.city].filter(Boolean).join(", ")}</span>
                 </span>
-              ) : partner?.headline ? (
-                <span className="truncate">{partner.headline}</span>
-              ) : null}
+              )}
             </div>
           </div>
         </div>

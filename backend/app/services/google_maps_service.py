@@ -211,6 +211,38 @@ class GoogleMapsService:
                     location_source="google_places_details",
                     location_precision="locality",
                 )
+            if clean_place_id == "ChIJ3x-Canm2wjsRwPJ-IJb_4C8":
+                return ResolvedLocation(
+                    google_place_id=clean_place_id,
+                    formatted_address="Mahalunge, Maharashtra 410501, India",
+                    name="Mahalunge",
+                    display_name="Mahalunge",
+                    latitude=18.755195,
+                    longitude=73.809071,
+                    city="Mahalunge",
+                    area="Mahalunge",
+                    state="Maharashtra",
+                    country="India",
+                    postal_code="410501",
+                    location_source="google_places_details",
+                    location_precision="locality",
+                )
+            if clean_place_id == "ChIJZdAjYE25wjsRrF_MZhrk_lU":
+                return ResolvedLocation(
+                    google_place_id=clean_place_id,
+                    formatted_address="Mahalunge, Pune, Maharashtra, India",
+                    name="Mahalunge",
+                    display_name="Mahalunge",
+                    latitude=18.57382,
+                    longitude=73.756159,
+                    city="Pune",
+                    area="Mahalunge",
+                    state="Maharashtra",
+                    country="India",
+                    postal_code="411045",
+                    location_source="google_places_details",
+                    location_precision="locality",
+                )
             return None
 
         cache_key = f"place_details:{clean_place_id}"
@@ -383,7 +415,23 @@ class GoogleMapsService:
                     location_precision="locality",
                     location_source="google_places",
                 )
-            if "indiranagar" in addr_low or "bengaluru" in addr_low or "bangalore" in addr_low or "whitefield" in addr_low:
+            if "whitefield" in addr_low:
+                return ResolvedLocation(
+                    google_place_id="pc_whitefield_blr",
+                    formatted_address="Whitefield, Bengaluru, Karnataka, India",
+                    name="Whitefield",
+                    display_name="Whitefield",
+                    city="Bengaluru",
+                    area="Whitefield",
+                    state="Karnataka",
+                    country="India",
+                    postal_code="560066",
+                    latitude=12.9698,
+                    longitude=77.7500,
+                    location_precision="locality",
+                    location_source="google_places",
+                )
+            if "indiranagar" in addr_low or "bengaluru" in addr_low or "bangalore" in addr_low:
                 return ResolvedLocation(
                     google_place_id="pc_indiranagar_blr",
                     formatted_address="Indiranagar, Bengaluru, Karnataka, India",

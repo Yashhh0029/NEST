@@ -5,13 +5,86 @@ from fastapi.testclient import TestClient
 
 # Ensure backend root is in sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+# ==============================================================================
+# CRITICAL TEST DATABASE SAFETY GUARD
+# ==============================================================================
+PROD_NEON_IDENTIFIERS = [
+    "ep-crimson-butterfly",
+    "b5pgmqnv",
+    "us-east-2.aws.neon.tech",
+]
+
+raw_test_db_url = os.environ.get("TEST_DATABASE_URL")
+
+# Rule 1: Never silently inherit production DATABASE_URL from backend/.env
+if not raw_test_db_url or not raw_test_db_url.strip():
+    pytest.exit(
+        "\n"
+        "==============================================================================\n"
+        "CRITICAL TEST DATABASE SAFETY GUARD: TEST_DATABASE_URL IS NOT SET!\n"
+        "Tests are strictly forbidden from inheriting DATABASE_URL from backend/.env\n"
+        "to prevent accidental connection or mutation of the production Neon database.\n"
+        "\n"
+        "To run tests, you must explicitly provide a dedicated TEST database URL:\n"
+        "  Linux / CI:    export TEST_DATABASE_URL='postgresql://user:pass@testhost/nest_test'\n"
+        "  Windows PS:    $env:TEST_DATABASE_URL='postgresql://user:pass@testhost/nest_test'\n"
+        "==============================================================================\n",
+        returncode=1,
+    )
+
+test_db_url = raw_test_db_url.strip()
+
+# Rule 2: Hard failure if test_db_url contains any production Neon identifiers
+for identifier in PROD_NEON_IDENTIFIERS:
+    if identifier in test_db_url.lower():
+        pytest.exit(
+            "\n"
+            "==============================================================================\n"
+            "CRITICAL SAFETY GUARD TRIGGERED: Attempted to run pytest against PRODUCTION!\n"
+            f"Found production identifier '{identifier}' in TEST_DATABASE_URL.\n"
+            "Tests are strictly forbidden from connecting to the production database.\n"
+            "==============================================================================\n",
+            returncode=1,
+        )
+
+# Explicitly configure environment and settings for the dedicated test database
+os.environ["DATABASE_URL"] = test_db_url
 os.environ["EMAIL_PROVIDER"] = "test"
+os.environ["GOOGLE_MAPS_SERVER_API_KEY"] = ""
+os.environ["GOOGLE_MAPS_API_KEY"] = ""
 
 from app.core.config import settings
+settings.DATABASE_URL = test_db_url
+settings.TEST_DATABASE_URL = test_db_url
 settings.EMAIL_PROVIDER = "test"
+settings.GOOGLE_MAPS_SERVER_API_KEY = ""
+settings.GOOGLE_MAPS_API_KEY = ""
 
-from app.db.database import SessionLocal
+from app.services.google_maps_service import google_maps_service
+google_maps_service.api_key = ""
+
+# Bind app database engine and session maker strictly to dedicated test database
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from app.db import database as app_db
+
+test_engine = create_engine(test_db_url, pool_pre_ping=True)
+app_db.engine = test_engine
+app_db.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+
+from app.db.database import SessionLocal, get_db
 from app.main import app
+
+def override_get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+app.dependency_overrides[get_db] = override_get_db
+
 from app.models.skill import Skill
 from app.models.user import User
 
@@ -63,37 +136,11 @@ def clean_test_data():
     from app.services.email_service import test_email_provider
     test_email_provider.clear()
 
-    # Deactivate real non-test users during test
-    real_user_ids = []
-    try:
-        db_ctx = SessionLocal()
-        real_users = db_ctx.query(User).filter(
-            ~User.email.like("%@example.test"),
-            ~User.email.like("%@nest.local"),
-            ~User.email.like("%@example.com"),
-        ).all()
-        real_user_ids = [u.id for u in real_users]
-        if real_user_ids:
-            db_ctx.query(User).filter(User.id.in_(real_user_ids)).update({"is_active": False}, synchronize_session=False)
-            db_ctx.commit()
-        db_ctx.close()
-    except Exception:
-        pass
-
     try:
         yield
     finally:
         _cleanup()
         test_email_provider.clear()
-        # Reactivate real non-test users after test
-        if real_user_ids:
-            try:
-                db_ctx = SessionLocal()
-                db_ctx.query(User).filter(User.id.in_(real_user_ids)).update({"is_active": True}, synchronize_session=False)
-                db_ctx.commit()
-                db_ctx.close()
-            except Exception:
-                pass
 
 
 def create_authenticated_user(client: TestClient, name: str, email: str, role: str = "newcomer"):

@@ -241,11 +241,11 @@ export const ResourcesPage: React.FC = () => {
     requestIdParam,
     selectedCategory,
     searchQuery,
-    exploreCenter,
+    exploreCenter?.latitude,
+    exploreCenter?.longitude,
     exploreRadius,
     viewportBounds,
     providerMode,
-    exploreLocationLabel,
     toastError,
   ]);
 
@@ -288,12 +288,13 @@ export const ResourcesPage: React.FC = () => {
   // Strict Client-Side Radius Enforcement Safeguard
   const filteredResources = useMemo(() => {
     if (!searchResult?.resources) return [];
-    const maxRadiusKm = (exploreRadius || 1000) / 1000.0;
+    const maxRadiusMeters = searchResult.radius_meters || exploreRadius || 1000;
+    const maxRadiusKm = maxRadiusMeters / 1000.0;
     // Allow strict radius matching with 0.005 km (5 meters) float tolerance
     return searchResult.resources.filter(
       (r) => r.distance_km == null || r.distance_km <= maxRadiusKm + 0.005
     );
-  }, [searchResult?.resources, exploreRadius]);
+  }, [searchResult?.resources, searchResult?.radius_meters, exploreRadius]);
 
   const selectedResource = useMemo(() => {
     if (!selectedResourceId || !filteredResources) return null;
@@ -598,7 +599,7 @@ export const ResourcesPage: React.FC = () => {
           <div className="flex items-center gap-2 text-teal-950 dark:text-teal-200 font-medium">
             <Compass className="w-4 h-4 text-brand-primary shrink-0" />
             <span>
-              Searching near{" "}
+              Searching places near{" "}
               <strong className="font-bold text-gray-950 dark:text-white">
                 {searchResult.search_center.label}
               </strong>{" "}

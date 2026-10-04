@@ -19,7 +19,9 @@ export function LocationPicker({
 }: LocationPickerProps) {
   const [isLocating, setIsLocating] = useState(false);
   const [geoError, setGeoError] = useState<string | null>(null);
-  const [showManualFields, setShowManualFields] = useState(false);
+  const [showManualFields, setShowManualFields] = useState(
+    Boolean(value.city || value.area || value.location_source === "manual")
+  );
 
   const handleSelectPrediction = async (prediction: PlaceAutocompletePrediction) => {
     try {

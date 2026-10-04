@@ -1,7 +1,7 @@
 import json
 import logging
 import os
-from typing import List, Union
+from typing import List, Optional, Union
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -16,6 +16,7 @@ class Settings(BaseSettings):
 
     # Database
     DATABASE_URL: str = "postgresql://postgres@127.0.0.1:5433/nest_db"
+    TEST_DATABASE_URL: Optional[str] = None
 
     # Security & JWT
     JWT_SECRET: str = "nest_dev_insecure_jwt_secret_change_in_production_key"
@@ -68,9 +69,9 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    @field_validator("DATABASE_URL", mode="before")
+    @field_validator("DATABASE_URL", "TEST_DATABASE_URL", mode="before")
     @classmethod
-    def assemble_db_url(cls, v: str) -> str:
+    def assemble_db_url(cls, v: Optional[str]) -> Optional[str]:
         if isinstance(v, str) and v.startswith("postgres://"):
             return v.replace("postgres://", "postgresql://", 1)
         return v
