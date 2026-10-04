@@ -374,3 +374,128 @@ def test_nearby_requests_feed(client: TestClient):
     assert req_item["city"] == "Pune"
     assert "requester_name" in req_item
     assert len(req_item["match_reasons"]) >= 1
+
+
+def test_helper_dashboard_target_location_filtering_ranoli(client: TestClient):
+    """
+    Focused verification of Helper Dashboard "Help Requests Near You" TARGET_LOCATION semantics:
+    A. Helper in Pune + request target Ranoli Gujarat -> request NOT visible.
+    B. Helper near Ranoli + request target Ranoli Gujarat -> request visible.
+    C. Request currently in Pune but target Ranoli Gujarat -> target Ranoli must be used.
+    D. Card displays target location, not helper/requester profile location.
+    E. Distance is calculated helper -> target coordinates.
+    """
+    from app.db.database import SessionLocal
+    from app.models.location import Location
+    from app.models.request_location import RequestLocation
+    from app.models.user import User
+
+    db = SessionLocal()
+    try:
+        # 1. Newcomer whose CURRENT/PROFILE location is in Pune (e.g. Wagholi, Pune)
+        newcomer = create_authenticated_user(client, "Dev Newcomer", "dev.ranoli.nc@example.test", role="newcomer")
+        nc_user = db.query(User).filter(User.email == "dev.ranoli.nc@example.test").first()
+        nc_profile_loc = Location(
+            user_id=nc_user.id,
+            city="Pune",
+            area="Wagholi",
+            state="Maharashtra",
+            latitude=18.5000,
+            longitude=73.9350,
+            location_label="Primary",
+        )
+        db.add(nc_profile_loc)
+        db.commit()
+
+        # Newcomer creates a request whose TARGET_LOCATION is Ranoli, Gujarat
+        req_resp = client.post(
+            "/api/requests",
+            json={"text": "I'm moving to Ranoli, Gujarat for masters study. I'm searching for flat and food."},
+            headers=newcomer["headers"],
+        )
+        assert req_resp.status_code == status.HTTP_201_CREATED
+        req_id = req_resp.json()["id"]
+
+        # Ensure target location coordinates are explicitly Ranoli, Gujarat coordinates
+        # (Ranoli near Vadodara: ~22.4038, 73.1348)
+        req_loc = db.query(RequestLocation).filter(RequestLocation.request_id == req_id).first()
+        if not req_loc:
+            req_loc = RequestLocation(
+                request_id=req_id,
+                city="Ranoli",
+                area="Ranoli",
+                state="Gujarat",
+                latitude=22.4038,
+                longitude=73.1348,
+                formatted_address="Ranoli, Gujarat",
+            )
+            db.add(req_loc)
+        else:
+            req_loc.city = "Ranoli"
+            req_loc.area = "Ranoli"
+            req_loc.state = "Gujarat"
+            req_loc.latitude = 22.4038
+            req_loc.longitude = 73.1348
+            req_loc.formatted_address = "Ranoli, Gujarat"
+            db.add(req_loc)
+        db.commit()
+
+        # 2. Helper in Pune/Mahalunge (~18.5512, 73.7489)
+        helper_pune = create_authenticated_user(client, "Pooja PuneHelper", "pooja.pune@example.test", role="helper")
+        hp_user = db.query(User).filter(User.email == "pooja.pune@example.test").first()
+        hp_loc = Location(
+            user_id=hp_user.id,
+            city="Pune",
+            area="Mahalunge",
+            state="Maharashtra",
+            latitude=18.5512,
+            longitude=73.7489,
+            location_label="Primary",
+        )
+        db.add(hp_loc)
+        db.commit()
+
+        # 3. Helper near Ranoli, Gujarat (~22.3800, 73.1800 - approx 5.4 km from Ranoli)
+        helper_ranoli = create_authenticated_user(client, "Jayesh GujaratHelper", "jayesh.guj@example.test", role="helper")
+        hg_user = db.query(User).filter(User.email == "jayesh.guj@example.test").first()
+        hg_loc = Location(
+            user_id=hg_user.id,
+            city="Ranoli",
+            area="Ranoli",
+            state="Gujarat",
+            latitude=22.3800,
+            longitude=73.1800,
+            location_label="Primary",
+        )
+        db.add(hg_loc)
+        db.commit()
+
+        # Test A: Helper in Pune must NOT see the request (it is > 400 km away)
+        resp_pune = client.get("/api/requests/nearby", headers=helper_pune["headers"])
+        assert resp_pune.status_code == status.HTTP_200_OK
+        pune_items = resp_pune.json()
+        pune_matching = [r for r in pune_items if r["id"] == req_id]
+        assert len(pune_matching) == 0, "Request targeting Ranoli must NOT appear to helper in Pune!"
+
+        # Test B & C: Helper near Ranoli MUST see the request (distance is helper -> target, not newcomer profile Pune)
+        resp_ranoli = client.get("/api/requests/nearby", headers=helper_ranoli["headers"])
+        assert resp_ranoli.status_code == status.HTTP_200_OK
+        ranoli_items = resp_ranoli.json()
+        ranoli_matching = [r for r in ranoli_items if r["id"] == req_id]
+        assert len(ranoli_matching) == 1, "Request targeting Ranoli MUST appear to helper near Ranoli!"
+
+        # Test D: Card displays target location (Ranoli/Gujarat), NOT helper location or requester's profile (Pune/Mahalunge)
+        target_card = ranoli_matching[0]
+        assert target_card["state"] == "Gujarat"
+        assert target_card["city"] in ["Ranoli", "Vadodara"] or target_card["area"] == "Ranoli"
+        assert target_card["city"] != "Pune"
+        assert target_card["area"] != "Mahalunge"
+
+        # Test E: Distance is calculated helper -> target coordinates (~5.4 km, NOT > 400 km)
+        assert target_card["distance_km"] is not None
+        assert 0.0 <= target_card["distance_km"] <= 15.0
+        assert target_card["distance_km"] < 25.0
+
+    finally:
+        db.close()
+

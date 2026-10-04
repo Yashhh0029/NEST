@@ -319,18 +319,57 @@ def get_nearby_requests_for_helper(
         req_user = db.query(User).filter(User.id == req.user_id).first()
         requester_name = req_user.name if req_user else "Newcomer"
 
-        # Check location
+        # Resolve request target location strictly (TARGET_LOCATION semantics)
         req_loc = db.query(RequestLocation).filter(RequestLocation.request_id == req.id).first()
+        target_lat = float(req_loc.latitude) if req_loc and req_loc.latitude is not None else None
+        target_lon = float(req_loc.longitude) if req_loc and req_loc.longitude is not None else None
+
+        # If coordinates not yet cached on RequestLocation, resolve from target hints
+        if (target_lat is None or target_lon is None):
+            from app.services.google_maps_service import google_maps_service
+            target_query_parts = []
+            if req_loc:
+                target_query_parts = [req_loc.display_name, req_loc.area, req_loc.city, req_loc.state]
+            if not any(target_query_parts):
+                target_query_parts = [req.area, req.city, req.state]
+            target_query = ", ".join(filter(None, target_query_parts + ["India"]))
+            if target_query and target_query != "India":
+                resolved_geo = google_maps_service.geocode_address(target_query)
+                if resolved_geo and resolved_geo.latitude is not None and resolved_geo.longitude is not None:
+                    target_lat = float(resolved_geo.latitude)
+                    target_lon = float(resolved_geo.longitude)
+                    if req_loc:
+                        req_loc.latitude = target_lat
+                        req_loc.longitude = target_lon
+                        if not req_loc.city and resolved_geo.city:
+                            req_loc.city = resolved_geo.city
+                        if not req_loc.area and resolved_geo.area:
+                            req_loc.area = resolved_geo.area
+                        if not req_loc.state and resolved_geo.state:
+                            req_loc.state = resolved_geo.state
+                        if not req_loc.formatted_address and resolved_geo.formatted_address:
+                            req_loc.formatted_address = resolved_geo.formatted_address
+                        db.add(req_loc)
+                        try:
+                            db.commit()
+                        except Exception:
+                            db.rollback()
+
+        effective_radius_km: float = radius_km if radius_km is not None else 25.0
         dist_km = None
-        if (
-            helper_lat is not None
-            and helper_lon is not None
-            and req_loc
-            and req_loc.latitude is not None
-            and req_loc.longitude is not None
-        ):
-            dist_km = round(_haversine_distance(helper_lat, helper_lon, float(req_loc.latitude), float(req_loc.longitude)), 1)
-            if radius_km is not None and dist_km > radius_km:
+
+        if helper_lat is not None and helper_lon is not None:
+            if target_lat is not None and target_lon is not None:
+                dist_km = round(_haversine_distance(helper_lat, helper_lon, target_lat, target_lon), 1)
+                if dist_km > effective_radius_km:
+                    continue
+            else:
+                # Target coordinates cannot be resolved; do not pretend request is nearby
+                continue
+        else:
+            # Helper has no coordinates configured: filter by city if target city is known
+            req_target_city = (req_loc.city if req_loc and req_loc.city else req.city) or ""
+            if req_target_city and helper_city and req_target_city.strip().lower() != helper_city:
                 continue
 
         # Extract needs

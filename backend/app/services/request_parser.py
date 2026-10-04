@@ -361,7 +361,39 @@ def _extract_location(text: str) -> ExtractedLocation:
         if detected_city_key:
             break
 
-    # 3. If area was detected but city was not explicitly stated, infer city
+    # 3. Detect destination pattern with Indian states (e.g. "moving to Ranoli, Gujarat")
+    if not loc.city:
+        indian_states = [
+            "andhra pradesh", "arunachal pradesh", "assam", "bihar", "chhattisgarh",
+            "goa", "gujarat", "haryana", "himachal pradesh", "jharkhand", "karnataka",
+            "kerala", "madhya pradesh", "maharashtra", "manipur", "meghalaya", "mizoram",
+            "nagaland", "odisha", "punjab", "rajasthan", "sikkim", "tamil nadu",
+            "telangana", "tripura", "uttar pradesh", "uttarakhand", "west bengal",
+            "delhi", "chandigarh", "puducherry"
+        ]
+        states_regex = "|".join(re.escape(s) for s in sorted(indian_states, key=len, reverse=True))
+        state_match = re.search(rf"(?:(?:moving|relocating|shifted|shifting|settling|going|heading|living)\s+to|(?:in|near|at))\s+([A-Za-z\s]{{2,30}}?),\s*({states_regex})\b", lower_text)
+        if not state_match:
+            state_match = re.search(rf"\b([A-Za-z\s]{{2,30}}?),\s*({states_regex})\b", lower_text)
+        if state_match:
+            extracted_place = state_match.group(1).strip()
+            # Clean common filler prefixes if captured
+            for prefix in [
+                "moving to", "relocating to", "shifted to", "shifting to",
+                "going to", "heading to", "living in", "settling in",
+                "in", "near", "at", "i am", "im", "i'm"
+            ]:
+                if extracted_place.lower().startswith(prefix):
+                    extracted_place = extracted_place[len(prefix):].strip()
+            matched_state = state_match.group(2).strip().title()
+            if extracted_place and len(extracted_place) >= 2:
+                loc.city = extracted_place.title()
+                loc.area = extracted_place.title()
+                loc.state = matched_state
+                loc.country = "India"
+                loc.city_source = "explicit_text"
+
+    # 4. If area was detected but city was not explicitly stated, infer city
     if detected_area_key and not loc.city:
         inferred_city_key = AREA_TO_CITY[detected_area_key]
         city_meta = CITY_MAPPINGS[inferred_city_key]

@@ -137,10 +137,10 @@ export function NearbyRequestsFeed() {
                       <span className="text-xs font-normal text-slate-400">needs guidance</span>
                     </h3>
                     <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                      {item.city && (
+                      {(item.display_name || item.area || item.city || item.formatted_address) && (
                         <span className="flex items-center gap-1">
                           <MapPin className="w-3 h-3 text-teal-600" />
-                          {Array.from(new Set([item.display_name, item.area, item.city])).filter(Boolean).join(", ") || item.formatted_address || item.city}
+                          {item.formatted_address || Array.from(new Set([item.display_name, item.area, item.city, item.state])).filter(Boolean).join(", ") || item.city}
                         </span>
                       )}
                       {item.distance_km !== null && item.distance_km !== undefined && (
