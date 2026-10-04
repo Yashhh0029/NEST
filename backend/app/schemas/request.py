@@ -91,6 +91,8 @@ class NearbyRequestItem(BaseModel):
     area: Optional[str] = None
     state: Optional[str] = None
     country: Optional[str] = None
+    display_name: Optional[str] = None
+    formatted_address: Optional[str] = None
     budget_amount: Optional[float] = None
     budget_currency: Optional[str] = None
     budget_period: Optional[str] = None

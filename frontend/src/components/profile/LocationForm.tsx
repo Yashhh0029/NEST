@@ -37,6 +37,11 @@ export function LocationForm({
       return;
     }
 
+    if (!locationData.google_place_id && (locationData.latitude == null || locationData.longitude == null)) {
+      toastError("Please select a location from the search suggestions to ensure accurate nearby matching.");
+      return;
+    }
+
     await onSubmit({
       ...locationData,
       city: locationData.city.trim(),

@@ -15,6 +15,7 @@ from app.schemas.profile import (
     ProfileUpdate,
 )
 from app.schemas.skill import UserSkillResponse
+from app.services.google_maps_service import google_maps_service
 
 
 def get_full_profile(db: Session, user: User) -> FullProfileResponse:
@@ -150,43 +151,79 @@ def upsert_user_location(db: Session, user: User, loc_in: LocationCreate) -> Loc
     )
     now = datetime.now(timezone.utc)
 
+    final_place_id = loc_in.google_place_id
+    final_lat = loc_in.latitude
+    final_lon = loc_in.longitude
+    final_city = loc_in.city
+    final_area = loc_in.area
+    final_state = loc_in.state
+    final_country = loc_in.country or "India"
+    final_postal = loc_in.postal_code
+    final_display = loc_in.display_name
+    final_formatted = loc_in.formatted_address
+    final_source = loc_in.location_source or "manual"
+    final_precision = loc_in.location_precision or "locality"
+
+    # Canonical source of truth: if Google Place ID is present, fetch authoritative details
+    if final_place_id:
+        place_details = google_maps_service.get_place_details(final_place_id)
+        if place_details:
+            if final_lat is None and place_details.latitude is not None:
+                final_lat = place_details.latitude
+            if final_lon is None and place_details.longitude is not None:
+                final_lon = place_details.longitude
+            if not final_formatted and place_details.formatted_address:
+                final_formatted = place_details.formatted_address
+            if not final_city and place_details.city:
+                final_city = place_details.city
+            if not final_area and place_details.area:
+                final_area = place_details.area
+            if not final_state and place_details.state:
+                final_state = place_details.state
+            if not final_postal and place_details.postal_code:
+                final_postal = place_details.postal_code
+            if not final_display:
+                final_display = place_details.display_name or place_details.name
+            if place_details.location_source:
+                final_source = place_details.location_source
+            if place_details.location_precision:
+                final_precision = place_details.location_precision
+
     if not loc:
         loc = Location(
             user_id=user.id,
-            city=loc_in.city,
-            area=loc_in.area,
-            state=loc_in.state,
-            country=loc_in.country or "India",
-            latitude=loc_in.latitude,
-            longitude=loc_in.longitude,
+            city=final_city,
+            area=final_area,
+            state=final_state,
+            country=final_country,
+            latitude=final_lat,
+            longitude=final_lon,
             location_label=label,
-            display_name=loc_in.display_name,
+            display_name=final_display,
             place_types=loc_in.place_types,
-            google_place_id=loc_in.google_place_id,
-            formatted_address=loc_in.formatted_address,
-            postal_code=loc_in.postal_code,
-            location_source=loc_in.location_source or "manual",
-            location_precision=loc_in.location_precision or "locality",
+            google_place_id=final_place_id,
+            formatted_address=final_formatted,
+            postal_code=final_postal,
+            location_source=final_source,
+            location_precision=final_precision,
             created_at=now,
             updated_at=now,
         )
         db.add(loc)
     else:
-        loc.city = loc_in.city
-        loc.area = loc_in.area
-        loc.state = loc_in.state
-        loc.country = loc_in.country or "India"
-        loc.latitude = loc_in.latitude
-        loc.longitude = loc_in.longitude
-        loc.display_name = loc_in.display_name
+        loc.city = final_city
+        loc.area = final_area
+        loc.state = final_state
+        loc.country = final_country
+        loc.latitude = final_lat
+        loc.longitude = final_lon
+        loc.display_name = final_display
         loc.place_types = loc_in.place_types
-        loc.google_place_id = loc_in.google_place_id
-        loc.formatted_address = loc_in.formatted_address
-        loc.postal_code = loc_in.postal_code
-        if loc_in.location_source:
-            loc.location_source = loc_in.location_source
-        if loc_in.location_precision:
-            loc.location_precision = loc_in.location_precision
+        loc.google_place_id = final_place_id
+        loc.formatted_address = final_formatted
+        loc.postal_code = final_postal
+        loc.location_source = final_source
+        loc.location_precision = final_precision
         loc.updated_at = now
 
     db.commit()

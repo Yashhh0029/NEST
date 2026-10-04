@@ -127,6 +127,8 @@ export interface NearbyRequestItem {
   area?: string | null;
   state?: string | null;
   country?: string | null;
+  display_name?: string | null;
+  formatted_address?: string | null;
   budget_amount?: number | null;
   budget_currency?: string | null;
   budget_period?: string | null;

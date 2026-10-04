@@ -41,6 +41,11 @@ def resolve_and_upsert_request_location(
 
     if google_place_id:
         resolved = google_maps_service.get_place_details(google_place_id)
+        if resolved:
+            # Preserve explicit rooftop coordinates if place details has none
+            if resolved.latitude is None and latitude is not None:
+                resolved.latitude = latitude
+                resolved.longitude = longitude
 
     if not resolved and latitude is not None and longitude is not None:
         resolved = google_maps_service.reverse_geocode(latitude, longitude)
@@ -57,9 +62,9 @@ def resolve_and_upsert_request_location(
                 location_precision="rooftop",
             )
 
-    if not resolved and (display_name or city_hint or area_hint):
-        query = ", ".join(filter(None, [display_name, area_hint, city_hint, "India"]))
-        resolved = google_maps_service.geocode_address(query)
+    # Note: If neither google_place_id nor valid coordinates are supplied,
+    # do NOT fabricate coordinates via forward-geocoding text centroids.
+    # Preserve hints without inventing coordinates.
 
     # Find or create RequestLocation
     existing_req_loc = db.query(RequestLocation).filter(RequestLocation.request_id == request_id).first()
@@ -79,10 +84,10 @@ def resolve_and_upsert_request_location(
         final_place_id = resolved.google_place_id or google_place_id
         final_display_name = display_name or resolved.display_name or resolved.name
         final_formatted = resolved.formatted_address or formatted_address
-        final_source = resolved.location_source
-        final_precision = resolved.location_precision
+        final_source = resolved.location_source or "google_places"
+        final_precision = resolved.location_precision or "locality"
     else:
-        # Fallback when Google resolution is unavailable: preserve user hints, never fabricate coordinates
+        # Fallback when no Google place/coords available: preserve user hints, never fabricate coordinates
         final_city = city_hint
         final_area = area_hint
         final_state = None
@@ -109,9 +114,7 @@ def resolve_and_upsert_request_location(
         existing_req_loc.longitude = final_lon
         existing_req_loc.location_source = final_source
         existing_req_loc.location_precision = final_precision
-        db.commit()
-        db.refresh(existing_req_loc)
-        return existing_req_loc
+        ret_loc = existing_req_loc
     else:
         new_req_loc = RequestLocation(
             request_id=request_id,
@@ -129,9 +132,22 @@ def resolve_and_upsert_request_location(
             location_precision=final_precision,
         )
         db.add(new_req_loc)
-        db.commit()
-        db.refresh(new_req_loc)
-        return new_req_loc
+        ret_loc = new_req_loc
+
+    # Keep Request geography aligned with canonical RequestLocation
+    if final_city:
+        req.city = final_city
+    if final_area is not None:
+        req.area = final_area
+    if final_state:
+        req.state = final_state
+    if final_country:
+        req.country = final_country
+    db.add(req)
+
+    db.commit()
+    db.refresh(ret_loc)
+    return ret_loc
 
 
 def get_request_target_location(db: Session, request_id: uuid.UUID) -> Optional[RequestLocation]:

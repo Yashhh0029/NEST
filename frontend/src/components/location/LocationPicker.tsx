@@ -250,68 +250,75 @@ export function LocationPicker({
         </div>
       )}
 
-      {/* Location Details Inputs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-        <div>
-          <label className="block text-xs font-bold text-gray-800 dark:text-gray-200 mb-1">
-            City <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            aria-label="City *"
-            value={value.city || ""}
-            disabled={disabled}
-            onChange={(e) => onChange({ ...value, city: e.target.value, location_source: "manual" })}
-            placeholder="e.g. Pune, Bengaluru, Nagpur"
-            className="w-full px-3 py-2 bg-white dark:bg-brand-dark-card border border-gray-300 dark:border-brand-dark-border rounded-lg text-sm font-semibold text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-brand-primary"
-          />
-        </div>
+      {/* Location Details Inputs (Shown only when manual entry toggled) */}
+      {showManualFields && (
+        <div className="space-y-3 pt-1 border-t border-gray-100 dark:border-brand-dark-border/40">
+          <p className="text-[11px] text-amber-700 dark:text-amber-400">
+            For accurate distance calculations and nearby matching, please select your location from the search bar above.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-gray-800 dark:text-gray-200 mb-1">
+                City <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                aria-label="City *"
+                value={value.city || ""}
+                disabled={disabled}
+                onChange={(e) => onChange({ ...value, city: e.target.value, location_source: "manual" })}
+                placeholder="e.g. Pune, Bengaluru, Nagpur"
+                className="w-full px-3 py-2 bg-white dark:bg-brand-dark-card border border-gray-300 dark:border-brand-dark-border rounded-lg text-sm font-semibold text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-brand-primary"
+              />
+            </div>
 
-        <div>
-          <label className="block text-xs font-bold text-gray-800 dark:text-gray-200 mb-1">
-            Area / Neighborhood
-          </label>
-          <input
-            type="text"
-            aria-label="Area / Neighborhood"
-            value={value.area || ""}
-            disabled={disabled}
-            onChange={(e) => onChange({ ...value, area: e.target.value })}
-            placeholder="e.g. Kothrud, Whitefield, Dharampeth"
-            className="w-full px-3 py-2 bg-white dark:bg-brand-dark-card border border-gray-300 dark:border-brand-dark-border rounded-lg text-sm font-semibold text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-brand-primary"
-          />
-        </div>
-      </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-800 dark:text-gray-200 mb-1">
+                Area / Neighborhood
+              </label>
+              <input
+                type="text"
+                aria-label="Area / Neighborhood"
+                value={value.area || ""}
+                disabled={disabled}
+                onChange={(e) => onChange({ ...value, area: e.target.value })}
+                placeholder="e.g. Kothrud, Whitefield, Dharampeth"
+                className="w-full px-3 py-2 bg-white dark:bg-brand-dark-card border border-gray-300 dark:border-brand-dark-border rounded-lg text-sm font-semibold text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-brand-primary"
+              />
+            </div>
+          </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-            State
-          </label>
-          <input
-            type="text"
-            aria-label="State"
-            value={value.state || ""}
-            disabled={disabled}
-            onChange={(e) => onChange({ ...value, state: e.target.value })}
-            placeholder="e.g. Maharashtra, Karnataka"
-            className="w-full px-3 py-2 bg-white dark:bg-brand-dark-card border border-gray-300 dark:border-brand-dark-border rounded-lg text-xs font-medium text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-brand-primary"
-          />
-        </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                State
+              </label>
+              <input
+                type="text"
+                aria-label="State"
+                value={value.state || ""}
+                disabled={disabled}
+                onChange={(e) => onChange({ ...value, state: e.target.value })}
+                placeholder="e.g. Maharashtra, Karnataka"
+                className="w-full px-3 py-2 bg-white dark:bg-brand-dark-card border border-gray-300 dark:border-brand-dark-border rounded-lg text-xs font-medium text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-brand-primary"
+              />
+            </div>
 
-        <div>
-          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Country
-          </label>
-          <input
-            type="text"
-            aria-label="Country"
-            value={value.country || "India"}
-            disabled
-            className="w-full px-3 py-2 bg-gray-100 dark:bg-brand-dark-muted/40 border border-gray-200 dark:border-brand-dark-border rounded-lg text-xs font-medium text-gray-700 dark:text-gray-300 cursor-not-allowed"
-          />
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Country
+              </label>
+              <input
+                type="text"
+                aria-label="Country"
+                value={value.country || "India"}
+                disabled
+                className="w-full px-3 py-2 bg-gray-100 dark:bg-brand-dark-muted/40 border border-gray-200 dark:border-brand-dark-border rounded-lg text-xs font-medium text-gray-700 dark:text-gray-300 cursor-not-allowed"
+              />
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Optional Private Unit / Flat Input */}
       <div>

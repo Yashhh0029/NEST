@@ -140,7 +140,7 @@ export function NearbyRequestsFeed() {
                       {item.city && (
                         <span className="flex items-center gap-1">
                           <MapPin className="w-3 h-3 text-teal-600" />
-                          {[item.area, item.city].filter(Boolean).join(", ")}
+                          {Array.from(new Set([item.display_name, item.area, item.city])).filter(Boolean).join(", ") || item.formatted_address || item.city}
                         </span>
                       )}
                       {item.distance_km !== null && item.distance_km !== undefined && (

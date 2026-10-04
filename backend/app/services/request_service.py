@@ -347,6 +347,14 @@ def get_nearby_requests_for_helper(
         if not reasons:
             reasons.append("Open request awaiting a local guide")
 
+        # Derive canonical location representation from the same record used for coordinates
+        canonical_city = req_loc.city if req_loc and req_loc.city else req.city
+        canonical_area = req_loc.area if req_loc and req_loc.area else req.area
+        canonical_state = req_loc.state if req_loc and req_loc.state else req.state
+        canonical_country = req_loc.country if req_loc and req_loc.country else req.country
+        canonical_display = req_loc.display_name if req_loc else None
+        canonical_formatted = req_loc.formatted_address if req_loc else None
+
         item = NearbyRequestItem(
             id=req.id,
             user_id=req.user_id,
@@ -354,10 +362,12 @@ def get_nearby_requests_for_helper(
             raw_text=req.raw_text,
             intent=req.intent,
             status=req.status,
-            city=req.city,
-            area=req.area,
-            state=req.state,
-            country=req.country,
+            city=canonical_city,
+            area=canonical_area,
+            state=canonical_state,
+            country=canonical_country,
+            display_name=canonical_display,
+            formatted_address=canonical_formatted,
             budget_amount=float(req.budget_amount) if req.budget_amount is not None else None,
             budget_currency=req.budget_currency,
             budget_period=req.budget_period,
