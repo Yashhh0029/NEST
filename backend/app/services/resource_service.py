@@ -257,6 +257,10 @@ def rank_and_explain_resources(
         if lat is not None and lon is not None:
             dist_km = round(haversine_km(search_lat, search_lon, lat, lon), 3)
 
+        # STRICT RADIUS ENFORCEMENT: Never rank or return places beyond radius
+        if dist_km is not None and dist_km > radius_km:
+            continue
+
         # Rating and review count: MUST remain None if unavailable (no fake defaults)
         rating_raw = p.get("rating")
         rating: Optional[float] = round(float(rating_raw), 1) if rating_raw is not None else None
@@ -641,11 +645,21 @@ def search_local_resources(
         target_name = locality_label.split(",")[0].strip()
 
     # 2. Build target-anchored query for supplementary text search
+    # If explicit coordinates are used (e.g. GPS or map pin), do not append "near <locality>"
+    # to avoid Google Places text search returning city-wide results for the named locality.
+    has_explicit_coords = (latitude is not None and longitude is not None)
     if query and query.strip():
-        effective_query = f"{query.strip()} near {target_name or locality_label}"
+        user_q = query.strip()
+        if has_explicit_coords or " near " in user_q.lower():
+            effective_query = user_q
+        else:
+            effective_query = f"{user_q} near {target_name or locality_label}"
     else:
         primary_term = category_meta["default_query_terms"][0]
-        effective_query = f"{primary_term} near {target_name or locality_label}"
+        if has_explicit_coords:
+            effective_query = primary_term
+        else:
+            effective_query = f"{primary_term} near {target_name or locality_label}"
 
     # 3. Provider selection logic
     use_osm = False
@@ -744,7 +758,7 @@ def search_local_resources(
                 accumulated_raw_places.append(p)
 
         # D. Count places within this progressive radius window
-        window_km = (float(stage_r) * 1.25) / 1000.0
+        window_km = float(stage_r) / 1000.0
         places_within_stage = 0
         for p in accumulated_raw_places:
             loc = p.get("location", {})
@@ -766,7 +780,21 @@ def search_local_resources(
             elif stage_r >= 1000 and places_within_stage >= 5:
                 break
 
-    if not accumulated_raw_places:
+    # STRICT RADIUS ENFORCEMENT:
+    # Selected radius in kilometers - strictly discard any place where d_km > max_radius_km.
+    # NEVER fall back to accumulated_raw_places or city-wide places.
+    max_radius_km = float(effective_radius) / 1000.0
+    valid_places: List[Dict[str, Any]] = []
+    for p in accumulated_raw_places:
+        loc = p.get("location", {})
+        plat = loc.get("latitude") if isinstance(loc, dict) else None
+        plon = loc.get("longitude") if isinstance(loc, dict) else None
+        if plat is not None and plon is not None:
+            d_km = haversine_km(search_lat, search_lon, plat, plon)
+            if d_km <= max_radius_km:
+                valid_places.append(p)
+
+    if not valid_places:
         return ResourceSearchResponse(
             status="NO_RESULTS",
             total=0,
@@ -782,21 +810,7 @@ def search_local_resources(
             provider="google_places",
         )
 
-    # Filter places within the effective radius window (so distant places don't replace local ones)
-    effective_window_km = (float(effective_radius) * 1.25) / 1000.0
-    valid_places: List[Dict[str, Any]] = []
-    for p in accumulated_raw_places:
-        loc = p.get("location", {})
-        plat = loc.get("latitude") if isinstance(loc, dict) else None
-        plon = loc.get("longitude") if isinstance(loc, dict) else None
-        if plat is not None and plon is not None:
-            d_km = haversine_km(search_lat, search_lon, plat, plon)
-            if d_km <= effective_window_km:
-                valid_places.append(p)
-        else:
-            valid_places.append(p)
-
-    places_to_rank = valid_places if valid_places else accumulated_raw_places
+    places_to_rank = valid_places
 
     # 5. Rank and normalize results with proximity prioritization
     ranked_resources = rank_and_explain_resources(

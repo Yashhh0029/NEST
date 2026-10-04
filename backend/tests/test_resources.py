@@ -131,10 +131,11 @@ def test_resource_normalization_and_strict_nulls(mock_search: MagicMock, client:
         },
     ]
 
-    resp = client.get(
-        "/api/resources/search?category=accommodation&latitude=18.5913&longitude=73.7389&radius_meters=5000",
-        headers=user["headers"],
-    )
+    with patch.object(GoogleMapsService, "search_places_nearby", return_value=[]):
+        resp = client.get(
+            "/api/resources/search?category=accommodation&latitude=18.5913&longitude=73.7389&radius_meters=5000",
+            headers=user["headers"],
+        )
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "SUCCESS"
@@ -181,7 +182,7 @@ def test_ranking_review_volume_does_not_overpower_distance(mock_search: MagicMoc
             "id": "place_b_far",
             "displayName": {"text": "Famous Far Away PG"},
             "formattedAddress": "Far outskirts",
-            "location": {"latitude": 18.5500, "longitude": 73.7000},  # ~4.8 km away
+            "location": {"latitude": 18.5600, "longitude": 73.7200},  # ~4.0 km away (within 5 km radius)
             "rating": 4.5,
             "userRatingCount": 2000,
             "types": ["lodging"],
@@ -197,10 +198,11 @@ def test_ranking_review_volume_does_not_overpower_distance(mock_search: MagicMoc
         },
     ]
 
-    resp = client.get(
-        "/api/resources/search?category=accommodation&latitude=18.5913&longitude=73.7389&radius_meters=5000",
-        headers=user["headers"],
-    )
+    with patch.object(GoogleMapsService, "search_places_nearby", return_value=[]):
+        resp = client.get(
+            "/api/resources/search?category=accommodation&latitude=18.5913&longitude=73.7389&radius_meters=5000",
+            headers=user["headers"],
+        )
     assert resp.status_code == 200
     items = resp.json()["resources"]
 
@@ -230,10 +232,11 @@ def test_unrated_place_is_not_penalized_with_zero(mock_search: MagicMock, client
         },
     ]
 
-    resp = client.get(
-        "/api/resources/search?category=accommodation&latitude=18.5913&longitude=73.7389",
-        headers=user["headers"],
-    )
+    with patch.object(GoogleMapsService, "search_places_nearby", return_value=[]):
+        resp = client.get(
+            "/api/resources/search?category=accommodation&latitude=18.5913&longitude=73.7389",
+            headers=user["headers"],
+        )
     assert resp.status_code == 200
     item = resp.json()["resources"][0]
     assert item["rating"] is None

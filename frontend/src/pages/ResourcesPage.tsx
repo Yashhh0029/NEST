@@ -227,8 +227,10 @@ export const ResourcesPage: React.FC = () => {
 
       const resp = await searchResources(params);
       setSearchResult(resp);
-      if (resp.search_center?.label && !exploreLocationLabel) {
-        setExploreLocationLabel(resp.search_center.label);
+      if (resp.search_center?.label) {
+        if (!exploreLocationLabel || exploreLocationLabel === "Current location") {
+          setExploreLocationLabel(resp.search_center.label);
+        }
       }
     } catch {
       toastError("Failed to fetch local resources. Please try again.");
@@ -283,10 +285,20 @@ export const ResourcesPage: React.FC = () => {
       }));
   }, [nearbyHelpers]);
 
+  // Strict Client-Side Radius Enforcement Safeguard
+  const filteredResources = useMemo(() => {
+    if (!searchResult?.resources) return [];
+    const maxRadiusKm = (exploreRadius || 1000) / 1000.0;
+    // Allow strict radius matching with 0.005 km (5 meters) float tolerance
+    return searchResult.resources.filter(
+      (r) => r.distance_km == null || r.distance_km <= maxRadiusKm + 0.005
+    );
+  }, [searchResult?.resources, exploreRadius]);
+
   const selectedResource = useMemo(() => {
-    if (!selectedResourceId || !searchResult?.resources) return null;
-    return searchResult.resources.find((r) => r.id === selectedResourceId) || null;
-  }, [selectedResourceId, searchResult?.resources]);
+    if (!selectedResourceId || !filteredResources) return null;
+    return filteredResources.find((r) => r.id === selectedResourceId) || null;
+  }, [selectedResourceId, filteredResources]);
 
   // Handle selecting location from autocomplete dropdown
   const handleSelectExplorePrediction = async (
@@ -396,7 +408,7 @@ export const ResourcesPage: React.FC = () => {
         setIsLocatingUser(false);
         toastError("Location permission denied. Please search your area manually.");
       },
-      { timeout: 10000 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   };
 
@@ -728,8 +740,9 @@ export const ResourcesPage: React.FC = () => {
           <Card className="p-2 overflow-hidden rounded-2xl">
             <GoogleMap
               targetLocation={currentSearchTarget}
+              radiusMeters={exploreRadius}
               candidates={helperMapCandidates}
-              places={searchResult?.resources || []}
+              places={filteredResources}
               selectedPlaceId={selectedResourceId}
               onSelectPlace={(place) => handleSelectPlaceOnMap(place.id)}
               onSearchThisArea={handleSearchThisArea}
@@ -878,15 +891,17 @@ export const ResourcesPage: React.FC = () => {
             </div>
           )}
         </Card>
-      ) : searchResult?.resources.length === 0 ? (
+      ) : filteredResources.length === 0 ? (
         <EmptyState
           icon={<Compass className="w-8 h-8 text-gray-400" />}
           title="No Local Places Found"
-          description="We couldn't find real places matching your query in this area. Try clearing filters, expanding the search area, or searching another category."
+          description={`We couldn't find real places matching your query within ${
+            exploreRadius < 1000 ? `${exploreRadius} m` : `${(exploreRadius / 1000).toFixed(1)} km`
+          }. Try expanding your search radius to 500 m or 1 km.`}
         />
       ) : (
         <div className="space-y-4">
-          {searchResult?.resources.map((item) => (
+          {filteredResources.map((item) => (
             <div key={item.id} className="relative group">
               <ResourceCard
                 resource={item}

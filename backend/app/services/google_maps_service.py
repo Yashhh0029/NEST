@@ -670,14 +670,16 @@ class GoogleMapsService:
             "textQuery": clean_query,
             "maxResultCount": min(max(max_result_count, 1), 20),
         }
+        clean_r = max(50.0, min(float(radius_meters), 50000.0))
         if latitude is not None and longitude is not None:
-            payload["locationBias"] = {
+            # Enforce circular locationRestriction to prevent city-wide place leaks
+            payload["locationRestriction"] = {
                 "circle": {
                     "center": {
                         "latitude": latitude,
                         "longitude": longitude,
                     },
-                    "radius": float(radius_meters),
+                    "radius": clean_r,
                 }
             }
         if included_type:
@@ -687,6 +689,20 @@ class GoogleMapsService:
 
         try:
             resp = requests.post(url, json=payload, headers=headers, timeout=6.0)
+            if resp.status_code == 400 and "locationRestriction" in payload:
+                # Fallback to locationBias if Places API project rejects restriction for this query
+                payload.pop("locationRestriction", None)
+                payload["locationBias"] = {
+                    "circle": {
+                        "center": {
+                            "latitude": latitude,
+                            "longitude": longitude,
+                        },
+                        "radius": clean_r,
+                    }
+                }
+                resp = requests.post(url, json=payload, headers=headers, timeout=6.0)
+
             if resp.status_code != 200:
                 logger.warning(
                     "Google Places searchText returned status %d: %s",
@@ -836,39 +852,96 @@ class GoogleMapsService:
         """
         lat, lon = latitude, longitude
 
-        # 1. Pimpri-Chinchwad / PCMC Region (Wakad, Hinjewadi, Nigdi, Akurdi, Ravet)
-        # Lat: 18.58 to 18.75, Lon: 73.70 to 73.88 (e.g. 18.65, 73.80)
-        if 18.58 <= lat <= 18.75 and 73.70 <= lon <= 73.88:
-            area = "Wakad" if lat <= 18.61 else "Nigdi"
-            return ResolvedLocation(
-                google_place_id="pc_pcmc_region",
-                formatted_address=f"{area}, Pimpri-Chinchwad, Maharashtra, India",
-                city="Pimpri-Chinchwad",
-                area=area,
-                state="Maharashtra",
-                country="India",
-                postal_code="411044" if area == "Nigdi" else "411057",
-                latitude=round(lat, 6),
-                longitude=round(lon, 6),
-                location_precision="locality",
-                location_source="coordinate_geocoded",
-            )
+        # 1. Detailed Pune & Pimpri-Chinchwad Micro-Locality Boundary Resolution
+        # Lat: 18.40 to 18.75, Lon: 73.68 to 74.02
+        if 18.40 <= lat <= 18.75 and 73.68 <= lon <= 74.02:
+            # Mahalunge (Lat: 18.55-18.60, Lon: 73.72-73.77)
+            if 18.55 <= lat <= 18.60 and 73.72 <= lon <= 73.765:
+                area = "Mahalunge"
+                city = "Pune"
+                postal = "411045"
+            # Balewadi (Lat: 18.56-18.60, Lon: 73.765-73.795)
+            elif 18.56 <= lat <= 18.60 and 73.765 < lon <= 73.795:
+                area = "Balewadi"
+                city = "Pune"
+                postal = "411045"
+            # Baner (Lat: 18.535-18.57, Lon: 73.77-73.81)
+            elif 18.535 <= lat <= 18.57 and 73.77 <= lon <= 73.81:
+                area = "Baner"
+                city = "Pune"
+                postal = "411045"
+            # Hinjewadi (Lat: 18.57-18.63, Lon: 73.68-73.75)
+            elif 18.57 <= lat <= 18.63 and 73.68 <= lon <= 73.75:
+                area = "Hinjewadi"
+                city = "Pune"
+                postal = "411057"
+            # Wakad (Lat: 18.58-18.625, Lon: 73.75 < lon <= 73.785)
+            elif 18.58 <= lat <= 18.625 and 73.75 < lon <= 73.785:
+                area = "Wakad"
+                city = "Pimpri-Chinchwad"
+                postal = "411057"
+            # Pimple Saudagar / Rahatani
+            elif 18.58 <= lat <= 18.62 and 73.785 < lon <= 73.82:
+                area = "Pimple Saudagar"
+                city = "Pimpri-Chinchwad"
+                postal = "411027"
+            # Aundh (Lat: 18.545-18.58, Lon: 73.80 < lon <= 73.83)
+            elif 18.545 <= lat <= 18.58 and 73.80 < lon <= 73.83:
+                area = "Aundh"
+                city = "Pune"
+                postal = "411007"
+            # Bavdhan & Pashan (Lat: 18.50-18.545, Lon: 73.75-73.80)
+            elif 18.50 <= lat <= 18.545 and 73.75 <= lon <= 73.80:
+                area = "Bavdhan" if lat < 18.525 else "Pashan"
+                city = "Pune"
+                postal = "411021"
+            # Kothrud (Lat: 18.485-18.525, Lon: 73.79-73.835)
+            elif 18.485 <= lat <= 18.525 and 73.79 <= lon <= 73.835:
+                area = "Kothrud"
+                city = "Pune"
+                postal = "411038"
+            # Shivajinagar / Deccan (Lat: 18.51-18.545, Lon: 73.835 < lon <= 73.87)
+            elif 18.51 <= lat <= 18.545 and 73.835 < lon <= 73.87:
+                area = "Shivajinagar"
+                city = "Pune"
+                postal = "411005"
+            # Viman Nagar / Kalyani Nagar (Lat: 18.535-18.58, Lon: 73.885-73.93)
+            elif 18.535 <= lat <= 18.58 and 73.885 <= lon <= 73.93:
+                area = "Viman Nagar"
+                city = "Pune"
+                postal = "411014"
+            # Kharadi (Lat: 18.535-18.57, Lon: 73.93 < lon <= 73.975)
+            elif 18.535 <= lat <= 18.57 and 73.93 < lon <= 73.975:
+                area = "Kharadi"
+                city = "Pune"
+                postal = "411014"
+            # Hadapsar / Magarpatta (Lat: 18.48-18.53, Lon: 73.90-73.96)
+            elif 18.48 <= lat <= 18.53 and 73.90 <= lon <= 73.96:
+                area = "Hadapsar"
+                city = "Pune"
+                postal = "411028"
+            # Nigdi / Akurdi / PCMC North (Lat: 18.625-18.75, Lon: 73.72-73.86)
+            elif 18.625 < lat <= 18.75 and 73.72 <= lon <= 73.86:
+                area = "Nigdi"
+                city = "Pimpri-Chinchwad"
+                postal = "411044"
+            else:
+                area = None
+                city = "Pune"
+                postal = "411001"
 
-        # 2. Pune City (Kothrud, Shivajinagar, Baner, Viman Nagar)
-        # Lat: 18.42 to 18.62, Lon: 73.72 to 74.00
-        if 18.42 <= lat <= 18.62 and 73.72 <= lon <= 74.00:
-            area = "Kothrud" if lon <= 73.83 else "Viman Nagar"
+            addr = f"{area}, {city}, Maharashtra, India" if area else f"{city}, Maharashtra, India"
             return ResolvedLocation(
-                google_place_id="pc_pune_region",
-                formatted_address=f"{area}, Pune, Maharashtra, India",
-                city="Pune",
+                google_place_id=f"pc_{area.lower() if area else 'pune'}_region",
+                formatted_address=addr,
+                city=city,
                 area=area,
                 state="Maharashtra",
                 country="India",
-                postal_code="411038",
+                postal_code=postal,
                 latitude=round(lat, 6),
                 longitude=round(lon, 6),
-                location_precision="locality",
+                location_precision="locality" if area is None else "neighborhood",
                 location_source="coordinate_geocoded",
             )
 

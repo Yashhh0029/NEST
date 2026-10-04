@@ -36,6 +36,7 @@ export interface GoogleMapProps {
     longitude?: number | null;
     label?: string;
   } | null;
+  radiusMeters?: number;
   candidates?: MapCandidate[];
   selectedCandidateId?: string | null;
   onSelectCandidate?: (candidateId: string) => void;
@@ -76,6 +77,7 @@ function escapeHtml(str: string): string {
 
 export function GoogleMap({
   targetLocation,
+  radiusMeters,
   candidates = [],
   selectedCandidateId,
   onSelectCandidate,
@@ -238,6 +240,21 @@ export function GoogleMap({
       });
 
       markersRef.current.push(targetMarker);
+
+      if (radiusMeters && radiusMeters > 0) {
+        const radiusCircle = new google.maps.Circle({
+          strokeColor: "#0F766E",
+          strokeOpacity: 0.6,
+          strokeWeight: 1.5,
+          fillColor: "#0F766E",
+          fillOpacity: 0.08,
+          map,
+          center: targetLatLng,
+          radius: radiusMeters,
+          clickable: false,
+        });
+        circlesRef.current.push(radiusCircle);
+      }
     }
 
     // 2. Add Candidate Area Markers (Approximate helper coordinates)
