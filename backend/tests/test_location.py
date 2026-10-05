@@ -16,7 +16,14 @@ def mock_google_maps_services(monkeypatch):
     Mock Google Maps API calls for predictable, deterministic test behavior
     without requiring external network calls or a paid Google Maps Platform API key.
     """
-    def mock_autocomplete(input_text: str, session_token: str = None):
+    def mock_autocomplete(
+        input_text: str,
+        session_token: str = None,
+        latitude: float = None,
+        longitude: float = None,
+        radius_meters: float = None,
+        **kwargs,
+    ):
         if not input_text or len(input_text.strip()) == 0:
             return []
         return [
@@ -567,4 +574,28 @@ def test_indian_coordinates_fallback_and_api(client: TestClient):
     assert data["area"] == "Nigdi"
     assert data["state"] == "Maharashtra"
     assert data["city"] != "Unknown City"
+
+
+def test_reverse_geocode_api_strips_business_and_nulls_place_id(client: TestClient):
+    """
+    POST /api/location/reverse-geocode with browser GPS coordinates must:
+    - Return exact device latitude/longitude
+    - Set google_place_id to None (do not adopt business place_id)
+    - Not have a commercial establishment name as the location name/display_name
+    - Return location_source 'browser_geolocation'
+    """
+    res = client.post("/api/location/reverse-geocode", json={
+        "latitude": 18.57382,
+        "longitude": 73.756159,
+    })
+    assert res.status_code == 200
+    data = res.json()
+    assert data["google_place_id"] is None
+    assert abs(data["latitude"] - 18.57382) < 1e-4
+    assert abs(data["longitude"] - 73.756159) < 1e-4
+    assert "The Orchid Hotel" not in (data.get("name") or "")
+    assert "The Orchid Hotel" not in (data.get("display_name") or "")
+    assert data["location_source"] == "browser_geolocation"
+    assert data["city"] in ["Pune", "Mahalunge", "Balewadi"]
+
 

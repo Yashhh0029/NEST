@@ -1,6 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { requestsService } from "@/services/requests";
 import { createConnection } from "@/services/connections";
+import { refreshCoordinator } from "@/services/refreshCoordinator";
+import { useAutoRefresh } from "@/hooks/useAutoRefresh";
+import { RefreshStatus } from "@/components/common/RefreshStatus";
 import { useToast } from "@/hooks/useToast";
 import type { NearbyRequestItem } from "@/types/request";
 import { Card } from "@/components/ui/Card";
@@ -17,35 +20,37 @@ import {
   Send,
   Loader2,
   Compass,
+  Sparkles,
 } from "lucide-react";
 
 export function NearbyRequestsFeed() {
-  const [requests, setRequests] = useState<NearbyRequestItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const [offerReq, setOfferReq] = useState<NearbyRequestItem | null>(null);
   const [initialMessage, setInitialMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { success, error } = useToast();
 
-  const fetchNearby = () => {
-    setLoading(true);
-    requestsService
-      .getNearbyRequests()
-      .then((data) => {
-        setRequests(data);
-      })
-      .catch((err) => {
-        console.error("Failed to load nearby requests:", err);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-  };
-
-  useEffect(() => {
-    fetchNearby();
-  }, []);
+  const {
+    data: requests = [],
+    isLoading: loading,
+    isRefreshing,
+    isOffline,
+    error: refreshError,
+    lastUpdated,
+    newItemsCount,
+    applyNewItems,
+    refreshNow,
+  } = useAutoRefresh<NearbyRequestItem[]>({
+    queryKey: "nearby_requests",
+    fetchFn: (signal) => requestsService.getNearbyRequests(undefined, signal),
+    interval: 45000, // 45s smart auto-refresh
+    scopes: ["nearby_requests", "requests"],
+    stageNewItems: true,
+    detectNewItems: (prev, next) => {
+      const prevIds = new Set(prev.map((r) => r.id));
+      return next.filter((r) => !prevIds.has(r.id)).length;
+    },
+  });
 
   const handleSendOffer = async () => {
     if (!offerReq) return;
@@ -53,14 +58,15 @@ export function NearbyRequestsFeed() {
     try {
       await createConnection({
         request_id: offerReq.id,
-        helper_id: "", // Current helper is inferred by backend or passed
+        helper_id: "", // Current helper is inferred by backend
         initial_message: initialMessage.trim() || undefined,
       });
       success(`You offered to help ${offerReq.requester_name}. They have been notified.`, "Offer Sent!");
       setOfferReq(null);
       setInitialMessage("");
-      // Refresh list
-      fetchNearby();
+      // Scoped instant invalidation
+      refreshCoordinator.invalidate(["connections", "nearby_requests", "notifications"]);
+      await refreshNow();
     } catch (err: any) {
       error(err.response?.data?.detail || "Please try again.", "Could not send offer");
     } finally {
@@ -82,30 +88,59 @@ export function NearbyRequestsFeed() {
 
   if (requests.length === 0) {
     return (
-      <Card className="p-8 text-center space-y-4 rounded-3xl border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm">
-        <div className="w-14 h-14 mx-auto rounded-2xl bg-teal-50 dark:bg-teal-950/60 text-teal-600 dark:text-teal-400 flex items-center justify-center font-bold text-xl">
-          <Compass className="w-7 h-7" />
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-teal-100 dark:bg-teal-950/80 text-teal-700 dark:text-teal-300">
+              <HeartHandshake className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold font-heading text-slate-900 dark:text-white">
+                Help Requests Near You
+              </h2>
+            </div>
+          </div>
+          <RefreshStatus
+            lastUpdated={lastUpdated}
+            isRefreshing={isRefreshing}
+            isOffline={isOffline}
+            error={refreshError}
+            onRefresh={refreshNow}
+          />
         </div>
-        <div className="space-y-1.5 max-w-md mx-auto">
-          <h3 className="text-base font-bold font-heading text-slate-900 dark:text-white">
-            No Open Requests in Your Area Right Now
-          </h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-            When newcomers in your neighborhood submit accommodation, transport, or relocation needs, they will appear here automatically.
-          </p>
-        </div>
-        <div className="pt-2">
-          <Button variant="outline" size="sm" onClick={fetchNearby} className="gap-2">
-            Refresh Feed
-          </Button>
-        </div>
-      </Card>
+
+        <Card className="p-8 text-center space-y-4 rounded-3xl border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm">
+          <div className="w-14 h-14 mx-auto rounded-2xl bg-teal-50 dark:bg-teal-950/60 text-teal-600 dark:text-teal-400 flex items-center justify-center font-bold text-xl">
+            <Compass className="w-7 h-7" />
+          </div>
+          <div className="space-y-1.5 max-w-md mx-auto">
+            <h3 className="text-base font-bold font-heading text-slate-900 dark:text-white">
+              No Open Requests in Your Area Right Now
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+              When newcomers in your neighborhood submit accommodation, transport, or relocation needs, they will appear here automatically.
+            </p>
+          </div>
+          <div className="pt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={refreshNow}
+              disabled={isRefreshing}
+              className="gap-2"
+            >
+              {isRefreshing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+              <span>{isRefreshing ? "Refreshing…" : "Refresh Feed"}</span>
+            </Button>
+          </div>
+        </Card>
+      </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <div className="p-1.5 rounded-lg bg-teal-100 dark:bg-teal-950/80 text-teal-700 dark:text-teal-300">
             <HeartHandshake className="w-4 h-4" />
@@ -119,10 +154,32 @@ export function NearbyRequestsFeed() {
             </p>
           </div>
         </div>
-        <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800">
-          {requests.length} open
-        </span>
+
+        <div className="flex items-center gap-2.5 self-start sm:self-center">
+          <RefreshStatus
+            lastUpdated={lastUpdated}
+            isRefreshing={isRefreshing}
+            isOffline={isOffline}
+            error={refreshError}
+            onRefresh={refreshNow}
+          />
+          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800">
+            {requests.length} open
+          </span>
+        </div>
       </div>
+
+      {/* Subtle New Requests Available Indicator */}
+      {newItemsCount > 0 && (
+        <button
+          type="button"
+          onClick={applyNewItems}
+          className="w-full py-2.5 px-4 rounded-2xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold shadow-sm transition flex items-center justify-center gap-2 cursor-pointer animate-in fade-in slide-in-from-top-1"
+        >
+          <Sparkles className="w-3.5 h-3.5 animate-pulse" />
+          <span>{newItemsCount} new request{newItemsCount > 1 ? "s" : ""} nearby · Click to show</span>
+        </button>
+      )}
 
       <Stagger className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {requests.map((item) => (

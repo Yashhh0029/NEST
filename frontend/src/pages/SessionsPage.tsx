@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { Calendar, Filter, Clock, AlertCircle } from "lucide-react";
 import { sessionService } from "@/services/sessions";
+import { refreshCoordinator } from "@/services/refreshCoordinator";
+import { RefreshStatus } from "@/components/common/RefreshStatus";
 import { SessionCard } from "@/components/session/SessionCard";
 import { RescheduleModal } from "@/components/session/RescheduleModal";
 import { CardSkeleton } from "@/components/ui/Skeleton";
@@ -15,53 +17,87 @@ export function SessionsPage() {
   const [sessions, setSessions] = useState<AssistanceSession[]>([]);
   const [activeTab, setActiveTab] = useState<FilterTab>("ALL");
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Reschedule Modal state
   const [rescheduleSession, setRescheduleSession] = useState<AssistanceSession | null>(null);
 
-  const fetchSessions = useCallback(async () => {
+  const fetchSessions = useCallback(async (isBackground = false) => {
     try {
-      setLoading(true);
+      if (isBackground) {
+        setIsRefreshing(true);
+      } else {
+        setLoading(true);
+      }
       setError(null);
       const params = activeTab === "ALL" ? undefined : { status: activeTab };
       const data = await sessionService.listSessions(params);
       setSessions(data);
+      setLastUpdated(new Date());
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to load assistance sessions.";
       setError(msg);
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
   }, [activeTab]);
 
   useEffect(() => {
-    fetchSessions();
+    fetchSessions(false);
+
+    const unsubscribe = refreshCoordinator.subscribe((scopes) => {
+      if (
+        scopes.includes("sessions") ||
+        scopes.includes("visibility_visible") ||
+        scopes.includes("network_online")
+      ) {
+        fetchSessions(true);
+      }
+    }, ["sessions"]);
+
+    const timer = setInterval(() => {
+      if (refreshCoordinator.isTabVisible() && refreshCoordinator.isOnline()) {
+        fetchSessions(true);
+      }
+    }, 30000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(timer);
+    };
   }, [fetchSessions]);
 
   const handleAccept = async (sessionId: string) => {
     await sessionService.acceptSession(sessionId);
-    await fetchSessions();
+    refreshCoordinator.invalidate(["sessions", "notifications"]);
+    await fetchSessions(false);
   };
 
   const handleDecline = async (sessionId: string) => {
     await sessionService.declineSession(sessionId);
-    await fetchSessions();
+    refreshCoordinator.invalidate(["sessions", "notifications"]);
+    await fetchSessions(false);
   };
 
   const handleCancel = async (sessionId: string, reason: string) => {
     await sessionService.cancelSession(sessionId, { reason });
-    await fetchSessions();
+    refreshCoordinator.invalidate(["sessions", "notifications"]);
+    await fetchSessions(false);
   };
 
   const handleComplete = async (sessionId: string) => {
     await sessionService.completeSession(sessionId);
-    await fetchSessions();
+    refreshCoordinator.invalidate(["sessions", "notifications", "reviews"]);
+    await fetchSessions(false);
   };
 
   const handleRescheduleSubmit = async (sessionId: string, payload: SessionReschedule) => {
     await sessionService.rescheduleSession(sessionId, payload);
-    await fetchSessions();
+    refreshCoordinator.invalidate(["sessions", "notifications"]);
+    await fetchSessions(false);
   };
 
   const handleDownloadIcs = async (sessionId: string, title: string) => {
@@ -82,7 +118,12 @@ export function SessionsPage() {
             Coordinate in-person and remote assistance sessions with confirmed newcomers and helpers.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          <RefreshStatus
+            lastUpdated={lastUpdated}
+            isRefreshing={isRefreshing}
+            onRefresh={() => fetchSessions(false)}
+          />
           <Link
             to="/profile/availability"
             className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition"

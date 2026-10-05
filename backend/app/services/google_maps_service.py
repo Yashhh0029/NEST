@@ -66,18 +66,56 @@ class GoogleMapsService:
         self._cache[key] = (datetime.now(timezone.utc) + self._cache_ttl, data)
 
     def autocomplete_places(
-        self, input_text: str, session_token: Optional[str] = None
+        self,
+        input_text: str,
+        session_token: Optional[str] = None,
+        latitude: Optional[float] = None,
+        longitude: Optional[float] = None,
+        radius_meters: Optional[float] = None,
     ) -> List[PlaceAutocompletePrediction]:
         """
         Query Google Places API (New) autocomplete, biased and restricted to India.
+        Uses circular locationBias when coordinates are provided (bias, never strict restriction).
         """
         clean_input = input_text.strip()
         if not clean_input:
             return []
 
+        coord_str = (
+            f"{round(latitude, 3)},{round(longitude, 3)}"
+            if latitude is not None and longitude is not None
+            else "none"
+        )
+        cache_key = f"autocomplete:{clean_input.lower()}:{coord_str}"
+        cached = self._get_from_cache(cache_key)
+        if cached is not None:
+            return cached
+
         if not self.is_configured:
             q_low = clean_input.lower()
             fallbacks = []
+            if "mahalunge" in q_low:
+                # Include both distinct Mahalunge locations for disambiguation testing
+                fallbacks.extend([
+                    PlaceAutocompletePrediction(
+                        place_id="ChIJZdAjYE25wjsRrF_MZhrk_lU",
+                        main_text="Mahalunge",
+                        secondary_text="Pune, Maharashtra, India",
+                        description="Mahalunge, Pune, Maharashtra, India",
+                    ),
+                    PlaceAutocompletePrediction(
+                        place_id="ChIJ3x-Canm2wjsRwPJ-IJb_4C8",
+                        main_text="Mahalunge",
+                        secondary_text="Maharashtra 410501, India",
+                        description="Mahalunge, Maharashtra 410501, India",
+                    ),
+                    PlaceAutocompletePrediction(
+                        place_id="ChIJdwrj1xq5wjsREZMUTXUhNbs",
+                        main_text="Mahalunge Balewadi Stadium",
+                        secondary_text="Baner - Mahalunge Road, Balewadi, Pune, Maharashtra, India",
+                        description="Mahalunge Balewadi Stadium, Baner - Mahalunge Road, Balewadi, Pune, Maharashtra, India",
+                    ),
+                ])
             if "hinjewadi" in q_low or "pune" in q_low or "kothrud" in q_low:
                 fallbacks.append(
                     PlaceAutocompletePrediction(
@@ -114,12 +152,16 @@ class GoogleMapsService:
                         description="Whitefield, Bengaluru, Karnataka, India",
                     )
                 )
+            if "kochi" in q_low or "ernakulam" in q_low:
+                fallbacks.append(
+                    PlaceAutocompletePrediction(
+                        place_id="ChIJv8a-SlENCDsRkkGEpcqC1Qs",
+                        main_text="Kochi",
+                        secondary_text="Kerala, India",
+                        description="Kochi, Kerala, India",
+                    )
+                )
             return fallbacks
-
-        cache_key = f"autocomplete:{clean_input.lower()}"
-        cached = self._get_from_cache(cache_key)
-        if cached is not None:
-            return cached
 
         url = "https://places.googleapis.com/v1/places:autocomplete"
         headers = {
@@ -132,6 +174,18 @@ class GoogleMapsService:
         }
         if session_token:
             payload["sessionToken"] = session_token
+        if latitude is not None and longitude is not None:
+            # locationBias circular preference: favors nearby without restricting distant searches (e.g. Kochi from Pune)
+            bias_radius = float(radius_meters) if radius_meters else 50000.0
+            payload["locationBias"] = {
+                "circle": {
+                    "center": {
+                        "latitude": float(latitude),
+                        "longitude": float(longitude),
+                    },
+                    "radius": bias_radius,
+                }
+            }
 
         try:
             resp = requests.post(url, json=payload, headers=headers, timeout=5.0)
@@ -254,7 +308,7 @@ class GoogleMapsService:
         headers = {
             "Content-Type": "application/json",
             "X-Goog-Api-Key": self.api_key,
-            "X-Goog-FieldMask": "id,displayName,formattedAddress,location,addressComponents",
+            "X-Goog-FieldMask": "id,displayName,formattedAddress,location,addressComponents,types",
         }
 
         try:
@@ -270,8 +324,25 @@ class GoogleMapsService:
             formatted = data.get("formattedAddress")
             disp_obj = data.get("displayName", {})
             disp_name = disp_obj.get("text") if isinstance(disp_obj, dict) else None
+            types = data.get("types", [])
 
             city, area, state, country, postal = self._extract_address_components(data.get("addressComponents", []))
+
+            # Derive explicit location precision from Google place types
+            if any(t in types for t in ["subpremise", "premise", "establishment", "point_of_interest"]):
+                precision = "exact"
+            elif any(t in types for t in ["route", "street_address"]):
+                precision = "street"
+            elif any(t in types for t in ["sublocality_level_1", "neighborhood"]):
+                precision = "neighborhood"
+            elif "locality" in types:
+                precision = "locality"
+            elif "administrative_area_level_2" in types:
+                precision = "city"
+            elif area is not None:
+                precision = "neighborhood"
+            else:
+                precision = "locality" if city else "approximate"
 
             resolved = ResolvedLocation(
                 google_place_id=clean_place_id,
@@ -285,7 +356,7 @@ class GoogleMapsService:
                 postal_code=postal,
                 latitude=round(lat, 6) if lat is not None else None,
                 longitude=round(lon, 6) if lon is not None else None,
-                location_precision="locality" if area is None else "neighborhood",
+                location_precision=precision,
                 location_source="google_places",
             )
             self._set_in_cache(cache_key, resolved)
@@ -516,20 +587,86 @@ class GoogleMapsService:
 
     def reverse_geocode(self, latitude: float, longitude: float) -> Optional[ResolvedLocation]:
         """
-        Reverse geocode GPS coordinates to human-readable area & city.
-        Uses deterministic coordinate boundaries for Indian regions (Zero-billing,
-        zero Geocoding API, zero OSM/Nominatim).
+        Reverse geocode GPS coordinates to human-readable canonical area & city.
+        Uses supported Google Places API (New) searchNearby architecture when configured.
+        Falls back to resilient coordinate boundaries when offline or unconfigured.
         """
         if not (-90.0 <= latitude <= 90.0 and -180.0 <= longitude <= 180.0):
             return None
 
-        cache_key = f"rev_geocode:{round(latitude, 3)},{round(longitude, 3)}"
+        cache_key = f"rev_geocode:{round(latitude, 4)},{round(longitude, 4)}"
         cached = self._get_from_cache(cache_key)
         if cached is not None:
             return cached
 
+        # Live Google Places API (New) nearby search for geographic context
+        if self.is_configured:
+            for radius in [1000.0, 5000.0]:
+                places = self.search_places_nearby(
+                    latitude=latitude,
+                    longitude=longitude,
+                    radius_meters=radius,
+                    max_result_count=5,
+                )
+                if places:
+                    # Aggregate geographic address components across nearby places
+                    # NEVER adopt a commercial establishment's displayName or business place_id as the user's location identity!
+                    city = None
+                    area = None
+                    state = None
+                    country = "India"
+                    postal = None
+
+                    for p in places:
+                        c, a, s, co, post = self._extract_address_components(p.get("addressComponents", []))
+                        if not city or (not city.isascii() and c and c.isascii()):
+                            city = c or city
+                        if not area or (not area.isascii() and a and a.isascii()):
+                            area = a or area
+                        if not state or (not state.isascii() and s and s.isascii()):
+                            state = s or state
+                        if not country or (not country.isascii() and co and co.isascii()):
+                            country = co or country
+                        if not postal and post:
+                            postal = post
+
+                    # Build clean geographic-only display name and formatted address
+                    geo_parts = [part for part in [area, city] if part]
+                    geo_display = ", ".join(geo_parts) if geo_parts else (city or area or "Current Location")
+
+                    addr_parts = [part for part in [
+                        area,
+                        city,
+                        f"{state} {postal}".strip() if (state or postal) else state,
+                        country,
+                    ] if part]
+                    geo_formatted = ", ".join(addr_parts) if addr_parts else "India"
+
+                    precision = "neighborhood" if area else ("locality" if city else "approximate")
+
+                    # Per canonical Place ID rule:
+                    # Do NOT store a commercial business's Place ID for GPS coordinates.
+                    # Do NOT blindly forward-geocode text which could cause duplicate-name ambiguity.
+                    # The exact device latitude/longitude remains the authoritative geographic identity.
+                    resolved = ResolvedLocation(
+                        google_place_id=None,
+                        formatted_address=geo_formatted,
+                        name=geo_display,
+                        display_name=geo_display,
+                        city=city,
+                        area=area,
+                        state=state,
+                        country=country or "India",
+                        postal_code=postal,
+                        latitude=round(latitude, 6),
+                        longitude=round(longitude, 6),
+                        location_precision=precision,
+                        location_source="browser_geolocation",
+                    )
+                    self._set_in_cache(cache_key, resolved)
+                    return resolved
+
         # Resilient offline coordinate boundary resolver for Indian coordinates
-        # (e.g. 18.65, 73.80 -> Nigdi, Pimpri-Chinchwad; Wakad, Pune; etc.)
         fallback = self.resolve_indian_coordinates(latitude, longitude)
         if fallback:
             self._set_in_cache(cache_key, fallback)
@@ -636,11 +773,12 @@ class GoogleMapsService:
                 "places.location,places.rating,places.userRatingCount,"
                 "places.priceLevel,places.primaryType,places.types,"
                 "places.regularOpeningHours,places.googleMapsUri,places.websiteUri,"
-                "places.nationalPhoneNumber"
+                "places.nationalPhoneNumber,places.addressComponents"
             ),
         }
         payload: Dict[str, Any] = {
             "maxResultCount": min(max(max_result_count, 1), 20),
+            "languageCode": "en",
             "locationRestriction": {
                 "circle": {
                     "center": {
@@ -979,9 +1117,12 @@ class GoogleMapsService:
                 postal = "411001"
 
             addr = f"{area}, {city}, Maharashtra, India" if area else f"{city}, Maharashtra, India"
+            geo_name = f"{area}, {city}" if area else city
             return ResolvedLocation(
-                google_place_id=f"pc_{area.lower() if area else 'pune'}_region",
+                google_place_id=None,
                 formatted_address=addr,
+                name=geo_name,
+                display_name=geo_name,
                 city=city,
                 area=area,
                 state="Maharashtra",
@@ -990,7 +1131,7 @@ class GoogleMapsService:
                 latitude=round(lat, 6),
                 longitude=round(lon, 6),
                 location_precision="locality" if area is None else "neighborhood",
-                location_source="coordinate_geocoded",
+                location_source="browser_geolocation",
             )
 
         # 3. Kochi / Ernakulam (Kakkanad, Infopark, Fort Kochi, Edappally)

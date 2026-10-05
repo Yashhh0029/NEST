@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { profileService } from "@/services/profile";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useToast } from "@/hooks/useToast";
+import { refreshCoordinator } from "@/services/refreshCoordinator";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
@@ -75,6 +76,7 @@ export function ProfileEditPage() {
       setFullProfile((prev) => (prev ? { ...prev, user: { ...prev.user, role: updatedUser.role } } : null));
       setUser(updatedUser);
       toastSuccess(`Community role updated to ${communityRole}!`, "Role Updated");
+      refreshCoordinator.invalidate(["profile", "nearby_requests"]);
     } catch {
       toastError("Failed to update community role.");
     } finally {
@@ -106,6 +108,7 @@ export function ProfileEditPage() {
 
       setFullProfile((prev) => (prev ? { ...prev, profile: updated } : null));
       toastSuccess("Profile information updated successfully!");
+      refreshCoordinator.invalidate(["profile", "nearby_requests"]);
     } catch {
       toastError("Failed to update profile details.");
     } finally {
@@ -119,6 +122,7 @@ export function ProfileEditPage() {
       const loc = await profileService.setMyLocation(locData);
       setFullProfile((prev) => (prev ? { ...prev, location: loc } : null));
       toastSuccess("Location updated successfully!");
+      refreshCoordinator.invalidate(["profile", "nearby_requests"]);
     } catch {
       toastError("Failed to update location.");
     } finally {
@@ -131,6 +135,7 @@ export function ProfileEditPage() {
       const added = await profileService.addMySkill({ name: skillName });
       setSkills((prev) => [...prev, added]);
       toastSuccess(`Added skill: ${added.skill_name}`);
+      refreshCoordinator.invalidate(["profile"]);
     } catch {
       toastError("Could not add skill.");
     }
@@ -141,6 +146,7 @@ export function ProfileEditPage() {
       await profileService.deleteMySkill(skillId);
       setSkills((prev) => prev.filter((s) => s.id !== skillId));
       toastSuccess("Skill removed.");
+      refreshCoordinator.invalidate(["profile"]);
     } catch {
       toastError("Could not remove skill.");
     }

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Star, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { createReview } from "@/services/reviews";
+import { refreshCoordinator } from "@/services/refreshCoordinator";
 import { useToast } from "@/hooks/useToast";
 
 interface ReviewModalProps {
@@ -52,6 +53,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
         comment: comment.trim() || undefined,
       });
       toastSuccess(`Thank you! Your review for ${partnerName} has been submitted.`);
+      refreshCoordinator.invalidate(["reviews", "connections", "profile"]);
       onSuccess();
       onClose();
     } catch (err: unknown) {

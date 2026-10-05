@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { profileService } from "@/services/profile";
+import { refreshCoordinator } from "@/services/refreshCoordinator";
 import { ProfileHeader } from "@/components/profile/ProfileHeader";
 import { SkillBadgeList } from "@/components/profile/SkillBadgeList";
 import { Card } from "@/components/ui/Card";
@@ -13,13 +14,29 @@ export function ProfilePage() {
   const [profileData, setProfileData] = useState<FullProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
+  const fetchProfile = useCallback(() => {
     profileService
       .getMyProfile()
       .then((data) => setProfileData(data))
       .catch(() => {})
       .finally(() => setIsLoading(false));
   }, []);
+
+  useEffect(() => {
+    fetchProfile();
+
+    const unsubscribe = refreshCoordinator.subscribe((scopes) => {
+      if (
+        scopes.includes("profile") ||
+        scopes.includes("visibility_visible") ||
+        scopes.includes("network_online")
+      ) {
+        fetchProfile();
+      }
+    }, ["profile"]);
+
+    return () => unsubscribe();
+  }, [fetchProfile]);
 
   if (isLoading) {
     return (

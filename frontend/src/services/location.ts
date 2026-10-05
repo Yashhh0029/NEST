@@ -7,10 +7,19 @@ import type {
 
 export async function autocompletePlaces(
   inputText: string,
-  sessionToken?: string
+  sessionToken?: string,
+  latitude?: number | null,
+  longitude?: number | null,
+  radiusMeters?: number | null
 ): Promise<AutocompleteResponse> {
+  const params: Record<string, any> = { input_text: inputText };
+  if (sessionToken) params.session_token = sessionToken;
+  if (latitude != null) params.latitude = latitude;
+  if (longitude != null) params.longitude = longitude;
+  if (radiusMeters != null) params.radius_meters = radiusMeters;
+
   const resp = await api.get<AutocompleteResponse>("/api/location/autocomplete", {
-    params: { input_text: inputText, session_token: sessionToken },
+    params,
   });
   return resp.data;
 }

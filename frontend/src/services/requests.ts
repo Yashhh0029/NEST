@@ -18,13 +18,13 @@ export const requestsService = {
     return res.data;
   },
 
-  async getMyRequests(): Promise<NewcomerRequest[]> {
-    const res = await api.get<NewcomerRequest[]>("/api/requests");
+  async getMyRequests(signal?: AbortSignal): Promise<NewcomerRequest[]> {
+    const res = await api.get<NewcomerRequest[]>("/api/requests", { signal });
     return res.data;
   },
 
-  async getRequestById(id: string): Promise<NewcomerRequest> {
-    const res = await api.get<NewcomerRequest>(`/api/requests/${id}`);
+  async getRequestById(id: string, signal?: AbortSignal): Promise<NewcomerRequest> {
+    const res = await api.get<NewcomerRequest>(`/api/requests/${id}`, { signal });
     return res.data;
   },
 
@@ -37,8 +37,11 @@ export const requestsService = {
     await api.delete(`/api/requests/${id}`);
   },
 
-  async getNearbyRequests(params?: { radius_km?: number; limit?: number }): Promise<NearbyRequestItem[]> {
-    const res = await api.get<NearbyRequestItem[]>("/api/requests/nearby", { params });
+  async getNearbyRequests(
+    params?: { radius_km?: number; limit?: number },
+    signal?: AbortSignal
+  ): Promise<NearbyRequestItem[]> {
+    const res = await api.get<NearbyRequestItem[]>("/api/requests/nearby", { params, signal });
     return res.data;
   },
 };

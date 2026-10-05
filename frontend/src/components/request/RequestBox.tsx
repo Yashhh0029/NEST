@@ -8,6 +8,7 @@ import { reverseGeocodeCoordinates, getPlaceDetails } from "@/services/location"
 import { PlaceAutocomplete } from "@/components/location/PlaceAutocomplete";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useToast } from "@/hooks/useToast";
+import { refreshCoordinator } from "@/services/refreshCoordinator";
 import type { ExtractedRequest } from "@/types/request";
 import type { PlaceAutocompletePrediction } from "@/types/google-location";
 import { Send, Sparkles, Navigation, MapPin, Loader2, Target, X } from "lucide-react";
@@ -171,6 +172,7 @@ export function RequestBox() {
         target_formatted_address: targetPlace?.formattedAddress || undefined,
       });
       toastSuccess("Request created successfully! Finding community matches...");
+      refreshCoordinator.invalidate(["requests", "nearby_requests", "notifications"]);
       navigate(`/requests/${created.id}`);
     } catch (err: unknown) {
       const errorMsg =

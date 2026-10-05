@@ -12,6 +12,8 @@ import {
 import type { ConnectionItem } from "@/types/connection";
 import type { ReviewItem } from "@/types/review";
 import { ReviewModal } from "@/components/review/ReviewModal";
+import { refreshCoordinator } from "@/services/refreshCoordinator";
+import { RefreshStatus } from "@/components/common/RefreshStatus";
 import { useToast } from "@/hooks/useToast";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -43,6 +45,8 @@ export function ConnectionsPage() {
   const [connections, setConnections] = useState<ConnectionItem[]>([]);
   const [reviewsMap, setReviewsMap] = useState<Record<string, ReviewItem[]>>({});
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [isReviewModalOpen, setIsReviewModalOpen] = useState<boolean>(false);
   const [selectedConnection, setSelectedConnection] = useState<ConnectionItem | null>(null);
@@ -63,22 +67,49 @@ export function ConnectionsPage() {
     setReviewsMap(Object.fromEntries(reviewsEntries));
   }, []);
 
-  const fetchConnections = useCallback(async () => {
-    setIsLoading(true);
+  const fetchConnections = useCallback(async (isBackground = false) => {
+    if (isBackground) {
+      setIsRefreshing(true);
+    } else {
+      setIsLoading(true);
+    }
     try {
       const data = await listConnections();
       const list = data.connections || [];
       setConnections(list);
+      setLastUpdated(new Date());
       await fetchReviewsForCompleted(list);
     } catch {
       toastError("Failed to load connections. Please refresh.");
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   }, [toastError, fetchReviewsForCompleted]);
 
   useEffect(() => {
-    fetchConnections();
+    fetchConnections(false);
+
+    const unsubscribe = refreshCoordinator.subscribe((scopes) => {
+      if (
+        scopes.includes("connections") ||
+        scopes.includes("visibility_visible") ||
+        scopes.includes("network_online")
+      ) {
+        fetchConnections(true);
+      }
+    }, ["connections"]);
+
+    const timer = setInterval(() => {
+      if (refreshCoordinator.isTabVisible() && refreshCoordinator.isOnline()) {
+        fetchConnections(true);
+      }
+    }, 30000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(timer);
+    };
   }, [fetchConnections]);
 
   const handleComplete = async (connectionId: string) => {
@@ -91,6 +122,7 @@ export function ConnectionsPage() {
       toastSuccess("Interaction completed! You can now leave a review.");
       setSelectedConnection(updated);
       setIsReviewModalOpen(true);
+      refreshCoordinator.invalidate(["connections", "notifications", "reviews"]);
     } catch (err: unknown) {
       const msg =
         err && typeof err === "object" && "response" in err
@@ -120,6 +152,7 @@ export function ConnectionsPage() {
       } else if (action === "cancel") {
         toastSuccess("Request cancelled.");
       }
+      refreshCoordinator.invalidate(["connections", "notifications", "sessions"]);
     } catch (err: unknown) {
       const msg =
         err && typeof err === "object" && "response" in err
@@ -145,14 +178,22 @@ export function ConnectionsPage() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto py-2 sm:py-6">
       {/* Page Header */}
-      <div className="space-y-1">
-        <h1 className="text-2xl sm:text-3xl font-bold font-heading text-gray-900 dark:text-gray-100 flex items-center gap-2">
-          <Users className="w-7 h-7 text-brand-primary" />
-          Connections
-        </h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          Manage your incoming helper requests, sent invitations, and active community connections.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-2xl sm:text-3xl font-bold font-heading text-gray-900 dark:text-gray-100 flex items-center gap-2">
+            <Users className="w-7 h-7 text-brand-primary" />
+            Connections
+          </h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Manage your incoming helper requests, sent invitations, and active community connections.
+          </p>
+        </div>
+
+        <RefreshStatus
+          lastUpdated={lastUpdated}
+          isRefreshing={isRefreshing}
+          onRefresh={() => fetchConnections(false)}
+        />
       </div>
 
       {/* Tabs */}

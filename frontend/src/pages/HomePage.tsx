@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { useAuthStore } from "@/store/useAuthStore";
 import { requestsService } from "@/services/requests";
+import { refreshCoordinator } from "@/services/refreshCoordinator";
 import { RequestBox } from "@/components/request/RequestBox";
 import { RequestCard } from "@/components/request/RequestCard";
 import { NearbyRequestsFeed } from "@/components/home/NearbyRequestsFeed";
@@ -28,7 +29,7 @@ export function HomePage() {
     isHelperOnly ? "helper" : "newcomer"
   );
 
-  useEffect(() => {
+  const fetchRecent = useCallback(() => {
     requestsService
       .getMyRequests()
       .then((data) => {
@@ -36,6 +37,22 @@ export function HomePage() {
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    fetchRecent();
+
+    const unsubscribe = refreshCoordinator.subscribe((scopes) => {
+      if (
+        scopes.includes("requests") ||
+        scopes.includes("visibility_visible") ||
+        scopes.includes("network_online")
+      ) {
+        fetchRecent();
+      }
+    }, ["requests"]);
+
+    return () => unsubscribe();
+  }, [fetchRecent]);
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto py-2 sm:py-6 px-0 sm:px-4">

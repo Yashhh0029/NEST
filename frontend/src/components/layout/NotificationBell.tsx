@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bell, CheckCheck, MapPin, ExternalLink, Loader2 } from "lucide-react";
 import { notificationService, type NotificationItem } from "@/services/notifications";
-
+import { refreshCoordinator } from "@/services/refreshCoordinator";
 import { ENV } from "@/config/env";
 
 export function NotificationBell() {
@@ -13,63 +13,159 @@ export function NotificationBell() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
-  const fetchUnreadCount = async () => {
+  const isMountedRef = useRef<boolean>(true);
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasAuthErrorRef = useRef<boolean>(false);
+
+  const fetchUnreadCount = useCallback(async () => {
+    if (hasAuthErrorRef.current || !refreshCoordinator.isOnline()) return;
     try {
       const count = await notificationService.getUnreadCount();
-      setUnreadCount(count);
-    } catch {
-      // silently ignore network issues
+      if (isMountedRef.current) {
+        setUnreadCount(count);
+      }
+    } catch (err: unknown) {
+      const status =
+        err && typeof err === "object" && "response" in err
+          ? (err as { response?: { status?: number } }).response?.status
+          : null;
+      if (status === 401 || status === 403) {
+        hasAuthErrorRef.current = true;
+      }
     }
-  };
+  }, []);
 
-  const fetchNotificationsList = async () => {
+  const fetchNotificationsList = useCallback(async () => {
+    if (hasAuthErrorRef.current || !refreshCoordinator.isOnline()) return;
     setIsLoading(true);
     try {
       const res = await notificationService.getNotifications(15, 0);
-      setNotifications(res.items);
-      setUnreadCount(res.unread_count);
+      if (isMountedRef.current) {
+        setNotifications(res.items);
+        setUnreadCount(res.unread_count);
+      }
     } catch {
-      // silently ignore network issues
+      // silently handle network issue
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
-  };
+  }, []);
 
-  useEffect(() => {
-    fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, 30000);
+  // Smart polling scheduler with visibility & online awareness
+  const scheduleNextPoll = useCallback(() => {
+    if (pollTimerRef.current) {
+      clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+    if (!isMountedRef.current || hasAuthErrorRef.current) return;
 
-    // WebSocket real-time subscription
-    let ws: WebSocket | null = null;
+    pollTimerRef.current = setTimeout(async () => {
+      if (refreshCoordinator.isTabVisible() && refreshCoordinator.isOnline()) {
+        await fetchUnreadCount();
+      }
+      scheduleNextPoll();
+    }, 30000); // 30s background sync
+  }, [fetchUnreadCount]);
+
+  // Connect WebSocket with auto-reconnect and message deduplication
+  const connectWs = useCallback(() => {
+    if (!isMountedRef.current || hasAuthErrorRef.current) return;
     const token = sessionStorage.getItem("nest_access_token");
-    if (token) {
-      try {
-        const base = ENV.API_URL || window.location.origin;
-        const wsUrl = base.replace(/^http/, "ws") + `/api/notifications/ws?token=${token}`;
-        ws = new WebSocket(wsUrl);
-        ws.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            if (data.type === "NEW_NOTIFICATION" && data.notification) {
-              setNotifications((prev) => [data.notification, ...prev]);
+    if (!token) return;
+
+    try {
+      const base = ENV.API_URL || window.location.origin;
+      const wsUrl = base.replace(/^http/, "ws") + `/api/notifications/ws?token=${token}`;
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === "NEW_NOTIFICATION" && data.notification) {
+            const incoming: NotificationItem = data.notification;
+            if (isMountedRef.current) {
+              setNotifications((prev) => {
+                if (prev.some((n) => n.id === incoming.id)) {
+                  return prev.map((n) => (n.id === incoming.id ? incoming : n));
+                }
+                return [incoming, ...prev];
+              });
               setUnreadCount((c) => c + 1);
             }
-          } catch {
-            // ignore
           }
-        };
-      } catch {
-        // ignore ws failure, polling interval serves as fallback
-      }
+        } catch {
+          // ignore malformed message
+        }
+      };
+
+      ws.onclose = (event) => {
+        if (!isMountedRef.current) return;
+        // If not cleanly closed, schedule reconnect with backoff
+        if (event.code !== 1000 && event.code !== 1008) {
+          reconnectTimeoutRef.current = setTimeout(() => {
+            if (refreshCoordinator.isOnline() && refreshCoordinator.isTabVisible()) {
+              connectWs();
+            }
+          }, 5000);
+        }
+      };
+
+      ws.onerror = () => {
+        // Fallback polling will keep state in sync
+      };
+    } catch {
+      // Ignore ws initialization error
     }
+  }, []);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    hasAuthErrorRef.current = false;
+
+    fetchUnreadCount();
+    scheduleNextPoll();
+    connectWs();
+
+    // Subscribe to refresh coordinator for notifications & visibility & online changes
+    const unsubscribe = refreshCoordinator.subscribe((scopes) => {
+      if (!isMountedRef.current) return;
+      if (
+        scopes.includes("notifications") ||
+        scopes.includes("connections") ||
+        scopes.includes("requests") ||
+        scopes.includes("visibility_visible") ||
+        scopes.includes("network_online")
+      ) {
+        fetchUnreadCount();
+        if (isOpen) {
+          fetchNotificationsList();
+        }
+        // Reconnect WS if it was disconnected
+        if (
+          !wsRef.current ||
+          wsRef.current.readyState === WebSocket.CLOSED ||
+          wsRef.current.readyState === WebSocket.CLOSING
+        ) {
+          connectWs();
+        }
+      }
+    }, ["notifications", "connections", "requests"]);
 
     return () => {
-      clearInterval(interval);
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.close();
+      isMountedRef.current = false;
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.close(1000, "Unmounted");
       }
+      unsubscribe();
     };
-  }, []);
+  }, [fetchUnreadCount, fetchNotificationsList, scheduleNextPoll, connectWs, isOpen]);
 
   const handleToggle = () => {
     if (!isOpen) {
@@ -150,7 +246,7 @@ export function NotificationBell() {
             {unreadCount > 0 && (
               <button
                 onClick={handleMarkAllRead}
-                className="text-xs text-brand-primary dark:text-teal-400 hover:underline flex items-center gap-1 font-medium"
+                className="text-xs text-brand-primary dark:text-teal-400 hover:underline flex items-center gap-1 font-medium cursor-pointer"
               >
                 <CheckCheck className="w-3.5 h-3.5" />
                 Mark all read

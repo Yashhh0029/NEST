@@ -11,6 +11,7 @@ import {
   translateChatMessage,
 } from "@/services/chat";
 import { useChatSocket } from "@/hooks/useChatSocket";
+import { refreshCoordinator } from "@/services/refreshCoordinator";
 import type { ConversationItem, MessageItem } from "@/types/chat";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -133,6 +134,21 @@ export function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
+  const syncLatestMessages = useCallback(async (convId: string) => {
+    try {
+      const msgs = await getMessages(convId);
+      setMessages((prev) => {
+        const existingIds = new Set(prev.map((m) => m.id));
+        const newMsgs = msgs.messages.filter((m) => !existingIds.has(m.id));
+        if (newMsgs.length === 0) return prev;
+        setTimeout(scrollToBottom, 50);
+        return [...prev, ...newMsgs];
+      });
+    } catch {
+      // silently handle fallback error
+    }
+  }, []);
+
   const handleIncomingRealtimeMessage = useCallback((incoming: MessageItem) => {
     setMessages((prev) => {
       if (prev.some((m) => m.id === incoming.id)) {
@@ -146,7 +162,36 @@ export function ChatPage() {
   const { isConnected } = useChatSocket({
     conversationId: conversation?.id,
     onMessageReceived: handleIncomingRealtimeMessage,
+    onReconnect: () => {
+      if (conversation?.id) {
+        syncLatestMessages(conversation.id);
+      }
+    },
   });
+
+  // Background fallback polling ONLY when WebSocket is disconnected
+  useEffect(() => {
+    if (isConnected || !conversation?.id) return;
+
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let isCancelled = false;
+
+    const pollFallback = async () => {
+      if (refreshCoordinator.isTabVisible() && refreshCoordinator.isOnline()) {
+        await syncLatestMessages(conversation.id);
+      }
+      if (!isCancelled && !isConnected) {
+        timer = setTimeout(pollFallback, 10000); // 10s fallback polling only when disconnected
+      }
+    };
+
+    timer = setTimeout(pollFallback, 10000);
+
+    return () => {
+      isCancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [isConnected, conversation?.id, syncLatestMessages]);
 
   // Initialize conversation and messages
   useEffect(() => {
@@ -227,6 +272,7 @@ export function ChatPage() {
       });
 
       setTimeout(scrollToBottom, 50);
+      refreshCoordinator.invalidate(["notifications", "chat"]);
     } catch (err: unknown) {
       const msg =
         err && typeof err === "object" && "response" in err

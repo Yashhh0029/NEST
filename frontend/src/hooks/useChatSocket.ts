@@ -1,29 +1,43 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { ENV } from "@/config/env";
 import { TOKEN_STORAGE_KEY } from "@/services/api";
+import { refreshCoordinator } from "@/services/refreshCoordinator";
 import type { MessageItem } from "@/types/chat";
 
 interface UseChatSocketOptions {
   conversationId?: string | null;
   onMessageReceived?: (message: MessageItem) => void;
+  onReconnect?: () => void;
 }
 
 export function useChatSocket({
   conversationId,
   onMessageReceived,
+  onReconnect,
 }: UseChatSocketOptions) {
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wasPreviouslyConnectedRef = useRef<boolean>(false);
 
   const connect = useCallback(() => {
     if (!conversationId) return;
 
+    // Check visibility and network before connecting
+    if (!refreshCoordinator.isOnline() || !refreshCoordinator.isTabVisible()) {
+      return;
+    }
+
     const token = sessionStorage.getItem(TOKEN_STORAGE_KEY);
     if (!token) {
       setConnectionError("No authentication token available.");
+      return;
+    }
+
+    // Clean up existing socket if any
+    if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
       return;
     }
 
@@ -50,6 +64,12 @@ export function useChatSocket({
       ws.onopen = () => {
         setIsConnected(true);
         setConnectionError(null);
+
+        // If this was a reconnection after disconnect, fire onReconnect callback to catch up
+        if (wasPreviouslyConnectedRef.current) {
+          onReconnect?.();
+        }
+        wasPreviouslyConnectedRef.current = true;
 
         // Setup ping heartbeat every 20 seconds
         pingIntervalRef.current = setInterval(() => {
@@ -81,22 +101,34 @@ export function useChatSocket({
           pingIntervalRef.current = null;
         }
 
-        // Reconnect if not cleanly closed or policy violation
+        // Reconnect with backoff if not cleanly closed or policy violation
         if (event.code !== 1000 && event.code !== 1008) {
           reconnectTimeoutRef.current = setTimeout(() => {
-            connect();
+            if (refreshCoordinator.isOnline() && refreshCoordinator.isTabVisible()) {
+              connect();
+            }
           }, 3000);
         }
       };
     } catch {
       setConnectionError("Failed to initiate WebSocket connection.");
     }
-  }, [conversationId, onMessageReceived]);
+  }, [conversationId, onMessageReceived, onReconnect]);
 
   useEffect(() => {
     connect();
 
+    // Listen for tab visibility return and network reconnect to restore socket
+    const unsubscribe = refreshCoordinator.subscribe((scopes) => {
+      if (scopes.includes("visibility_visible") || scopes.includes("network_online")) {
+        if (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED) {
+          connect();
+        }
+      }
+    });
+
     return () => {
+      unsubscribe();
       if (pingIntervalRef.current) {
         clearInterval(pingIntervalRef.current);
         pingIntervalRef.current = null;
@@ -129,5 +161,6 @@ export function useChatSocket({
     isConnected,
     connectionError,
     sendRealtimeMessage,
+    reconnect: connect,
   };
 }

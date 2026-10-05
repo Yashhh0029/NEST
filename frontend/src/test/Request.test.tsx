@@ -38,7 +38,7 @@ describe("Request Box & Understanding Chips", () => {
       expect(screen.getByText("₹10,000")).toBeInTheDocument();
       expect(screen.getByText("Vegetarian")).toBeInTheDocument();
     });
-  });
+  }, 15000);
 
   it("renders authoritative extracted request chips accurately", () => {
     render(

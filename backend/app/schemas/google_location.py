@@ -12,6 +12,9 @@ class PlaceAutocompletePrediction(BaseModel):
 class AutocompleteRequest(BaseModel):
     input_text: str = Field(..., min_length=1, max_length=200)
     session_token: Optional[str] = None
+    latitude: Optional[float] = Field(None, ge=-90.0, le=90.0)
+    longitude: Optional[float] = Field(None, ge=-180.0, le=180.0)
+    radius_meters: Optional[float] = Field(None, ge=100.0, le=100000.0)
 
 
 class AutocompleteResponse(BaseModel):

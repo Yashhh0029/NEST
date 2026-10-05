@@ -1,6 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { requestsService } from "@/services/requests";
+import { refreshCoordinator } from "@/services/refreshCoordinator";
+import { useAutoRefresh } from "@/hooks/useAutoRefresh";
+import { RefreshStatus } from "@/components/common/RefreshStatus";
 import { useToast } from "@/hooks/useToast";
 import { RequestCard } from "@/components/request/RequestCard";
 import { Button } from "@/components/ui/Button";
@@ -11,25 +14,27 @@ import type { NewcomerRequest } from "@/types/request";
 import { PlusCircle, FileText, Trash2 } from "lucide-react";
 
 export function RequestsPage() {
-  const [requests, setRequests] = useState<NewcomerRequest[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const { success: toastSuccess, error: toastError } = useToast();
 
-  const fetchRequests = () => {
-    setIsLoading(true);
-    requestsService
-      .getMyRequests()
-      .then((data) => setRequests(data))
-      .catch(() => toastError("Could not load requests. Please retry."))
-      .finally(() => setIsLoading(false));
-  };
-
-  useEffect(() => {
-    fetchRequests();
-  }, []);
+  const {
+    data: requests = [],
+    setData: setRequests,
+    isLoading,
+    isRefreshing,
+    isOffline,
+    error: refreshError,
+    lastUpdated,
+    refreshNow,
+  } = useAutoRefresh<NewcomerRequest[]>({
+    queryKey: "my_requests",
+    fetchFn: (signal) => requestsService.getMyRequests(signal),
+    interval: 45000,
+    scopes: ["requests"],
+    onError: () => toastError("Could not load requests. Please retry."),
+  });
 
   const confirmDelete = async () => {
     if (!deleteTargetId) return;
@@ -37,9 +42,11 @@ export function RequestsPage() {
     setIsDeleting(true);
     try {
       await requestsService.deleteRequest(deleteTargetId);
-      setRequests((prev) => prev.filter((r) => r.id !== deleteTargetId));
+      setRequests((prev) => (prev ? prev.filter((r) => r.id !== deleteTargetId) : []));
       toastSuccess("Request deleted successfully.");
       setDeleteTargetId(null);
+      // Invalidate requests & nearby feeds immediately
+      refreshCoordinator.invalidate(["requests", "nearby_requests"]);
     } catch {
       toastError("Failed to delete request.");
     } finally {
@@ -61,9 +68,18 @@ export function RequestsPage() {
           </p>
         </div>
 
-        <Link to="/home">
-          <Button leftIcon={<PlusCircle className="w-4 h-4" />}>New Request</Button>
-        </Link>
+        <div className="flex items-center gap-3">
+          <RefreshStatus
+            lastUpdated={lastUpdated}
+            isRefreshing={isRefreshing}
+            isOffline={isOffline}
+            error={refreshError}
+            onRefresh={refreshNow}
+          />
+          <Link to="/home">
+            <Button leftIcon={<PlusCircle className="w-4 h-4" />}>New Request</Button>
+          </Link>
+        </div>
       </div>
 
       {/* Loading Skeleton */}

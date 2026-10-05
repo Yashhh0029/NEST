@@ -19,6 +19,7 @@ export function LocationPicker({
 }: LocationPickerProps) {
   const [isLocating, setIsLocating] = useState(false);
   const [geoError, setGeoError] = useState<string | null>(null);
+  const [pendingDetectedLocation, setPendingDetectedLocation] = useState<LocationCreateOrUpdatePayload | null>(null);
   const [showManualFields, setShowManualFields] = useState(
     Boolean(value.city || value.area || value.location_source === "manual")
   );
@@ -43,6 +44,7 @@ export function LocationPicker({
         location_source: details.location_source || "google_places",
         location_precision: details.location_precision || "locality",
       });
+      setPendingDetectedLocation(null);
       setGeoError(null);
     } catch (err) {
       // Fallback: use prediction text directly
@@ -55,6 +57,7 @@ export function LocationPicker({
         location_source: "manual",
         location_precision: "locality",
       });
+      setPendingDetectedLocation(null);
     }
   };
 
@@ -76,7 +79,8 @@ export function LocationPicker({
 
           const resolvedCity = resolved.city || resolved.area || "Selected Location";
 
-          onChange({
+          // Require explicit user confirmation before applying detected GPS location
+          setPendingDetectedLocation({
             city: resolvedCity,
             area: resolved.area || undefined,
             state: resolved.state || undefined,
@@ -85,10 +89,11 @@ export function LocationPicker({
             longitude: lon,
             google_place_id: resolved.google_place_id || undefined,
             formatted_address: resolved.formatted_address || undefined,
+            display_name: (resolved.name || resolved.display_name || resolved.area || resolved.city) || undefined,
             postal_code: resolved.postal_code || undefined,
             private_unit: value.private_unit,
             location_source: "browser_geolocation",
-            location_precision: "rooftop",
+            location_precision: resolved.location_precision || "rooftop",
           });
         } catch (err) {
           setGeoError("Failed to resolve current coordinates. Please search manually.");
@@ -127,6 +132,11 @@ export function LocationPicker({
           onSelectPrediction={handleSelectPrediction}
           initialValue={value.formatted_address || [value.area, value.city].filter(Boolean).join(", ")}
           disabled={disabled}
+          biasCoords={
+            value.latitude != null && value.longitude != null
+              ? { latitude: value.latitude, longitude: value.longitude }
+              : null
+          }
         />
       </div>
 
@@ -163,6 +173,55 @@ export function LocationPicker({
         </div>
       )}
 
+      {/* Explicit Confirmation Dialog for Current GPS Detected Location */}
+      {pendingDetectedLocation && (
+        <div className="p-4 rounded-xl border border-teal-300 dark:border-teal-700 bg-teal-50/90 dark:bg-brand-dark-card space-y-3 shadow-sm animate-fade-in">
+          <div className="flex items-center gap-2">
+            <Navigation className="w-4 h-4 text-brand-primary animate-pulse" />
+            <h4 className="text-xs font-bold uppercase tracking-wider text-teal-900 dark:text-teal-200">
+              Current Location Detected via Device GPS
+            </h4>
+          </div>
+          <div className="text-xs space-y-1.5 text-gray-800 dark:text-gray-200 bg-white dark:bg-brand-dark-surface p-3 rounded-lg border border-teal-200 dark:border-teal-800">
+            <p className="font-bold text-sm text-gray-900 dark:text-white">
+              📍 {pendingDetectedLocation.display_name || pendingDetectedLocation.area || pendingDetectedLocation.city}
+            </p>
+            {pendingDetectedLocation.formatted_address && (
+              <p className="text-xs text-gray-600 dark:text-gray-400">
+                {pendingDetectedLocation.formatted_address}
+              </p>
+            )}
+            <div className="flex items-center gap-3 pt-1 text-[11px] text-gray-500 dark:text-gray-400 font-mono flex-wrap">
+              <span>City: {pendingDetectedLocation.city}</span>
+              {pendingDetectedLocation.area && <span>Area: {pendingDetectedLocation.area}</span>}
+              {pendingDetectedLocation.postal_code && <span>PIN: {pendingDetectedLocation.postal_code}</span>}
+              {pendingDetectedLocation.latitude != null && (
+                <span>({pendingDetectedLocation.latitude.toFixed(4)}°, {pendingDetectedLocation.longitude?.toFixed(4)}°)</span>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 pt-0.5">
+            <button
+              type="button"
+              onClick={() => {
+                onChange(pendingDetectedLocation);
+                setPendingDetectedLocation(null);
+              }}
+              className="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-brand-primary text-white hover:bg-brand-primary/90 transition-colors shadow-sm"
+            >
+              Use this location
+            </button>
+            <button
+              type="button"
+              onClick={() => setPendingDetectedLocation(null)}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 dark:border-brand-dark-border text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-brand-dark-muted/40 transition-colors"
+            >
+              Change / Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Selected Location Summary Chip */}
       {hasLocation && (
         <div className="p-3.5 rounded-xl bg-teal-50/80 dark:bg-brand-dark-card border border-teal-200/80 dark:border-brand-dark-border flex items-center justify-between gap-3 text-xs shadow-sm">
@@ -181,6 +240,9 @@ export function LocationPicker({
               </p>
               <div className="flex items-center gap-2 mt-0.5 text-[11px] text-gray-600 dark:text-gray-300 flex-wrap">
                 <span className="capitalize font-medium">Source: {value.location_source?.replace("_", " ") || "Manual"}</span>
+                <span className="capitalize font-medium px-1.5 py-0.2 rounded bg-teal-100/70 dark:bg-teal-900/30 text-teal-800 dark:text-teal-300 text-[10px]">
+                  Precision: {value.location_precision || "locality"}
+                </span>
                 {value.latitude != null && value.longitude != null && (
                   <span className="font-mono text-[10px] text-teal-800 dark:text-teal-300 font-semibold">
                     ({value.latitude.toFixed(4)}°, {value.longitude.toFixed(4)}°)

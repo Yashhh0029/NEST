@@ -235,7 +235,7 @@ export function RegisterPage() {
           {/* Name */}
           <Input
             label="Full Name *"
-            placeholder="e.g. Priya Sharma"
+            placeholder="e.g. Yash Kadam"
             error={errors.name?.message}
             {...register("name")}
           />

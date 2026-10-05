@@ -28,10 +28,16 @@ router = APIRouter()
 def autocomplete_places_get(
     input_text: str = Query(..., min_length=1, max_length=200),
     session_token: Optional[str] = Query(None),
+    latitude: Optional[float] = Query(None, ge=-90.0, le=90.0),
+    longitude: Optional[float] = Query(None, ge=-180.0, le=180.0),
+    radius_meters: Optional[float] = Query(None, ge=100.0, le=100000.0),
 ) -> AutocompleteResponse:
     predictions = google_maps_service.autocomplete_places(
         input_text=input_text,
         session_token=session_token,
+        latitude=latitude,
+        longitude=longitude,
+        radius_meters=radius_meters,
     )
     return AutocompleteResponse(predictions=predictions)
 
@@ -52,6 +58,9 @@ def autocomplete_places(
     predictions = google_maps_service.autocomplete_places(
         input_text=payload.input_text,
         session_token=payload.session_token,
+        latitude=payload.latitude,
+        longitude=payload.longitude,
+        radius_meters=payload.radius_meters,
     )
     return AutocompleteResponse(predictions=predictions)
 

@@ -4,6 +4,8 @@ import { requestsService } from "@/services/requests";
 import { intelligenceService } from "@/services/intelligence";
 import { createConnection, listConnections } from "@/services/connections";
 import { useToast } from "@/hooks/useToast";
+import { refreshCoordinator } from "@/services/refreshCoordinator";
+import { RefreshStatus } from "@/components/common/RefreshStatus";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -39,6 +41,8 @@ export function RequestDetailPage() {
   const [intelligence, setIntelligence] = useState<RequestIntelligenceResponse | null>(null);
   const [connections, setConnections] = useState<ConnectionItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState("");
   const [isUpdating, setIsUpdating] = useState(false);
@@ -54,9 +58,13 @@ export function RequestDetailPage() {
   const navigate = useNavigate();
   const { success: toastSuccess, error: toastError } = useToast();
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (isBackground = false) => {
     if (!id) return;
-    setIsLoading(true);
+    if (isBackground) {
+      setIsRefreshing(true);
+    } else {
+      setIsLoading(true);
+    }
     try {
       const [reqData, intelData, connsData] = await Promise.all([
         requestsService.getRequestById(id),
@@ -69,16 +77,40 @@ export function RequestDetailPage() {
       setConnections(
         (connsData.connections || []).filter((c) => c.request_id === id)
       );
+      setLastUpdated(new Date());
     } catch {
       toastError("Could not find this request.");
       navigate("/requests");
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   }, [id, navigate, toastError]);
 
   useEffect(() => {
-    loadData();
+    loadData(false);
+
+    const unsubscribe = refreshCoordinator.subscribe((scopes) => {
+      if (
+        scopes.includes("requests") ||
+        scopes.includes("connections") ||
+        scopes.includes("visibility_visible") ||
+        scopes.includes("network_online")
+      ) {
+        loadData(true);
+      }
+    }, ["requests", "connections"]);
+
+    const timer = setInterval(() => {
+      if (refreshCoordinator.isTabVisible() && refreshCoordinator.isOnline()) {
+        loadData(true);
+      }
+    }, 30000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(timer);
+    };
   }, [loadData]);
 
   const handleUpdate = async (e: React.FormEvent) => {
@@ -93,6 +125,7 @@ export function RequestDetailPage() {
       setRequest(updated);
       setIsEditing(false);
       toastSuccess("Request updated and re-parsed by backend NLP engine!", "Updated");
+      refreshCoordinator.invalidate(["requests", "nearby_requests"]);
       // Reload intelligence
       const intelData = await intelligenceService.getIntelligence(id);
       setIntelligence(intelData);
@@ -107,6 +140,7 @@ export function RequestDetailPage() {
     if (!id) return;
     try {
       await requestsService.deleteRequest(id);
+      refreshCoordinator.invalidate(["requests", "nearby_requests"]);
       toastSuccess("Request deleted.");
       navigate("/requests");
     } catch {
@@ -192,7 +226,8 @@ export function RequestDetailPage() {
       toastSuccess(`Connection request sent to ${connectingHelper.name}!`, "Connected");
       setConnectingHelper(null);
       setInitialMessage("");
-      loadData();
+      refreshCoordinator.invalidate(["connections", "requests", "notifications"]);
+      loadData(false);
     } catch {
       toastError("Failed to send connection request.");
     } finally {
@@ -237,6 +272,11 @@ export function RequestDetailPage() {
         </Link>
 
         <div className="flex items-center gap-2 flex-wrap">
+          <RefreshStatus
+            lastUpdated={lastUpdated}
+            isRefreshing={isRefreshing}
+            onRefresh={() => loadData(false)}
+          />
           <Link to={`/results/${request.id}`}>
             <Button
               variant="outline"
