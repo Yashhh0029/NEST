@@ -20,7 +20,7 @@ class ConnectionCreate(BaseModel):
 
 
 class ConnectionStatusUpdate(BaseModel):
-    action: str = Field(..., description="Action to take: 'accept', 'decline', 'cancel', or 'complete'")
+    action: str = Field(..., description="Action to take: 'accept', 'decline', 'cancel', 'complete', or 'reactivate'")
 
 
 class ConnectionUserSummary(BaseModel):

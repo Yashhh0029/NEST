@@ -17,6 +17,7 @@ export interface MessageItem {
 export interface ConversationItem {
   id: string;
   connection_id: string;
+  connection_status?: string | null;
   partner: ConnectionUserSummary;
   request?: ConnectionRequestSummary | null;
   created_at: string;

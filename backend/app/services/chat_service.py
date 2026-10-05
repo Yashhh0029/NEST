@@ -168,6 +168,7 @@ def format_conversation_response(
     return ConversationResponse(
         id=conversation.id,
         connection_id=conversation.connection_id,
+        connection_status=conn.status,
         partner=partner_summary,
         request=request_summary,
         created_at=conversation.created_at,

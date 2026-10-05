@@ -134,6 +134,27 @@ def complete_interaction(
 
 
 @router.post(
+    "/{connection_id}/reactivate",
+    response_model=ConnectionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Reactivate a completed connection",
+)
+def reactivate_interaction(
+    connection_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ConnectionResponse:
+    """
+    Reactivate a completed connection:
+    - Either participant (requester or helper) may reactivate.
+    - Restores connection status to ACCEPTED.
+    - Preserves all conversation history, messages, and previous review/reputation data.
+    - Safety checks: blocked users, moderation restrictions, and deactivated accounts cannot reactivate.
+    """
+    return update_connection_status(db, connection_id, current_user, "reactivate")
+
+
+@router.post(
     "/{connection_id}/reviews",
     response_model=ReviewResponse,
     status_code=status.HTTP_201_CREATED,

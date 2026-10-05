@@ -29,7 +29,7 @@ export async function getConnectionById(id: string): Promise<ConnectionItem> {
 
 export async function updateConnectionStatus(
   id: string,
-  action: "accept" | "decline" | "cancel" | "complete"
+  action: "accept" | "decline" | "cancel" | "complete" | "reactivate"
 ): Promise<ConnectionItem> {
   const resp = await api.patch<ConnectionItem>(`/api/connections/${id}`, {
     action,
@@ -39,5 +39,10 @@ export async function updateConnectionStatus(
 
 export async function completeConnection(id: string): Promise<ConnectionItem> {
   const resp = await api.post<ConnectionItem>(`/api/connections/${id}/complete`);
+  return resp.data;
+}
+
+export async function reactivateConnection(id: string): Promise<ConnectionItem> {
+  const resp = await api.post<ConnectionItem>(`/api/connections/${id}/reactivate`);
   return resp.data;
 }

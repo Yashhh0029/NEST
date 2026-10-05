@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import { HelperCard } from "@/components/match/HelperCard";
 import { ConnectionsPage } from "@/pages/ConnectionsPage";
 import * as connectionsService from "@/services/connections";
+import * as reviewService from "@/services/reviews";
 import { useAuthStore } from "@/store/useAuthStore";
 import type { HelperMatchItem } from "@/types/match";
 import type { ConnectionItem } from "@/types/connection";
@@ -108,6 +109,30 @@ const sampleConnections: ConnectionItem[] = [
   },
 ];
 
+const sampleCompletedConnection: ConnectionItem = {
+  id: "conn-4",
+  request_id: "req-4",
+  requester_id: "user-current",
+  helper_id: "helper-789",
+  status: "COMPLETED",
+  created_at: "2026-02-25T09:00:00Z",
+  updated_at: "2026-02-26T12:00:00Z",
+  completed_at: "2026-02-26T12:00:00Z",
+  helper: {
+    id: "helper-789",
+    name: "Ananya Roy",
+    headline: "Local Guide",
+    city: "Bengaluru",
+    area: "Whitefield",
+  },
+  request: {
+    id: "req-4",
+    raw_text: "Need local recommendations",
+    city: "Bengaluru",
+    area: "Whitefield",
+  },
+};
+
 describe("Phase 7 Connection System UI", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -121,6 +146,7 @@ describe("Phase 7 Connection System UI", () => {
       isAuthenticated: true,
       loading: false,
     });
+    vi.spyOn(reviewService, "getConnectionReviews").mockResolvedValue({ reviews: [] } as any);
   });
 
   describe("HelperCard Connection States", () => {
@@ -260,6 +286,62 @@ describe("Phase 7 Connection System UI", () => {
       await waitFor(() => {
         expect(screen.getByText("Vikram Sen")).toBeInTheDocument();
         expect(screen.getByText("Helper")).toBeInTheDocument();
+      });
+    });
+
+    it("displays Reactivate conversation button for completed connections and handles confirmation modal", async () => {
+      const connsWithCompleted = [...sampleConnections, sampleCompletedConnection];
+      vi.spyOn(connectionsService, "listConnections").mockResolvedValue({
+        total: connsWithCompleted.length,
+        connections: connsWithCompleted,
+      });
+
+      const reactivateSpy = vi.spyOn(connectionsService, "reactivateConnection").mockResolvedValue({
+        ...sampleCompletedConnection,
+        status: "ACCEPTED",
+      });
+
+      render(
+        <BrowserRouter>
+          <ConnectionsPage />
+        </BrowserRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("Connections")).toBeInTheDocument();
+      });
+
+      const activeTab = screen.getByRole("button", { name: /Active/i });
+      fireEvent.click(activeTab);
+
+      await waitFor(() => {
+        expect(screen.getByText("Ananya Roy")).toBeInTheDocument();
+      });
+
+      const reactivateBtn = screen.getByRole("button", { name: /Reactivate conversation/i });
+      expect(reactivateBtn).toBeInTheDocument();
+
+      // Click to open confirmation modal
+      fireEvent.click(reactivateBtn);
+
+      expect(screen.getByRole("heading", { name: /Reactivate conversation\?/i })).toBeInTheDocument();
+      expect(
+        screen.getByText(/You and the other person will be able to message each other again\. Previous messages will remain available\./i)
+      ).toBeInTheDocument();
+
+      // Click Cancel - modal closes
+      const cancelBtn = screen.getByRole("button", { name: "Cancel" });
+      fireEvent.click(cancelBtn);
+      expect(screen.queryByRole("heading", { name: /Reactivate conversation\?/i })).not.toBeInTheDocument();
+      expect(reactivateSpy).not.toHaveBeenCalled();
+
+      // Open again and confirm
+      fireEvent.click(reactivateBtn);
+      const confirmBtn = screen.getByRole("button", { name: "Reactivate" });
+      fireEvent.click(confirmBtn);
+
+      await waitFor(() => {
+        expect(reactivateSpy).toHaveBeenCalledWith("conn-4");
       });
     });
   });

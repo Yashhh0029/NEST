@@ -656,3 +656,39 @@ def admin_list_audit_logs(
         )
 
     return ModerationActionListResponse(total=total, actions=items)
+
+
+def is_connection_safety_restricted(db: Session, connection_id: uuid.UUID) -> bool:
+    """
+    Check if a connection is restricted due to a safety/moderation action
+    (e.g., active unresolved reports or moderation actions associated with this connection).
+    """
+    # 1. Unresolved reports targeting this connection
+    active_report = (
+        db.query(Report)
+        .filter(
+            Report.connection_id == connection_id,
+            Report.status.in_([ReportStatus.OPEN.value, ReportStatus.UNDER_REVIEW.value]),
+        )
+        .first()
+    )
+    if active_report:
+        return True
+
+    # 2. Moderation actions on reports linked to this connection that resulted in resolution/action
+    resolved_action = (
+        db.query(ModerationAction)
+        .join(Report, ModerationAction.report_id == Report.id)
+        .filter(
+            Report.connection_id == connection_id,
+            ModerationAction.action.in_([
+                ModerationActionType.REPORT_RESOLVED,
+                ModerationActionType.USER_SUSPENDED,
+            ]),
+        )
+        .first()
+    )
+    if resolved_action:
+        return True
+
+    return False

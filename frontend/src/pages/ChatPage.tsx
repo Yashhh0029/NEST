@@ -10,6 +10,8 @@ import {
   deleteMessage,
   translateChatMessage,
 } from "@/services/chat";
+import { getConnectionById } from "@/services/connections";
+import { useToast } from "@/hooks/useToast";
 import { useChatSocket } from "@/hooks/useChatSocket";
 import { refreshCoordinator } from "@/services/refreshCoordinator";
 import type { ConversationItem, MessageItem } from "@/types/chat";
@@ -19,6 +21,7 @@ import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { BlockConfirmModal } from "@/components/safety/BlockConfirmModal";
 import { ReportModal } from "@/components/safety/ReportModal";
+import { ReactivateConfirmModal } from "@/components/common/ReactivateConfirmModal";
 import {
   ArrowLeft,
   Send,
@@ -35,6 +38,7 @@ import {
   ShieldAlert,
   Flag,
   Languages,
+  RotateCcw,
 } from "lucide-react";
 
 interface MessageTranslation {
@@ -68,8 +72,11 @@ export function ChatPage() {
 
   const [showBlockModal, setShowBlockModal] = useState<boolean>(false);
   const [showReportModal, setShowReportModal] = useState<boolean>(false);
+  const [showReactivateModal, setShowReactivateModal] = useState<boolean>(false);
   const [reportingMessageId, setReportingMessageId] = useState<string | undefined>(undefined);
   const [isPartnerBlocked, setIsPartnerBlocked] = useState<boolean>(false);
+  const [connectionStatus, setConnectionStatus] = useState<string | null>(null);
+  const { success: toastSuccess } = useToast();
 
   // Multilingual translation state
   const [targetLang, setTargetLang] = useState<string>("en");
@@ -223,6 +230,18 @@ export function ChatPage() {
 
         if (!isMounted) return;
         setConversation(conv);
+        if (conv.connection_status) {
+          setConnectionStatus(conv.connection_status);
+        }
+
+        try {
+          const connData = await getConnectionById(connectionId);
+          if (isMounted && connData?.status) {
+            setConnectionStatus(connData.status);
+          }
+        } catch {
+          // Fallback to conv.connection_status
+        }
 
         // Fetch messages for conversation
         const msgs = await getMessages(conv.id);
@@ -409,8 +428,11 @@ export function ChatPage() {
                 {partner?.name || "Community Member"}
               </h2>
               <span className="hidden sm:inline-flex">
-                <Badge variant="primary" size="sm">
-                  Connected
+                <Badge
+                  variant={connectionStatus === "COMPLETED" ? "neutral" : "primary"}
+                  size="sm"
+                >
+                  {connectionStatus === "COMPLETED" ? "Completed" : "Connected"}
                 </Badge>
               </span>
             </div>
@@ -481,6 +503,20 @@ export function ChatPage() {
                 <span className="hidden sm:inline">Block</span>
               </button>
             </div>
+          )}
+
+          {connectionStatus === "COMPLETED" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowReactivateModal(true)}
+              className="text-xs h-8 px-2 sm:px-3 text-brand-primary border-brand-primary/40 hover:bg-brand-primary/10"
+              title="Reactivate this conversation to resume messaging"
+            >
+              <RotateCcw className="w-3.5 h-3.5 mr-1" />
+              <span className="hidden sm:inline">Reactivate conversation</span>
+              <span className="sm:hidden">Reactivate</span>
+            </Button>
           )}
 
           {/* Live status badge */}
@@ -752,7 +788,7 @@ export function ChatPage() {
         </div>
       )}
 
-      {/* Composer or Blocked Notice */}
+      {/* Composer or Blocked/Completed Notice */}
       {isPartnerBlocked ? (
         <div className="p-4 border-t border-gray-200 dark:border-brand-dark-border bg-gray-50/90 dark:bg-brand-dark-muted/40 text-center text-xs text-gray-500 space-y-1">
           <p className="font-semibold text-gray-700 dark:text-gray-300">
@@ -761,6 +797,26 @@ export function ChatPage() {
           <p>
             Historical messages remain readable for your records, but no further messages can be sent or received.
           </p>
+        </div>
+      ) : connectionStatus === "COMPLETED" ? (
+        <div className="p-4 border-t border-gray-200 dark:border-brand-dark-border bg-gray-50/90 dark:bg-brand-dark-muted/30 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+          <div className="space-y-0.5 text-center sm:text-left">
+            <p className="font-semibold text-gray-800 dark:text-gray-200">
+              This interaction has been marked as completed.
+            </p>
+            <p className="text-gray-500 dark:text-gray-400">
+              Messaging is currently closed. You can reactivate this conversation to message each other again.
+            </p>
+          </div>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => setShowReactivateModal(true)}
+            className="shrink-0 min-h-[36px]"
+          >
+            <RotateCcw className="w-4 h-4 mr-1.5" />
+            Reactivate conversation
+          </Button>
         </div>
       ) : (
         <form
@@ -809,6 +865,24 @@ export function ChatPage() {
           onClose={() => {
             setShowReportModal(false);
             setReportingMessageId(undefined);
+          }}
+        />
+      )}
+
+      {/* Reactivate Modal */}
+      {showReactivateModal && connectionId && (
+        <ReactivateConfirmModal
+          isOpen={showReactivateModal}
+          connectionId={connectionId}
+          partnerName={partner?.name}
+          onClose={() => setShowReactivateModal(false)}
+          onSuccess={() => {
+            setConnectionStatus("ACCEPTED");
+            setConversation((prev) =>
+              prev ? { ...prev, connection_status: "ACCEPTED" } : prev
+            );
+            toastSuccess("Conversation reactivated ✓");
+            refreshCoordinator.invalidate(["connections", "chat", "notifications"]);
           }}
         />
       )}

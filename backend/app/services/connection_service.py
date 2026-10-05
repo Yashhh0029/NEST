@@ -15,7 +15,10 @@ from app.schemas.connection import (
     ConnectionStatusEnum,
     ConnectionUserSummary,
 )
-from app.services.safety_service import is_blocked_bidirectional
+from app.services.safety_service import (
+    is_blocked_bidirectional,
+    is_connection_safety_restricted,
+)
 
 
 
@@ -231,6 +234,45 @@ def update_connection_status(
     clean_action = action.strip().lower()
     now = datetime.now(timezone.utc)
 
+    if clean_action == "reactivate":
+        if conn.requester_id != current_user.id and conn.helper_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only participants in this connection can reactivate it.",
+            )
+        if conn.status != ConnectionStatus.COMPLETED.value:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Only completed connections can be reactivated. Current status: '{conn.status}'.",
+            )
+        # Safety rules:
+        # 1. Blocked check
+        if is_blocked_bidirectional(db, conn.requester_id, conn.helper_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Action not permitted due to safety restrictions.",
+            )
+        # 2. Safety / moderation restriction check
+        if is_connection_safety_restricted(db, conn.id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This conversation cannot be reactivated due to active safety/moderation restrictions.",
+            )
+        # 3. User active / not suspended check
+        other_user_id = conn.helper_id if current_user.id == conn.requester_id else conn.requester_id
+        other_user = db.query(User).filter(User.id == other_user_id).first()
+        if not current_user.is_active or (other_user and not other_user.is_active):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot reactivate conversation because an account is suspended or deactivated.",
+            )
+
+        conn.status = ConnectionStatus.ACCEPTED.value
+        conn.updated_at = now
+        db.commit()
+        db.refresh(conn)
+        return _hydrate_connection_response(db, conn)
+
     if conn.status == ConnectionStatus.COMPLETED.value:
         if clean_action == "complete":
             return _hydrate_connection_response(db, conn)
@@ -313,7 +355,7 @@ def update_connection_status(
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid action '{action}'. Valid actions are 'accept', 'decline', 'cancel', 'complete'.",
+            detail=f"Invalid action '{action}'. Valid actions are 'accept', 'decline', 'cancel', 'complete', 'reactivate'.",
         )
 
     db.commit()

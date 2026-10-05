@@ -52,6 +52,7 @@ class ConversationCreate(BaseModel):
 class ConversationResponse(BaseModel):
     id: uuid.UUID
     connection_id: uuid.UUID
+    connection_status: Optional[str] = None
     partner: ConnectionUserSummary
     request: Optional[ConnectionRequestSummary] = None
     created_at: datetime

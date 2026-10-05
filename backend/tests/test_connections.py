@@ -281,3 +281,235 @@ def test_nonexistent_connection_returns_404(client: TestClient):
 
     resp_patch = client.patch(f"/api/connections/{fake_id}", headers=user["headers"], json={"action": "accept"})
     assert resp_patch.status_code == 404
+
+
+def test_reactivate_completed_connection_by_finder_and_helper(client: TestClient):
+    """
+    Finder or Helper can reactivate a completed connection.
+    Both users can message each other again and history is preserved.
+    """
+    finder = create_authenticated_user(client, "Finder User", "finder_react@example.test")
+    helper = create_authenticated_user(client, "Helper User", "helper_react@example.test")
+
+    # 1. Create request & connection
+    req_resp = client.post(
+        "/api/requests",
+        headers=finder["headers"],
+        json={"text": "Looking for advice in Baner Pune"},
+    )
+    req_id = req_resp.json()["id"]
+
+    conn_resp = client.post(
+        "/api/connections",
+        headers=finder["headers"],
+        json={"request_id": req_id, "helper_id": str(helper["user"]["id"])},
+    )
+    conn_id = conn_resp.json()["id"]
+
+    # 2. Accept connection
+    client.patch(
+        f"/api/connections/{conn_id}",
+        headers=helper["headers"],
+        json={"action": "accept"},
+    )
+
+    # 3. Create conversation and send first message
+    conv_resp = client.post(
+        "/api/conversations",
+        headers=finder["headers"],
+        json={"connection_id": conn_id},
+    )
+    conv_id = conv_resp.json()["id"]
+
+    msg1_resp = client.post(
+        f"/api/conversations/{conv_id}/messages",
+        headers=finder["headers"],
+        json={"content": "Hello helper, need some local tips!"},
+    )
+    assert msg1_resp.status_code == 201
+    msg1_id = msg1_resp.json()["id"]
+
+    # 4. Mark completed
+    complete_resp = client.post(
+        f"/api/connections/{conn_id}/complete",
+        headers=finder["headers"],
+    )
+    assert complete_resp.status_code == 200
+    assert complete_resp.json()["status"] == "COMPLETED"
+
+    # 5. Verify messaging is blocked while COMPLETED
+    blocked_msg = client.post(
+        f"/api/conversations/{conv_id}/messages",
+        headers=helper["headers"],
+        json={"content": "Can I still reply?"},
+    )
+    assert blocked_msg.status_code == 400
+    assert "completed" in blocked_msg.json()["detail"].lower()
+
+    # 6. Reactivate conversation via POST /api/connections/{id}/reactivate
+    reactivate_resp = client.post(
+        f"/api/connections/{conn_id}/reactivate",
+        headers=helper["headers"],
+    )
+    assert reactivate_resp.status_code == 200
+    assert reactivate_resp.json()["status"] == "ACCEPTED"
+
+    # 7. Verify messages can be sent again by both users
+    msg2_resp = client.post(
+        f"/api/conversations/{conv_id}/messages",
+        headers=helper["headers"],
+        json={"content": "Reactivated! Happy to help further."},
+    )
+    assert msg2_resp.status_code == 201
+
+    msg3_resp = client.post(
+        f"/api/conversations/{conv_id}/messages",
+        headers=finder["headers"],
+        json={"content": "Awesome, thanks!"},
+    )
+    assert msg3_resp.status_code == 201
+
+    # 8. Verify message history remains fully intact
+    msgs = client.get(
+        f"/api/conversations/{conv_id}/messages",
+        headers=finder["headers"],
+    ).json()["messages"]
+    msg_ids = [m["id"] for m in msgs]
+    assert msg1_id in msg_ids
+    assert msg2_resp.json()["id"] in msg_ids
+    assert msg3_resp.json()["id"] in msg_ids
+
+
+def test_reactivate_blocked_connection_forbidden(client: TestClient):
+    """Reactivation is forbidden if either user blocked the other."""
+    finder = create_authenticated_user(client, "BlockFinder", "block_finder@example.test")
+    helper = create_authenticated_user(client, "BlockHelper", "block_helper@example.test")
+
+    req_resp = client.post(
+        "/api/requests",
+        headers=finder["headers"],
+        json={"text": "Help in Indiranagar Bengaluru"},
+    )
+    conn_resp = client.post(
+        "/api/connections",
+        headers=finder["headers"],
+        json={"request_id": req_resp.json()["id"], "helper_id": str(helper["user"]["id"])},
+    )
+    conn_id = conn_resp.json()["id"]
+
+    client.patch(f"/api/connections/{conn_id}", headers=helper["headers"], json={"action": "accept"})
+    client.post(f"/api/connections/{conn_id}/complete", headers=finder["headers"])
+
+    # Finder blocks helper
+    block_resp = client.post(
+        f"/api/blocks/{helper['user']['id']}",
+        headers=finder["headers"],
+    )
+    assert block_resp.status_code == 201
+
+    # Attempt reactivate should be rejected with 403
+    react_resp = client.post(
+        f"/api/connections/{conn_id}/reactivate",
+        headers=finder["headers"],
+    )
+    assert react_resp.status_code == 403
+    assert "safety restrictions" in react_resp.json()["detail"].lower()
+
+
+def test_reactivate_non_completed_connection_rejected(client: TestClient):
+    """Only COMPLETED connections can be reactivated."""
+    user_a = create_authenticated_user(client, "User AA", "user_aa@example.test")
+    user_b = create_authenticated_user(client, "User BB", "user_bb@example.test")
+
+    req_resp = client.post(
+        "/api/requests",
+        headers=user_a["headers"],
+        json={"text": "Need help in Aundh Pune"},
+    )
+    conn_resp = client.post(
+        "/api/connections",
+        headers=user_a["headers"],
+        json={"request_id": req_resp.json()["id"], "helper_id": str(user_b["user"]["id"])},
+    )
+    conn_id = conn_resp.json()["id"]
+
+    # Try to reactivate while PENDING
+    react_resp = client.post(
+        f"/api/connections/{conn_id}/reactivate",
+        headers=user_a["headers"],
+    )
+    assert react_resp.status_code == 400
+    assert "completed" in react_resp.json()["detail"].lower()
+
+
+def test_reactivate_safety_restricted_connection_forbidden(client: TestClient):
+    """Reactivation is forbidden if connection is flagged/restricted by safety report."""
+    finder = create_authenticated_user(client, "SafetyFinder", "safe_finder@example.test")
+    helper = create_authenticated_user(client, "SafetyHelper", "safe_helper@example.test")
+
+    req_resp = client.post(
+        "/api/requests",
+        headers=finder["headers"],
+        json={"text": "Help in Whitefield Bengaluru"},
+    )
+    conn_resp = client.post(
+        "/api/connections",
+        headers=finder["headers"],
+        json={"request_id": req_resp.json()["id"], "helper_id": str(helper["user"]["id"])},
+    )
+    conn_id = conn_resp.json()["id"]
+
+    client.patch(f"/api/connections/{conn_id}", headers=helper["headers"], json={"action": "accept"})
+    client.post(f"/api/connections/{conn_id}/complete", headers=finder["headers"])
+
+    # Finder reports helper with connection_id
+    rep_resp = client.post(
+        "/api/reports",
+        headers=finder["headers"],
+        json={
+            "reported_user_id": str(helper["user"]["id"]),
+            "connection_id": conn_id,
+            "reason": "HARASSMENT",
+            "description": "Inappropriate interaction conduct",
+        },
+    )
+    assert rep_resp.status_code == 201
+
+    # Reactivate fails with 403
+    react_resp = client.post(
+        f"/api/connections/{conn_id}/reactivate",
+        headers=finder["headers"],
+    )
+    assert react_resp.status_code == 403
+    assert "safety" in react_resp.json()["detail"].lower() and "restrictions" in react_resp.json()["detail"].lower()
+
+
+def test_reactivate_unauthorized_user_forbidden(client: TestClient):
+    """An outsider cannot reactivate another user's connection."""
+    finder = create_authenticated_user(client, "User 1", "u1@example.test")
+    helper = create_authenticated_user(client, "User 2", "u2@example.test")
+    outsider = create_authenticated_user(client, "User 3", "u3@example.test")
+
+    req_resp = client.post(
+        "/api/requests",
+        headers=finder["headers"],
+        json={"text": "Help in Viman Nagar"},
+    )
+    conn_resp = client.post(
+        "/api/connections",
+        headers=finder["headers"],
+        json={"request_id": req_resp.json()["id"], "helper_id": str(helper["user"]["id"])},
+    )
+    conn_id = conn_resp.json()["id"]
+
+    client.patch(f"/api/connections/{conn_id}", headers=helper["headers"], json={"action": "accept"})
+    client.post(f"/api/connections/{conn_id}/complete", headers=finder["headers"])
+
+    # Outsider attempts reactivation
+    react_resp = client.post(
+        f"/api/connections/{conn_id}/reactivate",
+        headers=outsider["headers"],
+    )
+    assert react_resp.status_code == 403
+
+

@@ -280,5 +280,84 @@ describe("Phase 8 Chat & Messaging Frontend", () => {
 
       expect(screen.getByText(/Show translation/i)).toBeInTheDocument();
     });
+
+    it("displays completed interaction notice, allows reactivating conversation with confirmation modal, and restores composer", async () => {
+      vi.spyOn(chatService, "getConversationByConnection").mockResolvedValue({
+        ...mockConversation,
+        connection_status: "COMPLETED",
+      });
+      vi.spyOn(connectionsService, "getConnectionById").mockResolvedValue({
+        id: "conn-active-1",
+        request_id: "req-1",
+        requester_id: "current-user",
+        helper_id: "partner-123",
+        status: "COMPLETED",
+        created_at: "2026-03-01T10:00:00Z",
+        updated_at: "2026-03-01T10:00:00Z",
+      });
+      vi.spyOn(chatService, "getMessages").mockResolvedValue({
+        total: 2,
+        has_more: false,
+        messages: mockMessages,
+      });
+      const reactivateSpy = vi.spyOn(connectionsService, "reactivateConnection").mockResolvedValue({
+        id: "conn-active-1",
+        request_id: "req-1",
+        requester_id: "current-user",
+        helper_id: "partner-123",
+        status: "ACCEPTED",
+        created_at: "2026-03-01T10:00:00Z",
+        updated_at: "2026-03-01T10:00:00Z",
+      });
+
+      render(
+        <MemoryRouter initialEntries={["/chat/conn-active-1"]}>
+          <Routes>
+            <Route path="/chat/:connectionId" element={<ChatPage />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("Sneha Patil")).toBeInTheDocument();
+      });
+
+      // Verify Completed badge and completed notice
+      expect(screen.getByText("Completed")).toBeInTheDocument();
+      expect(screen.getByText(/This interaction has been marked as completed/i)).toBeInTheDocument();
+      expect(screen.queryByPlaceholderText(/Type a message\.\.\./i)).not.toBeInTheDocument();
+
+      // Find Reactivate button
+      const reactivateBtns = screen.getAllByRole("button", { name: /Reactivate conversation/i });
+      expect(reactivateBtns.length).toBeGreaterThan(0);
+      fireEvent.click(reactivateBtns[0]);
+
+      // Verify confirmation modal
+      expect(screen.getByRole("heading", { name: /Reactivate conversation\?/i })).toBeInTheDocument();
+      expect(
+        screen.getByText(/You and the other person will be able to message each other again\. Previous messages will remain available\./i)
+      ).toBeInTheDocument();
+
+      // Cancel button
+      const cancelBtn = screen.getByRole("button", { name: "Cancel" });
+      fireEvent.click(cancelBtn);
+      expect(screen.queryByRole("heading", { name: /Reactivate conversation\?/i })).not.toBeInTheDocument();
+      expect(reactivateSpy).not.toHaveBeenCalled();
+
+      // Open and confirm
+      fireEvent.click(reactivateBtns[0]);
+      const confirmBtn = screen.getByRole("button", { name: "Reactivate" });
+      fireEvent.click(confirmBtn);
+
+      await waitFor(() => {
+        expect(reactivateSpy).toHaveBeenCalledWith("conn-active-1");
+      });
+
+      // Composer is restored
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText(/Type a message\.\.\./i)).toBeInTheDocument();
+      });
+    });
   });
 });
+

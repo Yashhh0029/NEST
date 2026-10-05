@@ -33,7 +33,9 @@ import {
   MessageSquare,
   Star,
   Check,
+  RotateCcw,
 } from "lucide-react";
+import { ReactivateConfirmModal } from "@/components/common/ReactivateConfirmModal";
 
 type TabType = "incoming" | "sent" | "active";
 
@@ -50,6 +52,8 @@ export function ConnectionsPage() {
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [isReviewModalOpen, setIsReviewModalOpen] = useState<boolean>(false);
   const [selectedConnection, setSelectedConnection] = useState<ConnectionItem | null>(null);
+  const [isReactivateModalOpen, setIsReactivateModalOpen] = useState<boolean>(false);
+  const [selectedReactivateConnection, setSelectedReactivateConnection] = useState<ConnectionItem | null>(null);
 
   const fetchReviewsForCompleted = useCallback(async (conns: ConnectionItem[]) => {
     const completedConns = conns.filter((c) => c.status === "COMPLETED");
@@ -524,6 +528,17 @@ export function ConnectionsPage() {
                             Chat History
                           </Button>
                         </Link>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedReactivateConnection(conn);
+                            setIsReactivateModalOpen(true);
+                          }}
+                        >
+                          <RotateCcw className="w-4 h-4 mr-1.5" />
+                          Reactivate conversation
+                        </Button>
                         {(() => {
                           const raw = reviewsMap[conn.id];
                           const connRevs = Array.isArray(raw)
@@ -602,6 +617,27 @@ export function ConnectionsPage() {
             } catch {
               // Ignore
             }
+          }}
+        />
+      )}
+
+      {isReactivateModalOpen && selectedReactivateConnection && (
+        <ReactivateConfirmModal
+          isOpen={isReactivateModalOpen}
+          connectionId={selectedReactivateConnection.id}
+          partnerName={
+            (selectedReactivateConnection.requester_id === user?.id
+              ? selectedReactivateConnection.helper?.name
+              : selectedReactivateConnection.requester?.name) || "Partner"
+          }
+          onClose={() => {
+            setIsReactivateModalOpen(false);
+            setSelectedReactivateConnection(null);
+          }}
+          onSuccess={() => {
+            toastSuccess("Conversation reactivated ✓");
+            fetchConnections(false);
+            refreshCoordinator.invalidate(["connections", "chat", "notifications"]);
           }}
         />
       )}
