@@ -136,18 +136,40 @@ export function NearbyRequestsFeed() {
                       <span>{item.requester_name}</span>
                       <span className="text-xs font-normal text-slate-400">needs guidance</span>
                     </h3>
-                    <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                    <div className="flex flex-col gap-0.5 mt-1 text-xs">
                       {(item.display_name || item.area || item.city || item.formatted_address) && (
-                        <span className="flex items-center gap-1">
-                          <MapPin className="w-3 h-3 text-teal-600" />
-                          {item.formatted_address || Array.from(new Set([item.display_name, item.area, item.city, item.state])).filter(Boolean).join(", ") || item.city}
-                        </span>
+                        <div className="flex items-center gap-1 text-slate-700 dark:text-slate-300 font-medium">
+                          <MapPin className="w-3 h-3 text-teal-600 shrink-0" />
+                          <span>
+                            {item.formatted_address?.replace(/, India$/, "") ||
+                              Array.from(new Set([item.display_name, item.area, item.city, item.state]))
+                                .filter(Boolean)
+                                .join(", ") ||
+                              item.city}
+                          </span>
+                        </div>
                       )}
-                      {item.distance_km !== null && item.distance_km !== undefined && (
-                        <span className="font-medium text-teal-700 dark:text-teal-400">
-                          • {item.distance_km} km away
-                        </span>
-                      )}
+                      <div>
+                        {(!item.location_precision ||
+                          [
+                            "approximate",
+                            "locality",
+                            "neighborhood",
+                            "sublocality",
+                            "sublocality_level_1",
+                            "sublocality_level_2",
+                            "administrative_area",
+                            "country",
+                          ].includes(item.location_precision.toLowerCase())) ? (
+                          <span className="inline-flex items-center text-[11px] font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded border border-amber-200/60 dark:border-amber-900/40">
+                            Nearby · approximate target area
+                          </span>
+                        ) : item.distance_km !== null && item.distance_km !== undefined ? (
+                          <span className="font-semibold text-teal-700 dark:text-teal-400">
+                            • {item.distance_km} km away
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
 

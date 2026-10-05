@@ -355,7 +355,12 @@ def get_nearby_requests_for_helper(
                         except Exception:
                             db.rollback()
 
-        effective_radius_km: float = radius_km if radius_km is not None else 25.0
+        CANONICAL_NEARBY_RADIUS_KM: float = 20.0
+        effective_radius_km: float = (
+            min(float(radius_km), CANONICAL_NEARBY_RADIUS_KM)
+            if radius_km is not None
+            else CANONICAL_NEARBY_RADIUS_KM
+        )
         dist_km = None
 
         if helper_lat is not None and helper_lon is not None:
@@ -407,6 +412,7 @@ def get_nearby_requests_for_helper(
         canonical_country = req_loc.country if req_loc and req_loc.country else req.country
         canonical_display = req_loc.display_name if req_loc else None
         canonical_formatted = req_loc.formatted_address if req_loc else None
+        canonical_precision = req_loc.location_precision if req_loc and req_loc.location_precision else "approximate"
 
         item = NearbyRequestItem(
             id=req.id,
@@ -431,6 +437,7 @@ def get_nearby_requests_for_helper(
             is_time_flexible=req.is_time_flexible,
             needs=needs_list,
             distance_km=dist_km,
+            location_precision=canonical_precision,
             match_reasons=reasons,
             created_at=req.created_at,
         )

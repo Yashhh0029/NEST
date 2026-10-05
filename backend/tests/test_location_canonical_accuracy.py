@@ -285,3 +285,273 @@ def test_nearby_feed_derives_display_from_canonical_request_location():
 
     finally:
         db.close()
+
+
+def test_nearby_feed_boundary_20km_rule():
+    """
+    NEST NEARBY REQUESTS — CANONICAL 20 KM PRODUCT RULE:
+    19.9 km -> visible
+    20.0 km -> visible
+    20.1 km -> EXCLUDED
+    20.9 km -> EXCLUDED (proves live bug fix between Place 1 and Place 2)
+    Ranoli, Gujarat -> EXCLUDED for helper in Pune
+    """
+    db = SessionLocal()
+    try:
+        # Helper at Place 2 (Mahalunge, Pune: lat=18.57382, lon=73.756159)
+        helper = User(
+            email=f"helper_20km_{uuid.uuid4().hex[:8]}@example.test",
+            name="Pune Helper",
+            password_hash="hashed_pw",
+            role=UserRole.HELPER,
+            is_active=True,
+            email_verified=True,
+        )
+        db.add(helper)
+        db.commit()
+        db.refresh(helper)
+
+        upsert_user_location(
+            db=db,
+            user=helper,
+            loc_in=LocationCreate(
+                city="Pune",
+                area="Mahalunge",
+                latitude=PLACE_2_LAT,
+                longitude=PLACE_2_LON,
+                formatted_address=PLACE_2_ADDR,
+                google_place_id=PLACE_2_ID,
+            ),
+        )
+
+        newcomer = User(
+            email=f"newcomer_20km_{uuid.uuid4().hex[:8]}@example.test",
+            name="Newcomer 20km",
+            password_hash="hashed_pw",
+            role=UserRole.NEWCOMER,
+            is_active=True,
+            email_verified=True,
+        )
+        db.add(newcomer)
+        db.commit()
+        db.refresh(newcomer)
+
+        # 1. Candidate at 19.9 km
+        lat_19_9 = PLACE_2_LAT + (19.9 / 111.195)
+        req_19_9 = Request(user_id=newcomer.id, raw_text="Request 19.9 km", status="OPEN")
+        db.add(req_19_9)
+        db.commit()
+        db.refresh(req_19_9)
+        resolve_and_upsert_request_location(
+            db=db, request_id=req_19_9.id, user=newcomer,
+            latitude=lat_19_9, longitude=PLACE_2_LON,
+            city_hint="Pune", area_hint="North Pune",
+        )
+
+        # 2. Candidate at 20.0 km
+        lat_20_0 = PLACE_2_LAT + (20.0 / 111.195)
+        req_20_0 = Request(user_id=newcomer.id, raw_text="Request 20.0 km", status="OPEN")
+        db.add(req_20_0)
+        db.commit()
+        db.refresh(req_20_0)
+        resolve_and_upsert_request_location(
+            db=db, request_id=req_20_0.id, user=newcomer,
+            latitude=lat_20_0, longitude=PLACE_2_LON,
+            city_hint="Pune", area_hint="Outer Pune",
+        )
+
+        # 3. Candidate at 20.1 km (MUST BE EXCLUDED)
+        lat_20_1 = PLACE_2_LAT + (20.1 / 111.195)
+        req_20_1 = Request(user_id=newcomer.id, raw_text="Request 20.1 km", status="OPEN")
+        db.add(req_20_1)
+        db.commit()
+        db.refresh(req_20_1)
+        resolve_and_upsert_request_location(
+            db=db, request_id=req_20_1.id, user=newcomer,
+            latitude=lat_20_1, longitude=PLACE_2_LON,
+            city_hint="Pune", area_hint="Beyond 20km",
+        )
+
+        # 4. Candidate at Place 1 (20.9 km away, Mahalunge Khed 410501 - MUST BE EXCLUDED)
+        req_20_9 = Request(user_id=newcomer.id, raw_text="Request 20.9 km", status="OPEN")
+        db.add(req_20_9)
+        db.commit()
+        db.refresh(req_20_9)
+        resolve_and_upsert_request_location(
+            db=db, request_id=req_20_9.id, user=newcomer,
+            latitude=PLACE_1_LAT, longitude=PLACE_1_LON,
+            google_place_id=PLACE_1_ID, formatted_address=PLACE_1_ADDR,
+        )
+
+        # 5. Candidate in Ranoli, Gujarat (~500 km away - MUST BE EXCLUDED)
+        req_ranoli = Request(
+            user_id=newcomer.id,
+            raw_text="I'm moving to Ranoli, Gujarat for masters study. Searching for flat and food.",
+            status="OPEN",
+        )
+        db.add(req_ranoli)
+        db.commit()
+        db.refresh(req_ranoli)
+        resolve_and_upsert_request_location(
+            db=db, request_id=req_ranoli.id, user=newcomer,
+            latitude=22.3800, longitude=73.1800,
+            city_hint="Ranoli", area_hint="Ranoli",
+        )
+
+        # Fetch feed for helper
+        items = get_nearby_requests_for_helper(db=db, helper=helper)
+        item_ids = {i.id for i in items}
+
+        # Assertions
+        assert req_19_9.id in item_ids, "19.9 km candidate must be visible"
+        assert req_20_0.id in item_ids, "20.0 km candidate must be visible"
+        assert req_20_1.id not in item_ids, "20.1 km candidate must be EXCLUDED"
+        assert req_20_9.id not in item_ids, "20.9 km candidate must be EXCLUDED (20km rule)"
+        assert req_ranoli.id not in item_ids, "Ranoli, Gujarat must be EXCLUDED for Pune helper"
+
+        # Check distances returned
+        item_19_9 = next(i for i in items if i.id == req_19_9.id)
+        assert item_19_9.distance_km == 19.9
+
+        item_20_0 = next(i for i in items if i.id == req_20_0.id)
+        assert item_20_0.distance_km == 20.0
+
+    finally:
+        db.close()
+
+
+def test_nearby_feed_location_precision_and_target_semantics():
+    """
+    Verify location precision differentiation and target location semantics:
+    1. Area-level target (e.g. Mahalunge) preserves area-level precision ('locality'/'approximate').
+    2. Street-level target (e.g. 'XYZ Road, Mahalunge, Pune') has exact precision ('street'/'rooftop').
+    3. Requester profile location (e.g. 150 km away in Mumbai) does NOT affect matching or distance;
+       only REQUEST TARGET LOCATION is used for helper proximity.
+    """
+    db = SessionLocal()
+    try:
+        helper = User(
+            email=f"helper_prec_{uuid.uuid4().hex[:8]}@example.test",
+            name="Precision Helper",
+            password_hash="hashed_pw",
+            role=UserRole.HELPER,
+            is_active=True,
+            email_verified=True,
+        )
+        db.add(helper)
+        db.commit()
+        db.refresh(helper)
+
+        # Helper located in Pune at (18.57382, 73.756159)
+        upsert_user_location(
+            db=db,
+            user=helper,
+            loc_in=LocationCreate(
+                city="Pune",
+                area="Mahalunge",
+                latitude=PLACE_2_LAT,
+                longitude=PLACE_2_LON,
+                formatted_address=PLACE_2_ADDR,
+                google_place_id=PLACE_2_ID,
+            ),
+        )
+
+        # Newcomer with profile location in Mumbai (~120 km away from Pune)
+        newcomer_mumbai = User(
+            email=f"newcomer_mum_{uuid.uuid4().hex[:8]}@example.test",
+            name="Newcomer From Mumbai",
+            password_hash="hashed_pw",
+            role=UserRole.NEWCOMER,
+            is_active=True,
+            email_verified=True,
+        )
+        db.add(newcomer_mumbai)
+        db.commit()
+        db.refresh(newcomer_mumbai)
+
+        upsert_user_location(
+            db=db,
+            user=newcomer_mumbai,
+            loc_in=LocationCreate(
+                city="Mumbai",
+                area="Andheri",
+                latitude=19.1136,
+                longitude=72.8697,
+                formatted_address="Andheri, Mumbai, Maharashtra",
+            ),
+        )
+
+        # Newcomer creates request whose TARGET is XYZ Road, Mahalunge, Pune (3.7 km from helper)
+        # Lat ~18.57382 + (3.7 / 111.195) = ~18.60709
+        target_lat_3_7 = PLACE_2_LAT + (3.7 / 111.195)
+        req_street = Request(
+            user_id=newcomer_mumbai.id,
+            raw_text="Need rental flat near XYZ Road, Mahalunge, Pune",
+            status="OPEN",
+        )
+        db.add(req_street)
+        db.commit()
+        db.refresh(req_street)
+
+        resolve_and_upsert_request_location(
+            db=db,
+            request_id=req_street.id,
+            user=newcomer_mumbai,
+            latitude=target_lat_3_7,
+            longitude=PLACE_2_LON,
+            city_hint="Pune",
+            area_hint="Mahalunge",
+            display_name="XYZ Road, Mahalunge, Pune",
+            formatted_address="XYZ Road, Mahalunge, Pune, Maharashtra",
+        )
+        # Set precision to street
+        rloc = db.query(RequestLocation).filter(RequestLocation.request_id == req_street.id).first()
+        rloc.location_precision = "street"
+        db.commit()
+
+        # Newcomer creates area-level request for Mahalunge
+        req_area = Request(
+            user_id=newcomer_mumbai.id,
+            raw_text="I am moving to Mahalunge, need general advice",
+            status="OPEN",
+        )
+        db.add(req_area)
+        db.commit()
+        db.refresh(req_area)
+
+        resolve_and_upsert_request_location(
+            db=db,
+            request_id=req_area.id,
+            user=newcomer_mumbai,
+            latitude=PLACE_2_LAT,
+            longitude=PLACE_2_LON,
+            city_hint="Pune",
+            area_hint="Mahalunge",
+            display_name="Mahalunge",
+            formatted_address="Mahalunge, Pune, Maharashtra, India",
+        )
+        rloc_area = db.query(RequestLocation).filter(RequestLocation.request_id == req_area.id).first()
+        rloc_area.location_precision = "locality"
+        db.commit()
+
+        # Helper queries feed
+        items = get_nearby_requests_for_helper(db=db, helper=helper)
+        item_street = next(i for i in items if i.id == req_street.id)
+        item_area = next(i for i in items if i.id == req_area.id)
+
+        # 1. Street target must show exact distance ~3.7 km and precision 'street'
+        assert item_street is not None
+        assert item_street.distance_km == 3.7
+        assert item_street.location_precision == "street"
+
+        # 2. Area target must show precision 'locality' (area-level)
+        assert item_area is not None
+        assert item_area.location_precision == "locality"
+
+        # 3. Requester profile location (Mumbai, 120km away) did NOT cause distance to be 120km
+        assert item_street.distance_km < 20.0
+        assert item_area.distance_km < 20.0
+
+    finally:
+        db.close()
+

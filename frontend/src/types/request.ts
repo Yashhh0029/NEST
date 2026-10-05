@@ -139,6 +139,7 @@ export interface NearbyRequestItem {
   is_time_flexible: boolean;
   needs: string[];
   distance_km?: number | null;
+  location_precision?: string | null;
   match_reasons: string[];
   created_at: string;
 }

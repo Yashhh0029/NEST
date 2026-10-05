@@ -103,6 +103,7 @@ class NearbyRequestItem(BaseModel):
     is_time_flexible: bool = True
     needs: List[str] = Field(default_factory=list)
     distance_km: Optional[float] = None
+    location_precision: Optional[str] = "approximate"
     match_reasons: List[str] = Field(default_factory=list)
     created_at: datetime
 
