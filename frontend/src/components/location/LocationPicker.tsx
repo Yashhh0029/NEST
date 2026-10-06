@@ -4,6 +4,7 @@ import { PlaceAutocomplete } from "./PlaceAutocomplete";
 import { GoogleMap } from "./GoogleMap";
 import { MapLocationPicker } from "./MapLocationPicker";
 import { getPlaceDetails, reverseGeocodeCoordinates } from "../../services/location";
+import { formatLocationHierarchy } from "../../lib/locationHierarchy";
 import type { PlaceAutocompletePrediction } from "../../types/google-location";
 import type { LocationCreateOrUpdatePayload } from "../../types/profile";
 
@@ -35,6 +36,8 @@ export function LocationPicker({
       onChange({
         city: details.city || prediction.main_text,
         area: details.area || undefined,
+        taluka: details.taluka || undefined,
+        district: details.district || undefined,
         state: details.state || undefined,
         country: details.country || "India",
         latitude: details.latitude != null ? details.latitude : undefined,
@@ -88,6 +91,8 @@ export function LocationPicker({
           setPendingDetectedLocation({
             city: resolvedCity,
             area: resolved.area || undefined,
+            taluka: resolved.taluka || undefined,
+            district: resolved.district || undefined,
             state: resolved.state || undefined,
             country: resolved.country || "India",
             latitude: lat,
@@ -199,6 +204,8 @@ export function LocationPicker({
             onChange({
               city: picked.city,
               area: picked.area,
+              taluka: picked.taluka,
+              district: picked.district,
               state: picked.state,
               country: picked.country || "India",
               latitude: picked.latitude,
@@ -233,10 +240,30 @@ export function LocationPicker({
               Current Location Detected via Device GPS
             </h4>
           </div>
-          <div className="text-xs space-y-1.5 text-gray-800 dark:text-gray-200 bg-white dark:bg-brand-dark-surface p-3 rounded-lg border border-teal-200 dark:border-teal-800">
-            <p className="font-bold text-sm text-gray-900 dark:text-white">
-              📍 {pendingDetectedLocation.display_name || pendingDetectedLocation.area || pendingDetectedLocation.city}
-            </p>
+          <div className="text-xs space-y-2 text-gray-800 dark:text-gray-200 bg-white dark:bg-brand-dark-surface p-3.5 rounded-lg border border-teal-200 dark:border-teal-800">
+            {(() => {
+              const hierarchy = formatLocationHierarchy(pendingDetectedLocation);
+              return (
+                <div className="space-y-0.5 border-l-2 border-teal-500 pl-2.5 my-1">
+                  <p className="font-bold text-sm text-gray-900 dark:text-white">
+                    📍 {hierarchy.line1}
+                  </p>
+                  {hierarchy.line2 && (
+                    <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                      {hierarchy.line2}
+                    </p>
+                  )}
+                  {hierarchy.line3 && (
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                      {hierarchy.line3}
+                    </p>
+                  )}
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {hierarchy.line4}
+                  </p>
+                </div>
+              );
+            })()}
             {pendingDetectedLocation.formatted_address && (
               <p className="text-xs text-gray-600 dark:text-gray-400">
                 {pendingDetectedLocation.formatted_address}
@@ -255,6 +282,8 @@ export function LocationPicker({
               )}
               <span>City: {pendingDetectedLocation.city}</span>
               {pendingDetectedLocation.area && <span>Area: {pendingDetectedLocation.area}</span>}
+              {pendingDetectedLocation.taluka && <span>Taluka: {pendingDetectedLocation.taluka}</span>}
+              {pendingDetectedLocation.district && <span>District: {pendingDetectedLocation.district}</span>}
               {pendingDetectedLocation.postal_code && <span>PIN: {pendingDetectedLocation.postal_code}</span>}
             </div>
           </div>
@@ -287,27 +316,37 @@ export function LocationPicker({
             <div className="w-6 h-6 rounded-full bg-brand-primary/10 dark:bg-brand-primary/20 text-brand-primary flex items-center justify-center shrink-0 mt-0.5">
               <Check className="w-3.5 h-3.5" />
             </div>
-            <div className="min-w-0">
-              <p className="font-bold text-gray-900 dark:text-gray-100 truncate text-sm">
-                {primaryDisplay}
-                {secondaryDisplay && (
-                  <span className="text-xs font-normal text-gray-600 dark:text-gray-400 ml-1.5">
-                    • {secondaryDisplay}
-                  </span>
-                )}
-              </p>
-              <div className="flex items-center gap-2 mt-0.5 text-[11px] text-gray-600 dark:text-gray-300 flex-wrap">
-                <span className="capitalize font-medium">Source: {value.location_source?.replace("_", " ") || "Manual"}</span>
-                <span className="capitalize font-medium px-1.5 py-0.2 rounded bg-teal-100/70 dark:bg-teal-900/30 text-teal-800 dark:text-teal-300 text-[10px]">
-                  Precision: {value.location_precision || "locality"}
-                </span>
-                {value.latitude != null && value.longitude != null && (
-                  <span className="font-mono text-[10px] text-teal-800 dark:text-teal-300 font-semibold">
-                    ({value.latitude.toFixed(4)}°, {value.longitude.toFixed(4)}°)
-                  </span>
-                )}
-              </div>
-            </div>
+            {(() => {
+              const hierarchy = formatLocationHierarchy(value);
+              return (
+                <div className="min-w-0">
+                  <p className="font-bold text-gray-900 dark:text-gray-100 truncate text-sm">
+                    {primaryDisplay}
+                    {secondaryDisplay && (
+                      <span className="text-xs font-normal text-gray-600 dark:text-gray-400 ml-1.5">
+                        • {secondaryDisplay}
+                      </span>
+                    )}
+                  </p>
+                  {hierarchy.line2 && (
+                    <p className="text-xs text-gray-600 dark:text-gray-300 mt-0.5 font-medium">
+                      {hierarchy.line2}{hierarchy.line3 ? ` • ${hierarchy.line3}` : ""}
+                    </p>
+                  )}
+                  <div className="flex items-center gap-2 mt-0.5 text-[11px] text-gray-600 dark:text-gray-300 flex-wrap">
+                    <span className="capitalize font-medium">Source: {value.location_source?.replace("_", " ") || "Manual"}</span>
+                    <span className="capitalize font-medium px-1.5 py-0.2 rounded bg-teal-100/70 dark:bg-teal-900/30 text-teal-800 dark:text-teal-300 text-[10px]">
+                      Precision: {value.location_precision || "locality"}
+                    </span>
+                    {value.latitude != null && value.longitude != null && (
+                      <span className="font-mono text-[10px] text-teal-800 dark:text-teal-300 font-semibold">
+                        ({value.latitude.toFixed(4)}°, {value.longitude.toFixed(4)}°)
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}

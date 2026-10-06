@@ -75,10 +75,29 @@ export function ProfileHeader({ fullProfile }: ProfileHeaderProps) {
           <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
             <MapPin className="w-4 h-4 text-brand-primary shrink-0" />
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="font-medium text-gray-900 dark:text-gray-100">
-                {location.display_name && location.display_name !== location.city && location.display_name !== location.area
-                  ? `${location.display_name}, ${[location.area, location.city].filter(Boolean).join(", ")}`
-                  : [location.area, location.city].filter(Boolean).join(", ")}
+              <span className="font-medium text-gray-900 dark:text-gray-100" title={location.formatted_address || undefined}>
+                {(() => {
+                  const parts: string[] = [];
+                  if (location.display_name && location.display_name !== location.city && location.display_name !== location.area) {
+                    parts.push(location.display_name.trim());
+                    if (location.area && !location.display_name.toLowerCase().includes(location.area.toLowerCase())) {
+                      parts.push(location.area.trim());
+                    }
+                    if (
+                      location.city &&
+                      !location.display_name.toLowerCase().includes(location.city.toLowerCase()) &&
+                      (!location.area || !location.area.toLowerCase().includes(location.city.toLowerCase()))
+                    ) {
+                      parts.push(location.city.trim());
+                    }
+                  } else {
+                    if (location.area) parts.push(location.area.trim());
+                    if (location.city && (!location.area || !location.area.toLowerCase().includes(location.city.toLowerCase()))) {
+                      parts.push(location.city.trim());
+                    }
+                  }
+                  return parts.join(", ") || location.city || "Location set";
+                })()}
               </span>
               <Link
                 to="/profile/edit#location"

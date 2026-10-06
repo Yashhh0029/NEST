@@ -16,6 +16,8 @@ export interface ResolvedLocation {
   display_name?: string | null;
   city?: string | null;
   area?: string | null;
+  taluka?: string | null;
+  district?: string | null;
   state?: string | null;
   country: string;
   postal_code?: string | null;

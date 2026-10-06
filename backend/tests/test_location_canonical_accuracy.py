@@ -658,4 +658,27 @@ def test_gps_reverse_geocoding_strips_business_and_preserves_exact_device_coords
     assert resolved.location_precision in ["neighborhood", "locality"]
 
 
+def test_administrative_hierarchy_and_mahalunge_disambiguation():
+    """
+    Verify full administrative hierarchy:
+    - Mahalunge Khed (18.755195, 73.809071) resolves with Taluka Khed, District Pune, PIN 410501
+    - Mahalunge Pune (18.57382, 73.756159) resolves with District Pune, PIN 411045
+    - The two locations are clearly differentiated by coordinates, PIN, and administrative hierarchy
+    """
+    khed_res = google_maps_service.reverse_geocode(18.755195, 73.809071)
+    assert khed_res is not None
+    assert khed_res.taluka == "Khed"
+    assert khed_res.district == "Pune"
+    assert khed_res.postal_code == "410501"
+    assert "Khed" in khed_res.display_name
+    assert "410501" in khed_res.formatted_address
+
+    pune_res = google_maps_service.reverse_geocode(18.57382, 73.756159)
+    assert pune_res is not None
+    assert pune_res.postal_code == "411045"
+    assert pune_res.district == "Pune"
+    assert pune_res.postal_code != khed_res.postal_code
+
+
+
 

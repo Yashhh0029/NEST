@@ -616,6 +616,20 @@ class GoogleMapsService:
 
             city, area, state, country, postal, formatted, _ = self.parse_google_address_components_multi(results)
 
+            # Extract administrative hierarchy: Taluka (admin_level_3) and District (admin_level_2)
+            taluka = None
+            district = None
+            for res in results:
+                for comp in res.get("address_components", []):
+                    types = comp.get("types", [])
+                    name = comp.get("long_name") or comp.get("short_name")
+                    if not name:
+                        continue
+                    if "administrative_area_level_3" in types and not taluka:
+                        taluka = name
+                    if "administrative_area_level_2" in types and not district:
+                        district = name
+
             # Inspect most specific result (top result) for verified society/premise/building or route
             top = results[0]
             premise_name = None
@@ -631,11 +645,15 @@ class GoogleMapsService:
             geom_type = top.get("geometry", {}).get("location_type", "")
             precision = "rooftop" if (geom_type == "ROOFTOP" or premise_name) else ("neighborhood" if area else "locality")
 
-            # Build human-readable display name: prefer premise + area if available, else area + city
+            # Build human-readable display name: prefer premise + area if available, else area + taluka, else area + city
             if premise_name and area and premise_name.strip().lower() != area.strip().lower():
                 display_name = f"{premise_name}, {area}"
-            elif area and city:
+            elif area and taluka and area.strip().lower() != taluka.strip().lower() and (city and city.strip().lower() == area.strip().lower()):
+                display_name = f"{area}, {taluka}"
+            elif area and city and area.strip().lower() != city.strip().lower():
                 display_name = f"{area}, {city}"
+            elif area and taluka and area.strip().lower() != taluka.strip().lower():
+                display_name = f"{area}, {taluka}"
             else:
                 display_name = city or area or "Current Location"
 
@@ -646,6 +664,8 @@ class GoogleMapsService:
                 display_name=display_name,
                 city=city,
                 area=area,
+                taluka=taluka,
+                district=district,
                 state=state,
                 country=country or "India",
                 postal_code=postal,
@@ -1054,11 +1074,20 @@ class GoogleMapsService:
         lat, lon = latitude, longitude
 
         # 1. Detailed Pune & Pimpri-Chinchwad Micro-Locality Boundary Resolution
-        # Lat: 18.40 to 18.75, Lon: 73.68 to 74.02
-        if 18.40 <= lat <= 18.75 and 73.68 <= lon <= 74.02:
-            # Mahalunge (Lat: 18.55-18.60, Lon: 73.72-73.77)
-            if 18.55 <= lat <= 18.60 and 73.72 <= lon <= 73.765:
+        # Lat: 18.40 to 18.82, Lon: 73.68 to 74.02
+        if 18.40 <= lat <= 18.82 and 73.68 <= lon <= 74.02:
+            taluka = None
+            district = "Pune"
+            # Mahalunge (Khed Taluka, Chakan / Pune District, PIN 410501)
+            if 18.73 <= lat <= 18.78 and 73.79 <= lon <= 73.83:
                 area = "Mahalunge"
+                taluka = "Khed"
+                city = "Mahalunge"
+                postal = "410501"
+            # Mahalunge (Lat: 18.55-18.60, Lon: 73.72-73.77)
+            elif 18.55 <= lat <= 18.60 and 73.72 <= lon <= 73.765:
+                area = "Mahalunge"
+                taluka = "Mulshi"
                 city = "Pune"
                 postal = "411045"
             # Balewadi (Lat: 18.56-18.60, Lon: 73.765-73.795)
@@ -1074,6 +1103,7 @@ class GoogleMapsService:
             # Hinjewadi (Lat: 18.57-18.63, Lon: 73.68-73.75)
             elif 18.57 <= lat <= 18.63 and 73.68 <= lon <= 73.75:
                 area = "Hinjewadi"
+                taluka = "Mulshi"
                 city = "Pune"
                 postal = "411057"
             # Wakad (Lat: 18.58-18.625, Lon: 73.75 < lon <= 73.785)
@@ -1099,6 +1129,7 @@ class GoogleMapsService:
             # Kothrud (Lat: 18.485-18.525, Lon: 73.79-73.835)
             elif 18.485 <= lat <= 18.525 and 73.79 <= lon <= 73.835:
                 area = "Kothrud"
+                taluka = "Haveli"
                 city = "Pune"
                 postal = "411038"
             # Shivajinagar / Deccan (Lat: 18.51-18.545, Lon: 73.835 < lon <= 73.87)
@@ -1131,8 +1162,31 @@ class GoogleMapsService:
                 city = "Pune"
                 postal = "411001"
 
-            addr = f"{area}, {city}, Maharashtra, India" if area else f"{city}, Maharashtra, India"
-            geo_name = f"{area}, {city}" if area else city
+            if area and taluka and area.strip().lower() != taluka.strip().lower() and (city and city.strip().lower() == area.strip().lower()):
+                geo_name = f"{area}, {taluka}"
+            elif area and city and area.strip().lower() != city.strip().lower():
+                geo_name = f"{area}, {city}"
+            elif area and taluka and area.strip().lower() != taluka.strip().lower():
+                geo_name = f"{area}, {taluka}"
+            else:
+                geo_name = area or city
+
+            addr_parts = []
+            if area:
+                addr_parts.append(area)
+            if taluka and district:
+                addr_parts.append(f"{taluka} Taluka, {district} District")
+            elif district and district.lower() != (area or "").lower() and district.lower() != (city or "").lower():
+                addr_parts.append(f"{district} District")
+            elif city and city.lower() != (area or "").lower():
+                addr_parts.append(city)
+            if postal:
+                addr_parts.append(f"Maharashtra — {postal}")
+            else:
+                addr_parts.append("Maharashtra")
+            addr_parts.append("India")
+            addr = ", ".join(addr_parts)
+
             return ResolvedLocation(
                 google_place_id=None,
                 formatted_address=addr,
@@ -1140,6 +1194,8 @@ class GoogleMapsService:
                 display_name=geo_name,
                 city=city,
                 area=area,
+                taluka=taluka,
+                district=district,
                 state="Maharashtra",
                 country="India",
                 postal_code=postal,
@@ -1155,9 +1211,12 @@ class GoogleMapsService:
             area = "Kakkanad" if lon >= 76.32 else "Fort Kochi"
             return ResolvedLocation(
                 google_place_id="pc_kochi_region",
-                formatted_address=f"{area}, Kochi, Kerala, India",
+                formatted_address=f"{area}, Kochi, Ernakulam District, Kerala — 682030, India",
+                name=f"{area}, Kochi",
+                display_name=f"{area}, Kochi",
                 city="Kochi",
                 area=area,
+                district="Ernakulam",
                 state="Kerala",
                 country="India",
                 postal_code="682030",
@@ -1171,14 +1230,18 @@ class GoogleMapsService:
         # Lat: 12.82 to 13.15, Lon: 77.45 to 77.78
         if 12.82 <= lat <= 13.15 and 77.45 <= lon <= 77.78:
             area = "Whitefield" if lon >= 77.70 else "Indiranagar"
+            pin = "560066" if area == "Whitefield" else "560038"
             return ResolvedLocation(
                 google_place_id="pc_blr_region",
-                formatted_address=f"{area}, Bengaluru, Karnataka, India",
+                formatted_address=f"{area}, Bengaluru, Bengaluru Urban District, Karnataka — {pin}, India",
+                name=f"{area}, Bengaluru",
+                display_name=f"{area}, Bengaluru",
                 city="Bengaluru",
                 area=area,
+                district="Bengaluru Urban",
                 state="Karnataka",
                 country="India",
-                postal_code="560066" if area == "Whitefield" else "560038",
+                postal_code=pin,
                 latitude=round(lat, 6),
                 longitude=round(lon, 6),
                 location_precision="locality",
@@ -1189,9 +1252,12 @@ class GoogleMapsService:
         if 18.88 <= lat <= 19.32 and 72.75 <= lon <= 73.05:
             return ResolvedLocation(
                 google_place_id="pc_mumbai_region",
-                formatted_address="Bandra, Mumbai, Maharashtra, India",
+                formatted_address="Bandra, Mumbai, Mumbai Suburban District, Maharashtra — 400050, India",
+                name="Bandra, Mumbai",
+                display_name="Bandra, Mumbai",
                 city="Mumbai",
                 area="Bandra",
+                district="Mumbai Suburban",
                 state="Maharashtra",
                 country="India",
                 postal_code="400050",
@@ -1205,9 +1271,12 @@ class GoogleMapsService:
         if 21.05 <= lat <= 21.25 and 79.00 <= lon <= 79.20:
             return ResolvedLocation(
                 google_place_id="pc_nagpur_region",
-                formatted_address="Dharampeth, Nagpur, Maharashtra, India",
+                formatted_address="Dharampeth, Nagpur, Nagpur District, Maharashtra — 440010, India",
+                name="Dharampeth, Nagpur",
+                display_name="Dharampeth, Nagpur",
                 city="Nagpur",
                 area="Dharampeth",
+                district="Nagpur",
                 state="Maharashtra",
                 country="India",
                 postal_code="440010",

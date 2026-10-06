@@ -33,6 +33,8 @@ export interface Location {
   id: string;
   city: string;
   area?: string | null;
+  taluka?: string | null;
+  district?: string | null;
   state?: string | null;
   country: string;
   latitude?: number | null;
@@ -53,6 +55,8 @@ export interface Location {
 export interface LocationCreateOrUpdatePayload {
   city: string;
   area?: string;
+  taluka?: string;
+  district?: string;
   state?: string;
   country?: string;
   latitude?: number;

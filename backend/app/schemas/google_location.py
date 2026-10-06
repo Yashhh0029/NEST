@@ -37,6 +37,8 @@ class ResolvedLocation(BaseModel):
     display_name: Optional[str] = None
     city: Optional[str] = None
     area: Optional[str] = None
+    taluka: Optional[str] = None
+    district: Optional[str] = None
     state: Optional[str] = None
     country: str = "India"
     postal_code: Optional[str] = None

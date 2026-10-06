@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { loadGoogleMaps } from "../../lib/google-maps-loader";
 import { reverseGeocodeCoordinates } from "../../services/location";
 import type { ResolvedLocation } from "../../types/google-location";
+import { formatLocationHierarchy } from "../../lib/locationHierarchy";
 import {
   MapPin,
   Loader2,
@@ -15,6 +16,8 @@ import {
 export interface ConfirmedMapLocation {
   city: string;
   area?: string;
+  taluka?: string;
+  district?: string;
   state?: string;
   country: string;
   latitude: number;
@@ -237,6 +240,8 @@ export function MapLocationPicker({
     onConfirm({
       city: city.trim(),
       area: area ? area.trim() : undefined,
+      taluka: resolvedLocation?.taluka || undefined,
+      district: resolvedLocation?.district || undefined,
       state: state ? state.trim() : undefined,
       country: country.trim(),
       latitude: selectedCoords.lat,
@@ -249,12 +254,6 @@ export function MapLocationPicker({
       location_precision: resolvedLocation?.location_precision || "locality",
     });
   };
-
-  const readableLocationName =
-    resolvedLocation?.display_name ||
-    [resolvedLocation?.area, resolvedLocation?.city, resolvedLocation?.state, resolvedLocation?.country || "India"]
-      .filter(Boolean)
-      .join(", ");
 
   return (
     <div
@@ -361,10 +360,30 @@ export function MapLocationPicker({
         </div>
 
         {selectedCoords ? (
-          <div className="space-y-1.5">
-            <p className="font-bold text-sm text-gray-900 dark:text-gray-100">
-              📍 {readableLocationName || "Resolving locality..."}
-            </p>
+          <div className="space-y-2">
+            {resolvedLocation && (() => {
+              const hierarchy = formatLocationHierarchy(resolvedLocation);
+              return (
+                <div className="space-y-0.5 border-l-2 border-teal-500 pl-2.5 my-1">
+                  <p className="font-bold text-sm text-gray-900 dark:text-gray-100">
+                    📍 {hierarchy.line1}
+                  </p>
+                  {hierarchy.line2 && (
+                    <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                      {hierarchy.line2}
+                    </p>
+                  )}
+                  {hierarchy.line3 && (
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                      {hierarchy.line3}
+                    </p>
+                  )}
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {hierarchy.line4}
+                  </p>
+                </div>
+              );
+            })()}
 
             {resolvedLocation?.formatted_address && (
               <p className="text-xs text-gray-600 dark:text-gray-400">
@@ -372,11 +391,21 @@ export function MapLocationPicker({
               </p>
             )}
 
-            {/* Structured Area / City / State / Country breakdown */}
+            {/* Structured Area / Taluka / District / City / State / Country breakdown */}
             <div className="flex items-center gap-2 pt-1 flex-wrap text-[11px] font-medium text-gray-600 dark:text-gray-300">
               {resolvedLocation?.area && (
                 <span className="px-2 py-0.5 rounded bg-white dark:bg-brand-dark-card border border-teal-200 dark:border-teal-800">
                   Area: <strong>{resolvedLocation.area}</strong>
+                </span>
+              )}
+              {resolvedLocation?.taluka && (
+                <span className="px-2 py-0.5 rounded bg-white dark:bg-brand-dark-card border border-teal-200 dark:border-teal-800">
+                  Taluka: <strong>{resolvedLocation.taluka}</strong>
+                </span>
+              )}
+              {resolvedLocation?.district && (
+                <span className="px-2 py-0.5 rounded bg-white dark:bg-brand-dark-card border border-teal-200 dark:border-teal-800">
+                  District: <strong>{resolvedLocation.district}</strong>
                 </span>
               )}
               {resolvedLocation?.city && (
@@ -387,6 +416,11 @@ export function MapLocationPicker({
               {resolvedLocation?.state && (
                 <span className="px-2 py-0.5 rounded bg-white dark:bg-brand-dark-card border border-teal-200 dark:border-teal-800">
                   State: <strong>{resolvedLocation.state}</strong>
+                </span>
+              )}
+              {resolvedLocation?.postal_code && (
+                <span className="px-2 py-0.5 rounded bg-white dark:bg-brand-dark-card border border-teal-200 dark:border-teal-800">
+                  PIN: <strong>{resolvedLocation.postal_code}</strong>
                 </span>
               )}
               <span className="px-2 py-0.5 rounded bg-white dark:bg-brand-dark-card border border-teal-200 dark:border-teal-800">
