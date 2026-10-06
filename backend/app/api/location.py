@@ -90,7 +90,8 @@ def reverse_geocode(
             area=None,
             country="India",
             location_source="browser_unresolved",
-            location_precision="rooftop",
+            location_precision="coordinates_only",
+            is_unresolved=True,
         )
     return resolved
 

@@ -16,6 +16,7 @@ export interface LocationHierarchyLines {
   line4: string;
   lines: string[];
   fullHierarchy: string;
+  isUnavailable?: boolean;
 }
 
 export interface HierarchyInput {
@@ -27,9 +28,30 @@ export interface HierarchyInput {
   postal_code?: string | null;
   country?: string | null;
   display_name?: string | null;
+  premise?: string | null;
+  is_unresolved?: boolean;
 }
 
 export function formatLocationHierarchy(loc: HierarchyInput): LocationHierarchyLines {
+  const isUnresolved = Boolean(
+    loc.is_unresolved ||
+    (!loc.city && !loc.area && !loc.display_name && !loc.premise && !loc.taluka && !loc.district)
+  );
+
+  if (isUnresolved) {
+    const country = loc.country?.trim() || "India";
+    return {
+      line1: "Location details unavailable",
+      line2: undefined,
+      line3: undefined,
+      line4: country,
+      lines: ["Location details unavailable"],
+      fullHierarchy: "Location details unavailable",
+      isUnavailable: true,
+    };
+  }
+
+  const rawPremise = loc.premise?.trim();
   const rawArea = loc.area?.trim();
   const rawTaluka = loc.taluka?.trim();
   const rawDistrict = loc.district?.trim();
@@ -39,9 +61,13 @@ export function formatLocationHierarchy(loc: HierarchyInput): LocationHierarchyL
   const rawCountry = loc.country?.trim() || "India";
   const rawDisplayName = loc.display_name?.trim();
 
-  // Line 1: Area / Village / Locality
-  // Prefer area if available, else primary part of display_name, else city
-  let line1 = rawArea;
+  // Line 1: Premise / Society / Building / Area / Locality
+  let line1 = rawPremise;
+  if (line1 && rawArea && line1.toLowerCase() !== rawArea.toLowerCase()) {
+    line1 = `${line1}, ${rawArea}`;
+  } else if (!line1) {
+    line1 = rawArea;
+  }
   if (!line1 && rawDisplayName && rawDisplayName !== rawCity) {
     line1 = rawDisplayName.split(",")[0]?.trim() || rawDisplayName;
   }
@@ -67,12 +93,12 @@ export function formatLocationHierarchy(loc: HierarchyInput): LocationHierarchyL
     const dLower = rawDistrict!.toLowerCase();
     const l1Lower = line1.toLowerCase();
     const cLower = (rawCity || "").toLowerCase();
-    if (dLower !== l1Lower && (!rawCity || dLower !== cLower)) {
+    if (!l1Lower.includes(dLower) && (!rawCity || dLower !== cLower)) {
       line2 = districtFormatted;
-    } else if (rawCity && cLower !== l1Lower) {
+    } else if (rawCity && !l1Lower.includes(cLower)) {
       line2 = rawCity;
     }
-  } else if (rawCity && rawCity.toLowerCase() !== line1.toLowerCase()) {
+  } else if (rawCity && !line1.toLowerCase().includes(rawCity.toLowerCase())) {
     line2 = rawCity;
   }
 
@@ -99,5 +125,6 @@ export function formatLocationHierarchy(loc: HierarchyInput): LocationHierarchyL
     line4,
     lines,
     fullHierarchy,
+    isUnavailable: false,
   };
 }

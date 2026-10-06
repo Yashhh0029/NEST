@@ -49,6 +49,15 @@ class ResolvedLocation(BaseModel):
     road: Optional[str] = None
     neighborhood: Optional[str] = None
     suburb: Optional[str] = None
+    premise: Optional[str] = None
+    subpremise: Optional[str] = None
+    street_number: Optional[str] = None
+    route: Optional[str] = None
+    sublocality: Optional[str] = None
+    locality: Optional[str] = None
+    short_display_name: Optional[str] = None
+    full_display_address: Optional[str] = None
+    is_unresolved: bool = False
 
     @field_validator("latitude")
     @classmethod

@@ -85,11 +85,11 @@ export function LocationPicker({
           setGpsAccuracy(accuracy);
           const resolved = await reverseGeocodeCoordinates(lat, lon);
 
-          const resolvedCity = resolved.city || resolved.area || "Selected Location";
+          const resolvedCity = resolved.city || resolved.area || undefined;
 
           // Require explicit user confirmation before applying detected GPS location
           setPendingDetectedLocation({
-            city: resolvedCity,
+            city: resolvedCity || "",
             area: resolved.area || undefined,
             taluka: resolved.taluka || undefined,
             district: resolved.district || undefined,
@@ -103,7 +103,9 @@ export function LocationPicker({
             postal_code: resolved.postal_code || undefined,
             private_unit: value.private_unit,
             location_source: "browser_geolocation",
-            location_precision: resolved.location_precision || "rooftop",
+            location_precision: resolved.location_precision || (resolved.is_unresolved ? "coordinates_only" : "rooftop"),
+            premise: resolved.premise || undefined,
+            is_unresolved: resolved.is_unresolved,
           });
         } catch (err) {
           setGeoError("Failed to resolve current coordinates. Please search manually.");
@@ -123,7 +125,7 @@ export function LocationPicker({
     );
   };
 
-  const hasLocation = Boolean(value.city);
+  const hasLocation = Boolean(value.city || (value.latitude != null && value.longitude != null));
   const primaryDisplay = value.display_name || value.area || value.city;
   const secondaryDisplay = value.display_name && value.display_name !== value.area && value.display_name !== value.city
     ? [value.area, value.city, value.state, value.country || "India"].filter(Boolean).join(", ")
@@ -243,6 +245,18 @@ export function LocationPicker({
           <div className="text-xs space-y-2 text-gray-800 dark:text-gray-200 bg-white dark:bg-brand-dark-surface p-3.5 rounded-lg border border-teal-200 dark:border-teal-800">
             {(() => {
               const hierarchy = formatLocationHierarchy(pendingDetectedLocation);
+              if (hierarchy.isUnavailable) {
+                return (
+                  <div className="space-y-1 border-l-2 border-amber-500 pl-2.5 my-1">
+                    <p className="font-bold text-xs text-amber-800 dark:text-amber-300">
+                      📍 Geographic address details unavailable for these coordinates
+                    </p>
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                      Your exact GPS coordinates have been captured and can be saved directly.
+                    </p>
+                  </div>
+                );
+              }
               return (
                 <div className="space-y-0.5 border-l-2 border-teal-500 pl-2.5 my-1">
                   <p className="font-bold text-sm text-gray-900 dark:text-white">
@@ -264,7 +278,7 @@ export function LocationPicker({
                 </div>
               );
             })()}
-            {pendingDetectedLocation.formatted_address && (
+            {pendingDetectedLocation.formatted_address && pendingDetectedLocation.formatted_address.trim().toLowerCase() !== "india" && (
               <p className="text-xs text-gray-600 dark:text-gray-400">
                 {pendingDetectedLocation.formatted_address}
               </p>
@@ -280,7 +294,7 @@ export function LocationPicker({
                   Coordinates: {pendingDetectedLocation.latitude.toFixed(6)}, {pendingDetectedLocation.longitude?.toFixed(6)}
                 </span>
               )}
-              <span>City: {pendingDetectedLocation.city}</span>
+              {pendingDetectedLocation.city ? <span>City: {pendingDetectedLocation.city}</span> : null}
               {pendingDetectedLocation.area && <span>Area: {pendingDetectedLocation.area}</span>}
               {pendingDetectedLocation.taluka && <span>Taluka: {pendingDetectedLocation.taluka}</span>}
               {pendingDetectedLocation.district && <span>District: {pendingDetectedLocation.district}</span>}
@@ -296,7 +310,7 @@ export function LocationPicker({
               }}
               className="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-brand-primary text-white hover:bg-brand-primary/90 transition-colors shadow-sm"
             >
-              Use this location
+              {formatLocationHierarchy(pendingDetectedLocation).isUnavailable ? "Use exact coordinates" : "Use this location"}
             </button>
             <button
               type="button"
@@ -318,17 +332,18 @@ export function LocationPicker({
             </div>
             {(() => {
               const hierarchy = formatLocationHierarchy(value);
+              const isUnavail = hierarchy.isUnavailable;
               return (
                 <div className="min-w-0">
                   <p className="font-bold text-gray-900 dark:text-gray-100 truncate text-sm">
-                    {primaryDisplay}
-                    {secondaryDisplay && (
+                    {isUnavail ? `Coordinates (${value.latitude?.toFixed(4)}°, ${value.longitude?.toFixed(4)}°)` : primaryDisplay}
+                    {!isUnavail && secondaryDisplay && (
                       <span className="text-xs font-normal text-gray-600 dark:text-gray-400 ml-1.5">
                         • {secondaryDisplay}
                       </span>
                     )}
                   </p>
-                  {hierarchy.line2 && (
+                  {!isUnavail && hierarchy.line2 && (
                     <p className="text-xs text-gray-600 dark:text-gray-300 mt-0.5 font-medium">
                       {hierarchy.line2}{hierarchy.line3 ? ` • ${hierarchy.line3}` : ""}
                     </p>
@@ -336,7 +351,7 @@ export function LocationPicker({
                   <div className="flex items-center gap-2 mt-0.5 text-[11px] text-gray-600 dark:text-gray-300 flex-wrap">
                     <span className="capitalize font-medium">Source: {value.location_source?.replace("_", " ") || "Manual"}</span>
                     <span className="capitalize font-medium px-1.5 py-0.2 rounded bg-teal-100/70 dark:bg-teal-900/30 text-teal-800 dark:text-teal-300 text-[10px]">
-                      Precision: {value.location_precision || "locality"}
+                      Precision: {value.location_precision || (isUnavail ? "coordinates_only" : "locality")}
                     </span>
                     {value.latitude != null && value.longitude != null && (
                       <span className="font-mono text-[10px] text-teal-800 dark:text-teal-300 font-semibold">

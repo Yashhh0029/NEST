@@ -224,6 +224,7 @@ def rank_and_explain_resources(
     radius_meters: float,
     category_id: str,
     preferences: List[str],
+    search_origin_type: Optional[str] = None,
 ) -> List[ResourceItem]:
     """
     Apply a transparent, deterministic ranking formula to raw Google Places results.
@@ -287,10 +288,17 @@ def rank_and_explain_resources(
         # 1. Distance score (60% - Proximity is paramount for nearby discovery)
         if dist_km is not None:
             dist_score = max(0.0, 1.0 - (dist_km / max(radius_km, 0.05)))
-            if dist_km < 1.0:
-                reasons.append(f"{int(round(dist_km * 1000))} m away from target")
+            dist_str = f"{int(round(dist_km * 1000))} m" if dist_km < 1.0 else f"{dist_km:.2f} km"
+            if search_origin_type == "CURRENT_GPS":
+                reasons.append(f"{dist_str} from your current location")
+            elif search_origin_type == "SELECTED_MAP_LOCATION":
+                reasons.append(f"{dist_str} from selected map pin")
+            elif search_origin_type == "PROFILE_LOCATION":
+                reasons.append(f"{dist_str} from saved profile location")
+            elif search_origin_type == "REQUEST_LOCATION":
+                reasons.append(f"{dist_str} from request target")
             else:
-                reasons.append(f"{dist_km:.2f} km away from target")
+                reasons.append(f"{dist_str} away from target")
         else:
             dist_score = 0.5
 
@@ -558,6 +566,7 @@ def search_local_resources(
     max_lon: Optional[float] = None,
     provider: Optional[str] = None,
     limit: int = 50,
+    search_origin_type: Optional[str] = None,
     maps_service: GoogleMapsService = google_maps_service,
 ) -> ResourceSearchResponse:
     """
@@ -575,6 +584,12 @@ def search_local_resources(
     locality_label: Optional[str] = None
     preferences: List[str] = []
     effective_category: str = "accommodation"
+
+    if search_origin_type is None:
+        if request_id:
+            search_origin_type = "REQUEST_LOCATION"
+        elif latitude is not None and longitude is not None:
+            search_origin_type = "CURRENT_GPS"
 
     if request_id:
         req = db.query(Request).filter(Request.id == request_id).first()
@@ -637,9 +652,17 @@ def search_local_resources(
         locality_label = locality_label or "Pune, Maharashtra"
     elif not locality_label:
         rev = maps_service.reverse_geocode(search_lat, search_lon)
-        if rev:
+        if rev and not getattr(rev, "is_unresolved", False):
             parts = [p for p in [rev.road, rev.area, rev.city] if p]
-            locality_label = ", ".join(dict.fromkeys(parts)) or rev.formatted_address or "Pune, Maharashtra"
+            locality_label = ", ".join(dict.fromkeys(parts)) or rev.formatted_address
+
+        if not locality_label or locality_label.strip().lower() == "india":
+            if search_origin_type == "CURRENT_GPS":
+                locality_label = f"Current GPS Location ({round(search_lat, 4)}°, {round(search_lon, 4)}°)"
+            elif search_origin_type == "SELECTED_MAP_LOCATION":
+                locality_label = f"Selected Map Pin ({round(search_lat, 4)}°, {round(search_lon, 4)}°)"
+            else:
+                locality_label = f"Coordinates ({round(search_lat, 4)}°, {round(search_lon, 4)}°)"
 
     if not target_name and locality_label:
         target_name = locality_label.split(",")[0].strip()
@@ -648,15 +671,20 @@ def search_local_resources(
     # If explicit coordinates are used (e.g. GPS or map pin), do not append "near <locality>"
     # to avoid Google Places text search returning city-wide results for the named locality.
     has_explicit_coords = (latitude is not None and longitude is not None)
+    is_generic_label = (
+        not target_name
+        or target_name.strip().lower() in ("india", "current gps location", "selected map pin")
+        or target_name.startswith("Coordinates")
+    )
     if query and query.strip():
         user_q = query.strip()
-        if has_explicit_coords or " near " in user_q.lower():
+        if has_explicit_coords or " near " in user_q.lower() or is_generic_label:
             effective_query = user_q
         else:
             effective_query = f"{user_q} near {target_name or locality_label}"
     else:
         primary_term = category_meta["default_query_terms"][0]
-        if has_explicit_coords:
+        if has_explicit_coords or is_generic_label:
             effective_query = primary_term
         else:
             effective_query = f"{primary_term} near {target_name or locality_label}"
@@ -820,6 +848,7 @@ def search_local_resources(
         radius_meters=float(effective_radius),
         category_id=effective_category,
         preferences=preferences,
+        search_origin_type=search_origin_type,
     )
 
     # Return valid deduplicated places without arbitrary limit truncation (Requirement 3)

@@ -210,12 +210,24 @@ export const ResourcesPage: React.FC = () => {
         limit: 50,
       };
 
+      let searchOriginType: string | undefined = undefined;
+      if (requestIdParam) {
+        searchOriginType = "REQUEST_LOCATION";
+      } else if (isCurrentLocation) {
+        searchOriginType = "CURRENT_GPS";
+      } else if (selectedPlace) {
+        searchOriginType = "SELECTED_MAP_LOCATION";
+      }
+
       if (exploreCenter?.latitude != null && exploreCenter?.longitude != null) {
         params.latitude = exploreCenter.latitude;
         params.longitude = exploreCenter.longitude;
         params.radius_meters = exploreRadius;
       } else if (requestIdParam) {
         params.request_id = requestIdParam;
+      }
+      if (searchOriginType) {
+        (params as any).search_origin_type = searchOriginType;
       }
 
       if (viewportBounds) {
@@ -396,7 +408,7 @@ export const ResourcesPage: React.FC = () => {
         setIsLocatingUser(false);
         setSelectedPlace(null);
         setIsCurrentLocation(true);
-        const label = "Current location";
+        const label = "Current GPS Location";
         setExploreCenter({
           latitude: pos.coords.latitude,
           longitude: pos.coords.longitude,
@@ -542,9 +554,13 @@ export const ResourcesPage: React.FC = () => {
               )}
             </div>
             <p className="text-base font-bold text-gray-950 dark:text-white truncate">
-              {exploreLocationLabel ||
-                searchResult?.search_center?.label ||
-                "Pune, Maharashtra"}
+              {exploreLocationLabel && exploreLocationLabel.trim().toLowerCase() !== "india"
+                ? exploreLocationLabel
+                : searchResult?.search_center?.label && searchResult.search_center.label.trim().toLowerCase() !== "india"
+                ? searchResult.search_center.label
+                : isCurrentLocation && exploreCenter
+                ? `GPS (${exploreCenter.latitude.toFixed(4)}°, ${exploreCenter.longitude.toFixed(4)}°)`
+                : "Selected Area"}
             </p>
           </div>
         </div>
@@ -594,14 +610,18 @@ export const ResourcesPage: React.FC = () => {
       </div>
 
       {/* Target Location Context Banner with Radius Controls */}
-      {searchResult?.search_center?.label && (
+      {searchResult?.search_center && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-teal-50/70 dark:bg-brand-dark-muted/40 border border-teal-200/60 dark:border-brand-dark-border text-xs">
           <div className="flex items-center gap-2 text-teal-950 dark:text-teal-200 font-medium">
             <Compass className="w-4 h-4 text-brand-primary shrink-0" />
             <span>
               Searching places near{" "}
               <strong className="font-bold text-gray-950 dark:text-white">
-                {searchResult.search_center.label}
+                {searchResult.search_center.label && searchResult.search_center.label.trim().toLowerCase() !== "india"
+                  ? searchResult.search_center.label
+                  : isCurrentLocation
+                  ? "your current GPS location"
+                  : selectedPlace?.name || "selected coordinates"}
               </strong>{" "}
               within{" "}
               <span className="font-bold text-brand-primary">

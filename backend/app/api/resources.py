@@ -48,6 +48,7 @@ def search_resources(
     max_lon: Optional[float] = Query(None, ge=-180.0, le=180.0, description="Viewport bounding box maximum longitude"),
     provider: Optional[str] = Query(None, description="Preferred provider: 'google', 'osm', or 'auto'"),
     limit: int = Query(50, ge=1, le=100, description="Maximum number of results to return"),
+    search_origin_type: Optional[str] = Query(None, description="Origin type: 'CURRENT_GPS', 'PROFILE_LOCATION', 'SELECTED_MAP_LOCATION', 'REQUEST_LOCATION'"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ResourceSearchResponse:
@@ -73,6 +74,7 @@ def search_resources(
         max_lon=max_lon,
         provider=provider,
         limit=limit,
+        search_origin_type=search_origin_type,
     )
 
 

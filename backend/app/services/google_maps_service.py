@@ -275,11 +275,14 @@ class GoogleMapsService:
                     longitude=73.809071,
                     city="Mahalunge",
                     area="Mahalunge",
+                    taluka="Khed",
+                    district="Pune",
                     state="Maharashtra",
                     country="India",
                     postal_code="410501",
                     location_source="google_places_details",
                     location_precision="locality",
+                    is_unresolved=False,
                 )
             if clean_place_id == "ChIJZdAjYE25wjsRrF_MZhrk_lU":
                 return ResolvedLocation(
@@ -291,11 +294,14 @@ class GoogleMapsService:
                     longitude=73.756159,
                     city="Pune",
                     area="Mahalunge",
+                    taluka="Haveli",
+                    district="Pune",
                     state="Maharashtra",
                     country="India",
                     postal_code="411045",
                     location_source="google_places_details",
                     location_precision="locality",
+                    is_unresolved=False,
                 )
             return None
 
@@ -326,11 +332,24 @@ class GoogleMapsService:
             disp_name = disp_obj.get("text") if isinstance(disp_obj, dict) else None
             types = data.get("types", [])
 
-            city, area, state, country, postal = self._extract_address_components(data.get("addressComponents", []))
+            parsed = self.parse_universal_components(data.get("addressComponents", []))
+            city = parsed.get("city")
+            area = parsed.get("area")
+            state = parsed.get("state")
+            country = parsed.get("country") or "India"
+            postal = parsed.get("postal_code")
+            taluka = parsed.get("taluka")
+            district = parsed.get("district")
+            premise = parsed.get("premise")
+            subpremise = parsed.get("subpremise")
+            route = parsed.get("route")
+            sublocality = parsed.get("sublocality")
+            locality = parsed.get("locality")
+            neighborhood = parsed.get("neighborhood")
 
             # Derive explicit location precision from Google place types
             if any(t in types for t in ["subpremise", "premise", "establishment", "point_of_interest"]):
-                precision = "exact"
+                precision = "premise" if (premise or subpremise) else "exact"
             elif any(t in types for t in ["route", "street_address"]):
                 precision = "street"
             elif any(t in types for t in ["sublocality_level_1", "neighborhood"]):
@@ -351,13 +370,26 @@ class GoogleMapsService:
                 display_name=disp_name,
                 city=city,
                 area=area,
+                taluka=taluka,
+                district=district,
                 state=state,
-                country=country or "India",
+                country=country,
                 postal_code=postal,
                 latitude=round(lat, 6) if lat is not None else None,
                 longitude=round(lon, 6) if lon is not None else None,
                 location_precision=precision,
                 location_source="google_places",
+                premise=premise,
+                subpremise=subpremise,
+                street_number=parsed.get("street_number"),
+                route=route,
+                road=route,
+                sublocality=sublocality,
+                locality=locality,
+                neighborhood=neighborhood,
+                short_display_name=disp_name,
+                full_display_address=formatted,
+                is_unresolved=False,
             )
             self._set_in_cache(cache_key, resolved)
             return resolved
@@ -559,9 +591,20 @@ class GoogleMapsService:
             disp_obj = top.get("displayName", {})
             name = disp_obj.get("text") if isinstance(disp_obj, dict) else None
 
-            city, area, state, country, postal = self._extract_address_components(
-                top.get("addressComponents", [])
-            )
+            parsed = self.parse_universal_components(top.get("addressComponents", []))
+            city = parsed.get("city")
+            area = parsed.get("area")
+            state = parsed.get("state")
+            country = parsed.get("country") or "India"
+            postal = parsed.get("postal_code")
+            taluka = parsed.get("taluka")
+            district = parsed.get("district")
+            premise = parsed.get("premise")
+            subpremise = parsed.get("subpremise")
+            route = parsed.get("route")
+            sublocality = parsed.get("sublocality")
+            locality = parsed.get("locality")
+            neighborhood = parsed.get("neighborhood")
 
             resolved = ResolvedLocation(
                 google_place_id=place_id,
@@ -570,13 +613,26 @@ class GoogleMapsService:
                 display_name=name,
                 city=city,
                 area=area,
+                taluka=taluka,
+                district=district,
                 state=state,
-                country=country or "India",
+                country=country,
                 postal_code=postal,
                 latitude=round(lat, 6) if lat is not None else None,
                 longitude=round(lon, 6) if lon is not None else None,
                 location_precision="locality" if area is None else "neighborhood",
                 location_source="google_places",
+                premise=premise,
+                subpremise=subpremise,
+                street_number=parsed.get("street_number"),
+                route=route,
+                road=route,
+                sublocality=sublocality,
+                locality=locality,
+                neighborhood=neighborhood,
+                short_display_name=name,
+                full_display_address=formatted,
+                is_unresolved=False,
             )
             self._set_in_cache(cache_key, resolved)
             return resolved
@@ -674,17 +730,187 @@ class GoogleMapsService:
                 location_precision=precision,
                 location_source="browser_geolocation",
                 road=route_name,
+                premise=premise_name,
+                route=route_name,
+                short_display_name=display_name,
+                full_display_address=top.get("formatted_address") or formatted,
+                is_unresolved=False,
             )
         except Exception as exc:
             logger.warning("Google Geocoding API reverse-geocode call failed gracefully: %s", exc)
             return None
 
+    def _reverse_geocode_places_nearby(self, latitude: float, longitude: float) -> Optional[ResolvedLocation]:
+        """
+        Reverse geocode GPS coordinates using Google Places API (New) searchNearby with a 500m radius.
+        Extracts administrative addressComponents from the closest place.
+        Does NOT adopt commercial business identity as location name.
+        """
+        if not self.is_configured:
+            return None
+        try:
+            places = self.search_places_nearby(latitude, longitude, radius_meters=500.0, max_result_count=1)
+            if not places:
+                return None
+            top = places[0]
+            comps = top.get("addressComponents", [])
+            if not comps:
+                return None
+            parsed = self.parse_universal_components(comps)
+            if not (parsed.get("city") or parsed.get("area") or parsed.get("state")):
+                return None
+
+            area = parsed.get("area")
+            city = parsed.get("city")
+            taluka = parsed.get("taluka")
+            district = parsed.get("district")
+            state = parsed.get("state")
+            country = parsed.get("country") or "India"
+            postal = parsed.get("postal_code")
+            premise = parsed.get("premise")
+            route = parsed.get("route")
+
+            display_name = None
+            if area and city and area.strip().lower() != city.strip().lower():
+                display_name = f"{area}, {city}"
+            elif area:
+                display_name = area
+            elif city:
+                display_name = city
+
+            parts = [p for p in [area, taluka, district, city, state, postal, country] if p]
+            formatted_address = ", ".join(dict.fromkeys(parts))
+
+            return ResolvedLocation(
+                google_place_id=None,
+                formatted_address=formatted_address,
+                name=display_name,
+                display_name=display_name,
+                city=city,
+                area=area,
+                taluka=taluka,
+                district=district,
+                state=state,
+                country=country,
+                postal_code=postal,
+                latitude=round(latitude, 6),
+                longitude=round(longitude, 6),
+                location_precision="neighborhood" if area else "locality",
+                location_source="google_places_nearby_reverse",
+                road=route,
+                premise=premise,
+                subpremise=parsed.get("subpremise"),
+                street_number=parsed.get("street_number"),
+                route=route,
+                sublocality=parsed.get("sublocality"),
+                locality=parsed.get("locality"),
+                neighborhood=parsed.get("neighborhood"),
+                short_display_name=display_name,
+                full_display_address=formatted_address,
+                is_unresolved=False,
+            )
+        except Exception as exc:
+            logger.warning("Places API searchNearby reverse geocoding failed: %s", exc)
+            return None
+
+    def _reverse_geocode_osm(self, latitude: float, longitude: float) -> Optional[ResolvedLocation]:
+        """
+        Resilient, zero-billing OpenStreetMap Nominatim reverse geocoder.
+        Worldwide coverage, no API key required, respects OSM usage policy.
+        """
+        try:
+            url = "https://nominatim.openstreetmap.org/reverse"
+            headers = {
+                "User-Agent": "NEST-Community-Platform/1.0 (nest-app; support@nestcommunity.org)",
+                "Accept-Language": "en",
+            }
+            params = {
+                "lat": latitude,
+                "lon": longitude,
+                "format": "json",
+                "addressdetails": 1,
+            }
+            resp = requests.get(url, params=params, headers=headers, timeout=4.0)
+            if resp.status_code != 200:
+                logger.warning("OSM Nominatim reverse geocode returned status %d", resp.status_code)
+                return None
+            data = resp.json()
+            if not data or "address" not in data:
+                return None
+
+            addr = data.get("address", {})
+            suburb = addr.get("suburb")
+            neighbourhood = addr.get("neighbourhood")
+            residential = addr.get("residential")
+            village = addr.get("village")
+            hamlet = addr.get("hamlet")
+            city = addr.get("city") or addr.get("town") or addr.get("municipality")
+            state_district = addr.get("state_district") or addr.get("district")
+            county = addr.get("county") or addr.get("subdistrict")
+            state = addr.get("state")
+            postal_code = addr.get("postcode")
+            country = addr.get("country", "India")
+            road = addr.get("road")
+
+            area = suburb or neighbourhood or residential or village or hamlet
+            taluka = county
+            district = state_district
+
+            if not city:
+                city = district or taluka or village or area
+
+            if city and area and city.strip().lower() == area.strip().lower():
+                if village and village.strip().lower() != city.strip().lower():
+                    area = village
+                else:
+                    area = None
+
+            display_name = None
+            if area and city and area.strip().lower() != city.strip().lower():
+                display_name = f"{area}, {city}"
+            elif area:
+                display_name = area
+            elif city:
+                display_name = city
+
+            formatted_address = data.get("display_name")
+            if not formatted_address:
+                parts = [p for p in [road, area, taluka, district, state, postal_code, country] if p]
+                formatted_address = ", ".join(dict.fromkeys(parts))
+
+            return ResolvedLocation(
+                google_place_id=None,
+                formatted_address=formatted_address,
+                name=display_name,
+                display_name=display_name,
+                city=city,
+                area=area,
+                taluka=taluka,
+                district=district,
+                state=state,
+                country=country or "India",
+                postal_code=postal_code,
+                latitude=round(latitude, 6),
+                longitude=round(longitude, 6),
+                location_precision="neighborhood" if area else "locality",
+                location_source="osm_reverse_geocoding",
+                road=road,
+                short_display_name=display_name,
+                full_display_address=formatted_address,
+                is_unresolved=False,
+            )
+        except Exception as exc:
+            logger.warning("OSM Nominatim reverse geocode failed: %s", exc)
+            return None
+
     def reverse_geocode(self, latitude: float, longitude: float) -> Optional[ResolvedLocation]:
         """
         Reverse geocode GPS coordinates to human-readable canonical area & city.
-        Uses authoritative Google Geocoding API when configured.
-        Preserves exact input coordinates as authoritative source of truth.
-        Falls back to resilient coordinate boundaries when offline or unconfigured.
+        Uses 4-tier resilient resolution:
+        1. Authoritative Google Geocoding API (when configured).
+        2. Google Places API (New) searchNearby addressComponents (when configured).
+        3. OpenStreetMap Nominatim reverse geocoding (zero-billing, worldwide).
+        4. Safe Indian coordinates bounding fallback (coordinates preserved, is_unresolved=True).
         """
         if not (-90.0 <= latitude <= 90.0 and -180.0 <= longitude <= 180.0):
             return None
@@ -697,11 +923,23 @@ class GoogleMapsService:
         # 1. Authoritative Google Maps Geocoding API
         if self.is_configured:
             geo_res = self._geocode_latlng_api(latitude, longitude)
-            if geo_res:
+            if geo_res and not geo_res.is_unresolved:
                 self._set_in_cache(cache_key, geo_res)
                 return geo_res
 
-        # 2. Resilient deterministic coordinate boundary resolver for Indian coordinates
+            # 2. Resilient Google Places API (New) searchNearby
+            places_res = self._reverse_geocode_places_nearby(latitude, longitude)
+            if places_res and not places_res.is_unresolved:
+                self._set_in_cache(cache_key, places_res)
+                return places_res
+
+        # 3. Resilient OpenStreetMap Nominatim reverse geocoder
+        osm_res = self._reverse_geocode_osm(latitude, longitude)
+        if osm_res and not osm_res.is_unresolved:
+            self._set_in_cache(cache_key, osm_res)
+            return osm_res
+
+        # 4. Resilient deterministic coordinate boundary fallback
         fallback = self.resolve_indian_coordinates(latitude, longitude)
         if fallback:
             self._set_in_cache(cache_key, fallback)
@@ -941,37 +1179,113 @@ class GoogleMapsService:
             return []
 
     @staticmethod
+    def parse_universal_components(
+        components: List[Dict[str, Any]],
+    ) -> Dict[str, Optional[str]]:
+        """
+        Universal address components parser.
+        Supports:
+        - Google Places API (New) format: {"longText": "...", "shortText": "...", "types": [...]}
+        - Google Geocoding API format: {"long_name": "...", "short_name": "...", "types": [...]}
+        Extracts administrative hierarchy:
+        premise, subpremise, street_number, route, sublocality, sublocality_2, neighborhood,
+        locality, taluka (admin_3), district (admin_2), state (admin_1), postal_code, country.
+        Derives canonical area and city without guessing.
+        """
+        premise = None
+        subpremise = None
+        street_number = None
+        route = None
+        sublocality_1 = None
+        sublocality_2 = None
+        neighborhood = None
+        locality = None
+        taluka = None
+        district = None
+        state = None
+        country = "India"
+        postal_code = None
+
+        for comp in components:
+            types = comp.get("types", [])
+            text = (
+                comp.get("long_name")
+                or comp.get("longText")
+                or comp.get("short_name")
+                or comp.get("shortText")
+            )
+            if not text:
+                continue
+
+            if "subpremise" in types and not subpremise:
+                subpremise = text
+            if "premise" in types and not premise:
+                premise = text
+            if "street_number" in types and not street_number:
+                street_number = text
+            if "route" in types and not route:
+                route = text
+            if "sublocality_level_2" in types and not sublocality_2:
+                sublocality_2 = text
+            if ("sublocality_level_1" in types or "sublocality" in types) and not sublocality_1:
+                sublocality_1 = text
+            if "neighborhood" in types and not neighborhood:
+                neighborhood = text
+            if "locality" in types and not locality:
+                locality = text
+            if "administrative_area_level_3" in types and not taluka:
+                taluka = text
+            if "administrative_area_level_2" in types and not district:
+                district = text
+            if "administrative_area_level_1" in types and not state:
+                state = text
+            if "postal_code" in types and not postal_code:
+                postal_code = text
+            if "country" in types:
+                country = text
+
+        area = sublocality_1 or neighborhood or sublocality_2 or premise
+        city = locality or district or taluka
+
+        if city and area and city.strip().lower() == area.strip().lower():
+            if sublocality_2 or neighborhood:
+                area = sublocality_2 or neighborhood
+            elif district and district.strip().lower() != city.strip().lower():
+                city = district
+            else:
+                area = None
+
+        return {
+            "premise": premise,
+            "subpremise": subpremise,
+            "street_number": street_number,
+            "route": route,
+            "road": route,
+            "sublocality": sublocality_1 or sublocality_2,
+            "neighborhood": neighborhood,
+            "locality": locality,
+            "taluka": taluka,
+            "district": district,
+            "city": city,
+            "area": area,
+            "state": state,
+            "postal_code": postal_code,
+            "country": country,
+        }
+
+    @staticmethod
     def _extract_address_components(
         components: List[Dict[str, Any]],
     ) -> Tuple[Optional[str], Optional[str], Optional[str], str, Optional[str]]:
         """Extract city, area, state, country, postal from Places API (New) addressComponents."""
-        city = None
-        area = None
-        state = None
-        country = "India"
-        postal = None
-
-        for comp in components:
-            types = comp.get("types", [])
-            text = comp.get("longText") or comp.get("shortText")
-            if not text:
-                continue
-
-            if "sublocality_level_1" in types or "sublocality" in types or "neighborhood" in types:
-                if not area:
-                    area = text
-            elif "locality" in types:
-                city = text
-            elif "administrative_area_level_2" in types and not city:
-                city = text
-            elif "administrative_area_level_1" in types:
-                state = text
-            elif "country" in types:
-                country = text
-            elif "postal_code" in types:
-                postal = text
-
-        return city, area, state, country, postal
+        parsed = GoogleMapsService.parse_universal_components(components)
+        return (
+            parsed.get("city"),
+            parsed.get("area"),
+            parsed.get("state"),
+            parsed.get("country") or "India",
+            parsed.get("postal_code"),
+        )
 
     @staticmethod
     def parse_google_address_components_multi(
@@ -1091,6 +1405,7 @@ class GoogleMapsService:
                 longitude=round(lon, 6),
                 location_precision="approximate",
                 location_source="browser_geolocation",
+                is_unresolved=True,
             )
 
         return None

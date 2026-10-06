@@ -70,6 +70,8 @@ export interface LocationCreateOrUpdatePayload {
   private_unit?: string;
   location_source?: string;
   location_precision?: string;
+  premise?: string;
+  is_unresolved?: boolean;
 }
 
 export interface UserSkill {

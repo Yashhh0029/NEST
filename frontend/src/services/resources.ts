@@ -23,6 +23,7 @@ export async function searchResources(params?: {
   max_lon?: number;
   provider?: string;
   limit?: number;
+  search_origin_type?: string;
 }): Promise<ResourceSearchResponse> {
   const resp = await api.get<ResourceSearchResponse>("/api/resources/search", {
     params,

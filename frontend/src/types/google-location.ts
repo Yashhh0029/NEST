@@ -28,6 +28,15 @@ export interface ResolvedLocation {
   road?: string | null;
   neighborhood?: string | null;
   suburb?: string | null;
+  premise?: string | null;
+  subpremise?: string | null;
+  street_number?: string | null;
+  route?: string | null;
+  sublocality?: string | null;
+  locality?: string | null;
+  short_display_name?: string | null;
+  full_display_address?: string | null;
+  is_unresolved?: boolean;
 }
 
 

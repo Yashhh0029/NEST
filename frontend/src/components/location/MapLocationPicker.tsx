@@ -28,6 +28,8 @@ export interface ConfirmedMapLocation {
   google_place_id?: string;
   location_source: string;
   location_precision: string;
+  premise?: string;
+  is_unresolved?: boolean;
 }
 
 export interface MapLocationPickerProps {
@@ -112,14 +114,6 @@ export function MapLocationPicker({
             map: mapInstanceRef.current,
             draggable: true,
             title: "Drag to refine your location",
-            icon: {
-              path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
-              scale: 6,
-              fillColor: "#0F766E", // Teal brand color
-              fillOpacity: 1,
-              strokeColor: "#ffffff",
-              strokeWeight: 2,
-            },
             zIndex: 10,
           });
 
@@ -228,17 +222,17 @@ export function MapLocationPicker({
 
   const handleConfirm = () => {
     if (!selectedCoords) return;
-    const city = resolvedLocation?.city || resolvedLocation?.area || initialLocation?.city || "Selected Location";
+    const city = resolvedLocation?.city || resolvedLocation?.area || initialLocation?.city || "";
     const area = resolvedLocation?.area || initialLocation?.area || undefined;
     const state = resolvedLocation?.state || undefined;
     const country = resolvedLocation?.country || "India";
 
     const displayName =
       resolvedLocation?.display_name ||
-      (area ? `${area}, ${city}` : city);
+      (area && city ? `${area}, ${city}` : city || area || undefined);
 
     onConfirm({
-      city: city.trim(),
+      city: city ? city.trim() : (resolvedLocation?.is_unresolved ? "Coordinates" : "Selected Location"),
       area: area ? area.trim() : undefined,
       taluka: resolvedLocation?.taluka || undefined,
       district: resolvedLocation?.district || undefined,
@@ -251,7 +245,9 @@ export function MapLocationPicker({
       postal_code: resolvedLocation?.postal_code || undefined,
       google_place_id: resolvedLocation?.google_place_id || undefined,
       location_source: "map_picker",
-      location_precision: resolvedLocation?.location_precision || "locality",
+      location_precision: resolvedLocation?.location_precision || (resolvedLocation?.is_unresolved ? "coordinates_only" : "rooftop"),
+      premise: resolvedLocation?.premise || undefined,
+      is_unresolved: resolvedLocation?.is_unresolved,
     });
   };
 
@@ -361,8 +357,27 @@ export function MapLocationPicker({
 
         {selectedCoords ? (
           <div className="space-y-2">
+            <div className="flex items-center gap-2 text-[11px] font-mono text-teal-800 dark:text-teal-300 bg-white dark:bg-brand-dark-card p-2 rounded-lg border border-teal-200 dark:border-teal-800">
+              <MapPin className="w-3.5 h-3.5 text-brand-primary shrink-0" />
+              <span>
+                Selected Pin: <strong>{selectedCoords.lat.toFixed(6)}, {selectedCoords.lng.toFixed(6)}</strong>
+              </span>
+            </div>
+
             {resolvedLocation && (() => {
               const hierarchy = formatLocationHierarchy(resolvedLocation);
+              if (hierarchy.isUnavailable) {
+                return (
+                  <div className="space-y-1 border-l-2 border-amber-500 pl-2.5 my-1">
+                    <p className="font-semibold text-xs text-amber-800 dark:text-amber-300">
+                      Geographic address details unavailable for these coordinates
+                    </p>
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                      Exact coordinates ({selectedCoords.lat.toFixed(6)}, {selectedCoords.lng.toFixed(6)}) will be saved.
+                    </p>
+                  </div>
+                );
+              }
               return (
                 <div className="space-y-0.5 border-l-2 border-teal-500 pl-2.5 my-1">
                   <p className="font-bold text-sm text-gray-900 dark:text-gray-100">
@@ -385,7 +400,7 @@ export function MapLocationPicker({
               );
             })()}
 
-            {resolvedLocation?.formatted_address && (
+            {resolvedLocation?.formatted_address && resolvedLocation.formatted_address.trim().toLowerCase() !== "india" && (
               <p className="text-xs text-gray-600 dark:text-gray-400">
                 {resolvedLocation.formatted_address}
               </p>
