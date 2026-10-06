@@ -126,9 +126,9 @@ export function RequestBox() {
   const [targetPlace, setTargetPlace] = useState<TargetPlaceDetails | null>(null);
   const [showTargetInput, setShowTargetInput] = useState(false);
 
-  const handleSelectTargetPlace = async (prediction: PlaceAutocompletePrediction) => {
+  const handleSelectTargetPlace = async (prediction: PlaceAutocompletePrediction, sessionToken?: string) => {
     try {
-      const details = await getPlaceDetails(prediction.place_id);
+      const details = await getPlaceDetails(prediction.place_id, sessionToken);
       setTargetPlace({
         placeId: prediction.place_id,
         name: details.display_name || details.name || prediction.main_text,
@@ -149,7 +149,12 @@ export function RequestBox() {
     }
   };
 
-  const targetCity = targetPlace?.city || backendExtracted?.location?.city || localPreviews.find((p) => p.type === "location")?.label;
+  const targetCity =
+    targetPlace?.name ||
+    targetPlace?.city ||
+    backendExtracted?.location?.display_name ||
+    backendExtracted?.location?.city ||
+    localPreviews.find((p) => p.type === "location")?.label;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -165,11 +170,11 @@ export function RequestBox() {
         text: cleanText,
         target_city: targetPlace?.city || backendExtracted?.location?.city || undefined,
         target_area: targetPlace?.area || backendExtracted?.location?.area || undefined,
-        target_display_name: targetPlace?.name || undefined,
-        target_google_place_id: targetPlace?.placeId || undefined,
-        target_latitude: targetPlace?.lat || undefined,
-        target_longitude: targetPlace?.lng || undefined,
-        target_formatted_address: targetPlace?.formattedAddress || undefined,
+        target_display_name: targetPlace?.name || backendExtracted?.location?.display_name || undefined,
+        target_google_place_id: targetPlace?.placeId || backendExtracted?.location?.google_place_id || undefined,
+        target_latitude: targetPlace?.lat != null ? targetPlace.lat : backendExtracted?.location?.latitude != null ? backendExtracted.location.latitude : undefined,
+        target_longitude: targetPlace?.lng != null ? targetPlace.lng : backendExtracted?.location?.longitude != null ? backendExtracted.location.longitude : undefined,
+        target_formatted_address: targetPlace?.formattedAddress || backendExtracted?.location?.formatted_address || undefined,
       });
       toastSuccess("Request created successfully! Finding community matches...");
       refreshCoordinator.invalidate(["requests", "nearby_requests", "notifications"]);

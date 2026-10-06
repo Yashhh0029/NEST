@@ -72,10 +72,13 @@ class GoogleMapsService:
         latitude: Optional[float] = None,
         longitude: Optional[float] = None,
         radius_meters: Optional[float] = None,
+        included_primary_types: Optional[List[str]] = None,
     ) -> List[PlaceAutocompletePrediction]:
         """
         Query Google Places API (New) autocomplete, biased and restricted to India.
         Uses circular locationBias when coordinates are provided (bias, never strict restriction).
+        Prioritizes geographic and administrative places (cities, localities, neighborhoods, premises)
+        ahead of arbitrary commercial establishments.
         """
         clean_input = input_text.strip()
         if not clean_input:
@@ -86,7 +89,8 @@ class GoogleMapsService:
             if latitude is not None and longitude is not None
             else "none"
         )
-        cache_key = f"autocomplete:{clean_input.lower()}:{coord_str}"
+        types_key = ",".join(included_primary_types) if included_primary_types else "all"
+        cache_key = f"autocomplete:{clean_input.lower()}:{coord_str}:{types_key}"
         cached = self._get_from_cache(cache_key)
         if cached is not None:
             return cached
@@ -94,6 +98,23 @@ class GoogleMapsService:
         if not self.is_configured:
             q_low = clean_input.lower()
             fallbacks = []
+            if "boisar" in q_low:
+                fallbacks.extend([
+                    PlaceAutocompletePrediction(
+                        place_id="ChIJI1ifSTke5zsRys2rC5ulSmk",
+                        main_text="Boisar",
+                        secondary_text="Maharashtra, India",
+                        description="Boisar, Maharashtra, India",
+                        types=["locality", "political", "geocode"],
+                    ),
+                    PlaceAutocompletePrediction(
+                        place_id="ChIJyyR0gP4c5zsRf1EUN6YuOys",
+                        main_text="Boisar",
+                        secondary_text="Palghar, Maharashtra, India",
+                        description="Boisar, Palghar, Maharashtra, India",
+                        types=["sublocality", "sublocality_level_1", "political", "geocode"],
+                    ),
+                ])
             if "mahalunge" in q_low:
                 # Include both distinct Mahalunge locations for disambiguation testing
                 fallbacks.extend([
@@ -102,18 +123,21 @@ class GoogleMapsService:
                         main_text="Mahalunge",
                         secondary_text="Pune, Maharashtra, India",
                         description="Mahalunge, Pune, Maharashtra, India",
+                        types=["locality", "political", "geocode"],
                     ),
                     PlaceAutocompletePrediction(
                         place_id="ChIJ3x-Canm2wjsRwPJ-IJb_4C8",
                         main_text="Mahalunge",
                         secondary_text="Maharashtra 410501, India",
                         description="Mahalunge, Maharashtra 410501, India",
+                        types=["locality", "political", "geocode"],
                     ),
                     PlaceAutocompletePrediction(
                         place_id="ChIJdwrj1xq5wjsREZMUTXUhNbs",
                         main_text="Mahalunge Balewadi Stadium",
                         secondary_text="Baner - Mahalunge Road, Balewadi, Pune, Maharashtra, India",
                         description="Mahalunge Balewadi Stadium, Baner - Mahalunge Road, Balewadi, Pune, Maharashtra, India",
+                        types=["point_of_interest", "establishment"],
                     ),
                 ])
             if "hinjewadi" in q_low or "pune" in q_low or "kothrud" in q_low:
@@ -123,6 +147,7 @@ class GoogleMapsService:
                         main_text="Kothrud",
                         secondary_text="Pune, Maharashtra, India",
                         description="Kothrud, Pune, Maharashtra, India",
+                        types=["locality", "political", "geocode"],
                     )
                 )
             if "indiranagar" in q_low or "bengaluru" in q_low or "bangalore" in q_low:
@@ -132,6 +157,7 @@ class GoogleMapsService:
                         main_text="Indiranagar",
                         secondary_text="Bengaluru, Karnataka, India",
                         description="Indiranagar, Bengaluru, Karnataka, India",
+                        types=["neighborhood", "political", "geocode"],
                     )
                 )
             if "koramangala" in q_low:
@@ -141,6 +167,7 @@ class GoogleMapsService:
                         main_text="Koramangala",
                         secondary_text="Bengaluru, Karnataka, India",
                         description="Koramangala, Bengaluru, Karnataka, India",
+                        types=["sublocality", "political", "geocode"],
                     )
                 )
             if "whitefield" in q_low:
@@ -150,15 +177,27 @@ class GoogleMapsService:
                         main_text="Whitefield",
                         secondary_text="Bengaluru, Karnataka, India",
                         description="Whitefield, Bengaluru, Karnataka, India",
+                        types=["locality", "political", "geocode"],
                     )
                 )
-            if "kochi" in q_low or "ernakulam" in q_low:
+            if "kochi" in q_low or "ernakulam" in q_low or "kakkanad" in q_low:
                 fallbacks.append(
                     PlaceAutocompletePrediction(
                         place_id="ChIJv8a-SlENCDsRkkGEpcqC1Qs",
                         main_text="Kochi",
                         secondary_text="Kerala, India",
                         description="Kochi, Kerala, India",
+                        types=["locality", "political", "geocode"],
+                    )
+                )
+            if "mumbai" in q_low:
+                fallbacks.append(
+                    PlaceAutocompletePrediction(
+                        place_id="ChIJwe1EZjDG5zsRaYxkjYnchkI",
+                        main_text="Mumbai",
+                        secondary_text="Maharashtra, India",
+                        description="Mumbai, Maharashtra, India",
+                        types=["locality", "political", "geocode"],
                     )
                 )
             return fallbacks
@@ -172,6 +211,8 @@ class GoogleMapsService:
             "input": clean_input,
             "includedRegionCodes": ["in"],
         }
+        if included_primary_types:
+            payload["includedPrimaryTypes"] = included_primary_types[:5]
         if session_token:
             payload["sessionToken"] = session_token
         if latitude is not None and longitude is not None:
@@ -205,6 +246,7 @@ class GoogleMapsService:
                 main_text = structured.get("mainText", {}).get("text") or text_info.get("text", "")
                 secondary_text = structured.get("secondaryText", {}).get("text")
                 description = text_info.get("text") or main_text
+                types = pred.get("types", [])
 
                 if place_id and main_text:
                     predictions.append(
@@ -213,8 +255,32 @@ class GoogleMapsService:
                             main_text=main_text,
                             secondary_text=secondary_text,
                             description=description,
+                            types=types,
                         )
                     )
+
+            # Prioritize geographic/address locations over arbitrary commercial businesses
+            geo_primary = {
+                "locality", "sublocality", "sublocality_level_1", "sublocality_level_2",
+                "neighborhood", "administrative_area_level_1", "administrative_area_level_2",
+                "administrative_area_level_3", "premise", "subpremise", "route", "street_address",
+                "geocode", "political", "postal_code", "country"
+            }
+            def _rank_pred(p: PlaceAutocompletePrediction) -> int:
+                p_types = set(p.types or [])
+                c_low = clean_input.lower()
+                m_low = p.main_text.lower()
+                if c_low == m_low and ("locality" in p_types or "political" in p_types):
+                    return 100
+                if any(t in p_types for t in ["locality", "sublocality", "sublocality_level_1", "neighborhood"]):
+                    return 80
+                if any(t in p_types for t in ["premise", "subpremise", "route", "street_address", "geocode", "political"]):
+                    return 60
+                if p_types.intersection(geo_primary):
+                    return 40
+                return 10
+
+            predictions.sort(key=_rank_pred, reverse=True)
 
             self._set_in_cache(cache_key, predictions)
             return predictions
@@ -223,7 +289,7 @@ class GoogleMapsService:
             logger.warning("Google Places autocomplete failed gracefully: %s", exc)
             return []
 
-    def get_place_details(self, place_id: str) -> Optional[ResolvedLocation]:
+    def get_place_details(self, place_id: str, session_token: Optional[str] = None) -> Optional[ResolvedLocation]:
         """
         Fetch place details using Google Places API (New).
         """
@@ -233,7 +299,79 @@ class GoogleMapsService:
 
         if not self.is_configured:
             p_low = clean_place_id.lower()
-            if "hinjewadi" in p_low or "pune" in p_low:
+            if "boisar" in p_low or clean_place_id == "ChIJI1ifSTke5zsRys2rC5ulSmk":
+                return ResolvedLocation(
+                    google_place_id=clean_place_id,
+                    formatted_address="Boisar, Palghar, Maharashtra, India",
+                    name="Boisar",
+                    display_name="Boisar",
+                    latitude=19.808156,
+                    longitude=72.771777,
+                    city="Boisar",
+                    area="Boisar",
+                    district="Palghar",
+                    state="Maharashtra",
+                    country="India",
+                    postal_code="401501",
+                    location_source="google_places_details",
+                    location_precision="locality",
+                    is_unresolved=False,
+                )
+            if clean_place_id == "ChIJyyR0gP4c5zsRf1EUN6YuOys":
+                return ResolvedLocation(
+                    google_place_id=clean_place_id,
+                    formatted_address="Boisar, Palghar, Maharashtra 401404, India",
+                    name="Boisar",
+                    display_name="Boisar",
+                    latitude=19.712833,
+                    longitude=72.760696,
+                    city="Palghar",
+                    area="Boisar",
+                    district="Palghar",
+                    state="Maharashtra",
+                    country="India",
+                    postal_code="401404",
+                    location_source="google_places_details",
+                    location_precision="locality",
+                    is_unresolved=False,
+                )
+            if "wakad" in p_low:
+                return ResolvedLocation(
+                    google_place_id=clean_place_id,
+                    formatted_address="Wakad, Pune, Maharashtra 411057, India",
+                    name="Wakad",
+                    display_name="Wakad",
+                    latitude=18.5987,
+                    longitude=73.7686,
+                    city="Pune",
+                    area="Wakad",
+                    district="Pune",
+                    state="Maharashtra",
+                    country="India",
+                    postal_code="411057",
+                    location_source="google_places_details",
+                    location_precision="locality",
+                    is_unresolved=False,
+                )
+            if "baner" in p_low:
+                return ResolvedLocation(
+                    google_place_id=clean_place_id,
+                    formatted_address="Baner, Pune, Maharashtra 411045, India",
+                    name="Baner",
+                    display_name="Baner",
+                    latitude=18.5590,
+                    longitude=73.7868,
+                    city="Pune",
+                    area="Baner",
+                    district="Pune",
+                    state="Maharashtra",
+                    country="India",
+                    postal_code="411045",
+                    location_source="google_places_details",
+                    location_precision="locality",
+                    is_unresolved=False,
+                )
+            if "hinjewadi" in p_low or "hinjawadi" in p_low:
                 return ResolvedLocation(
                     google_place_id=clean_place_id,
                     formatted_address="Hinjewadi, Pune, Maharashtra 411057, India",
@@ -243,13 +381,69 @@ class GoogleMapsService:
                     longitude=73.7389,
                     city="Pune",
                     area="Hinjewadi",
+                    district="Pune",
                     state="Maharashtra",
                     country="India",
                     postal_code="411057",
                     location_source="google_places_details",
                     location_precision="locality",
+                    is_unresolved=False,
                 )
-            if "indiranagar" in p_low or "bengaluru" in p_low:
+            if "hsr" in p_low:
+                return ResolvedLocation(
+                    google_place_id=clean_place_id,
+                    formatted_address="HSR Layout, Bengaluru, Karnataka 560102, India",
+                    name="HSR Layout",
+                    display_name="HSR Layout",
+                    latitude=12.9121,
+                    longitude=77.6446,
+                    city="Bengaluru",
+                    area="HSR Layout",
+                    district="Bengaluru Urban",
+                    state="Karnataka",
+                    country="India",
+                    postal_code="560102",
+                    location_source="google_places_details",
+                    location_precision="locality",
+                    is_unresolved=False,
+                )
+            if "koramangala" in p_low:
+                return ResolvedLocation(
+                    google_place_id=clean_place_id,
+                    formatted_address="Koramangala, Bengaluru, Karnataka 560034, India",
+                    name="Koramangala",
+                    display_name="Koramangala",
+                    latitude=12.9352,
+                    longitude=77.6245,
+                    city="Bengaluru",
+                    area="Koramangala",
+                    district="Bengaluru Urban",
+                    state="Karnataka",
+                    country="India",
+                    postal_code="560034",
+                    location_source="google_places_details",
+                    location_precision="locality",
+                    is_unresolved=False,
+                )
+            if "whitefield" in p_low:
+                return ResolvedLocation(
+                    google_place_id=clean_place_id,
+                    formatted_address="Whitefield, Bengaluru, Karnataka 560066, India",
+                    name="Whitefield",
+                    display_name="Whitefield",
+                    latitude=12.9698,
+                    longitude=77.7500,
+                    city="Bengaluru",
+                    area="Whitefield",
+                    district="Bengaluru Urban",
+                    state="Karnataka",
+                    country="India",
+                    postal_code="560066",
+                    location_source="google_places_details",
+                    location_precision="locality",
+                    is_unresolved=False,
+                )
+            if "indiranagar" in p_low:
                 return ResolvedLocation(
                     google_place_id=clean_place_id,
                     formatted_address="Indiranagar, Bengaluru, Karnataka 560038, India",
@@ -259,11 +453,49 @@ class GoogleMapsService:
                     longitude=77.5946,
                     city="Bengaluru",
                     area="Indiranagar",
+                    district="Bengaluru Urban",
                     state="Karnataka",
                     country="India",
                     postal_code="560038",
                     location_source="google_places_details",
                     location_precision="locality",
+                    is_unresolved=False,
+                )
+            if "pune" in p_low:
+                return ResolvedLocation(
+                    google_place_id=clean_place_id,
+                    formatted_address="Pune, Maharashtra, India",
+                    name="Pune",
+                    display_name="Pune",
+                    latitude=18.5204,
+                    longitude=73.8567,
+                    city="Pune",
+                    area=None,
+                    district="Pune",
+                    state="Maharashtra",
+                    country="India",
+                    postal_code="411001",
+                    location_source="google_places_details",
+                    location_precision="locality",
+                    is_unresolved=False,
+                )
+            if "bengaluru" in p_low or "bangalore" in p_low:
+                return ResolvedLocation(
+                    google_place_id=clean_place_id,
+                    formatted_address="Bengaluru, Karnataka, India",
+                    name="Bengaluru",
+                    display_name="Bengaluru",
+                    latitude=12.9716,
+                    longitude=77.5946,
+                    city="Bengaluru",
+                    area=None,
+                    district="Bengaluru Urban",
+                    state="Karnataka",
+                    country="India",
+                    postal_code="560001",
+                    location_source="google_places_details",
+                    location_precision="locality",
+                    is_unresolved=False,
                 )
             if clean_place_id == "ChIJ3x-Canm2wjsRwPJ-IJb_4C8":
                 return ResolvedLocation(
@@ -311,6 +543,8 @@ class GoogleMapsService:
             return cached
 
         url = f"https://places.googleapis.com/v1/places/{clean_place_id}"
+        if session_token:
+            url = f"{url}?sessionToken={urllib.parse.quote(session_token)}"
         headers = {
             "Content-Type": "application/json",
             "X-Goog-Api-Key": self.api_key,
@@ -502,6 +736,93 @@ class GoogleMapsService:
         if not self.is_configured:
             # Deterministic development fallbacks when unconfigured
             addr_low = clean_address.lower()
+            if "boisar" in addr_low:
+                return ResolvedLocation(
+                    google_place_id="ChIJI1ifSTke5zsRys2rC5ulSmk",
+                    formatted_address="Boisar, Maharashtra 401501, India",
+                    name="Boisar",
+                    display_name="Boisar",
+                    city="Boisar",
+                    area="Boisar",
+                    district="Palghar",
+                    state="Maharashtra",
+                    country="India",
+                    postal_code="401501",
+                    latitude=19.808156,
+                    longitude=72.771777,
+                    location_precision="locality",
+                    location_source="google_places",
+                    is_unresolved=False,
+                )
+            if "kakkanad" in addr_low:
+                return ResolvedLocation(
+                    google_place_id="ChIJk21_kakkanad_kochi",
+                    formatted_address="Kakkanad, Kochi, Kerala 682030, India",
+                    name="Kakkanad",
+                    display_name="Kakkanad",
+                    city="Kochi",
+                    area="Kakkanad",
+                    district="Ernakulam",
+                    state="Kerala",
+                    country="India",
+                    postal_code="682030",
+                    latitude=10.0159,
+                    longitude=76.3419,
+                    location_precision="locality",
+                    location_source="google_places",
+                    is_unresolved=False,
+                )
+            if "hinjewadi" in addr_low or "hinjawadi" in addr_low:
+                return ResolvedLocation(
+                    google_place_id="pc_hinjewadi_pune",
+                    formatted_address="Hinjewadi, Pune, Maharashtra 411057, India",
+                    name="Hinjewadi",
+                    display_name="Hinjewadi",
+                    city="Pune",
+                    area="Hinjewadi",
+                    state="Maharashtra",
+                    country="India",
+                    postal_code="411057",
+                    latitude=18.5913,
+                    longitude=73.7389,
+                    location_precision="locality",
+                    location_source="google_places",
+                    is_unresolved=False,
+                )
+            if "wakad" in addr_low:
+                return ResolvedLocation(
+                    google_place_id="pc_wakad_pune",
+                    formatted_address="Wakad, Pune, Maharashtra 411057, India",
+                    name="Wakad",
+                    display_name="Wakad",
+                    city="Pune",
+                    area="Wakad",
+                    state="Maharashtra",
+                    country="India",
+                    postal_code="411057",
+                    latitude=18.5987,
+                    longitude=73.7686,
+                    location_precision="locality",
+                    location_source="google_places",
+                    is_unresolved=False,
+                )
+            if "baner" in addr_low:
+                return ResolvedLocation(
+                    google_place_id="pc_baner_pune",
+                    formatted_address="Baner, Pune, Maharashtra 411045, India",
+                    name="Baner",
+                    display_name="Baner",
+                    city="Pune",
+                    area="Baner",
+                    state="Maharashtra",
+                    country="India",
+                    postal_code="411045",
+                    latitude=18.5590,
+                    longitude=73.7868,
+                    location_precision="locality",
+                    location_source="google_places",
+                    is_unresolved=False,
+                )
             if "kothrud" in addr_low or "pune" in addr_low:
                 return ResolvedLocation(
                     google_place_id="pc_kothrud_pune",
@@ -517,6 +838,7 @@ class GoogleMapsService:
                     longitude=73.8077,
                     location_precision="locality",
                     location_source="google_places",
+                    is_unresolved=False,
                 )
             if "whitefield" in addr_low:
                 return ResolvedLocation(
@@ -533,6 +855,7 @@ class GoogleMapsService:
                     longitude=77.7500,
                     location_precision="locality",
                     location_source="google_places",
+                    is_unresolved=False,
                 )
             if "indiranagar" in addr_low or "bengaluru" in addr_low or "bangalore" in addr_low:
                 return ResolvedLocation(
@@ -549,6 +872,41 @@ class GoogleMapsService:
                     longitude=77.5946,
                     location_precision="locality",
                     location_source="google_places",
+                    is_unresolved=False,
+                )
+            if "mumbai" in addr_low or "bombay" in addr_low:
+                return ResolvedLocation(
+                    google_place_id="ChIJwe1EZjDG5zsRaYxkjYnchkI",
+                    formatted_address="Mumbai, Maharashtra, India",
+                    name="Mumbai",
+                    display_name="Mumbai",
+                    city="Mumbai",
+                    area=None,
+                    state="Maharashtra",
+                    country="India",
+                    postal_code=None,
+                    latitude=19.0760,
+                    longitude=72.8777,
+                    location_precision="locality",
+                    location_source="google_places",
+                    is_unresolved=False,
+                )
+            if "kochi" in addr_low or "ernakulam" in addr_low or "cochin" in addr_low:
+                return ResolvedLocation(
+                    google_place_id="ChIJv8a-SlENCDsRkkGEpcqC1Qs",
+                    formatted_address="Kochi, Kerala, India",
+                    name="Kochi",
+                    display_name="Kochi",
+                    city="Kochi",
+                    area=None,
+                    state="Kerala",
+                    country="India",
+                    postal_code=None,
+                    latitude=9.9312,
+                    longitude=76.2673,
+                    location_precision="locality",
+                    location_source="google_places",
+                    is_unresolved=False,
                 )
             return None
 
@@ -813,104 +1171,13 @@ class GoogleMapsService:
             logger.warning("Places API searchNearby reverse geocoding failed: %s", exc)
             return None
 
-    def _reverse_geocode_osm(self, latitude: float, longitude: float) -> Optional[ResolvedLocation]:
-        """
-        Resilient, zero-billing OpenStreetMap Nominatim reverse geocoder.
-        Worldwide coverage, no API key required, respects OSM usage policy.
-        """
-        try:
-            url = "https://nominatim.openstreetmap.org/reverse"
-            headers = {
-                "User-Agent": "NEST-Community-Platform/1.0 (nest-app; support@nestcommunity.org)",
-                "Accept-Language": "en",
-            }
-            params = {
-                "lat": latitude,
-                "lon": longitude,
-                "format": "json",
-                "addressdetails": 1,
-            }
-            resp = requests.get(url, params=params, headers=headers, timeout=4.0)
-            if resp.status_code != 200:
-                logger.warning("OSM Nominatim reverse geocode returned status %d", resp.status_code)
-                return None
-            data = resp.json()
-            if not data or "address" not in data:
-                return None
-
-            addr = data.get("address", {})
-            suburb = addr.get("suburb")
-            neighbourhood = addr.get("neighbourhood")
-            residential = addr.get("residential")
-            village = addr.get("village")
-            hamlet = addr.get("hamlet")
-            city = addr.get("city") or addr.get("town") or addr.get("municipality")
-            state_district = addr.get("state_district") or addr.get("district")
-            county = addr.get("county") or addr.get("subdistrict")
-            state = addr.get("state")
-            postal_code = addr.get("postcode")
-            country = addr.get("country", "India")
-            road = addr.get("road")
-
-            area = suburb or neighbourhood or residential or village or hamlet
-            taluka = county
-            district = state_district
-
-            if not city:
-                city = district or taluka or village or area
-
-            if city and area and city.strip().lower() == area.strip().lower():
-                if village and village.strip().lower() != city.strip().lower():
-                    area = village
-                else:
-                    area = None
-
-            display_name = None
-            if area and city and area.strip().lower() != city.strip().lower():
-                display_name = f"{area}, {city}"
-            elif area:
-                display_name = area
-            elif city:
-                display_name = city
-
-            formatted_address = data.get("display_name")
-            if not formatted_address:
-                parts = [p for p in [road, area, taluka, district, state, postal_code, country] if p]
-                formatted_address = ", ".join(dict.fromkeys(parts))
-
-            return ResolvedLocation(
-                google_place_id=None,
-                formatted_address=formatted_address,
-                name=display_name,
-                display_name=display_name,
-                city=city,
-                area=area,
-                taluka=taluka,
-                district=district,
-                state=state,
-                country=country or "India",
-                postal_code=postal_code,
-                latitude=round(latitude, 6),
-                longitude=round(longitude, 6),
-                location_precision="neighborhood" if area else "locality",
-                location_source="osm_reverse_geocoding",
-                road=road,
-                short_display_name=display_name,
-                full_display_address=formatted_address,
-                is_unresolved=False,
-            )
-        except Exception as exc:
-            logger.warning("OSM Nominatim reverse geocode failed: %s", exc)
-            return None
-
     def reverse_geocode(self, latitude: float, longitude: float) -> Optional[ResolvedLocation]:
         """
         Reverse geocode GPS coordinates to human-readable canonical area & city.
-        Uses 4-tier resilient resolution:
-        1. Authoritative Google Geocoding API (when configured).
+        Strictly uses authoritative Google Maps Platform:
+        1. Google Geocoding API (when configured and enabled).
         2. Google Places API (New) searchNearby addressComponents (when configured).
-        3. OpenStreetMap Nominatim reverse geocoding (zero-billing, worldwide).
-        4. Safe Indian coordinates bounding fallback (coordinates preserved, is_unresolved=True).
+        3. Safe Indian coordinates boundary fallback (coordinates preserved, is_unresolved=True).
         """
         if not (-90.0 <= latitude <= 90.0 and -180.0 <= longitude <= 180.0):
             return None
@@ -933,13 +1200,7 @@ class GoogleMapsService:
                 self._set_in_cache(cache_key, places_res)
                 return places_res
 
-        # 3. Resilient OpenStreetMap Nominatim reverse geocoder
-        osm_res = self._reverse_geocode_osm(latitude, longitude)
-        if osm_res and not osm_res.is_unresolved:
-            self._set_in_cache(cache_key, osm_res)
-            return osm_res
-
-        # 4. Resilient deterministic coordinate boundary fallback
+        # 3. Resilient deterministic coordinate boundary fallback (honest unresolved, zero third-party provider)
         fallback = self.resolve_indian_coordinates(latitude, longitude)
         if fallback:
             self._set_in_cache(cache_key, fallback)

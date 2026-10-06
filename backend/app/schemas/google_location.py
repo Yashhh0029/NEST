@@ -7,6 +7,7 @@ class PlaceAutocompletePrediction(BaseModel):
     main_text: str
     secondary_text: Optional[str] = None
     description: str
+    types: List[str] = Field(default_factory=list)
 
 
 class AutocompleteRequest(BaseModel):
@@ -15,6 +16,7 @@ class AutocompleteRequest(BaseModel):
     latitude: Optional[float] = Field(None, ge=-90.0, le=90.0)
     longitude: Optional[float] = Field(None, ge=-180.0, le=180.0)
     radius_meters: Optional[float] = Field(None, ge=100.0, le=100000.0)
+    included_primary_types: Optional[List[str]] = None
 
 
 class AutocompleteResponse(BaseModel):

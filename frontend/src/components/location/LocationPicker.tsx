@@ -28,9 +28,9 @@ export function LocationPicker({
     Boolean(value.city || value.area || value.location_source === "manual")
   );
 
-  const handleSelectPrediction = async (prediction: PlaceAutocompletePrediction) => {
+  const handleSelectPrediction = async (prediction: PlaceAutocompletePrediction, sessionToken?: string) => {
     try {
-      const details = await getPlaceDetails(prediction.place_id);
+      const details = await getPlaceDetails(prediction.place_id, sessionToken);
       const displayName = details.name || details.display_name || prediction.main_text;
       const formattedAddress = details.formatted_address || prediction.description;
       onChange({

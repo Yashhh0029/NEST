@@ -5,11 +5,12 @@ import type { PlaceAutocompletePrediction } from "../../types/google-location";
 import { useDebounce } from "../../hooks/useDebounce";
 
 export interface PlaceAutocompleteProps {
-  onSelectPrediction: (prediction: PlaceAutocompletePrediction) => void;
+  onSelectPrediction: (prediction: PlaceAutocompletePrediction, sessionToken?: string) => void;
   placeholder?: string;
   initialValue?: string;
   disabled?: boolean;
   biasCoords?: { latitude: number; longitude: number } | null;
+  primaryType?: string;
 }
 
 export function PlaceAutocomplete({
@@ -18,13 +19,25 @@ export function PlaceAutocomplete({
   initialValue = "",
   disabled = false,
   biasCoords,
+  primaryType,
 }: PlaceAutocompleteProps) {
   const [query, setQuery] = useState(initialValue);
   const [predictions, setPredictions] = useState<PlaceAutocompletePrediction[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const sessionTokenRef = useRef<string | null>(null);
   const debouncedQuery = useDebounce(query, 300);
+
+  const getOrCreateSessionToken = () => {
+    if (!sessionTokenRef.current) {
+      sessionTokenRef.current =
+        typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : "ses_" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+    }
+    return sessionTokenRef.current;
+  };
 
   useEffect(() => {
     setQuery(initialValue);
@@ -38,16 +51,20 @@ export function PlaceAutocomplete({
       if (clean.length < 2) {
         setPredictions([]);
         setIsOpen(false);
+        sessionTokenRef.current = null;
         return;
       }
 
       setIsLoading(true);
+      const token = getOrCreateSessionToken();
       try {
         const resp = await autocompletePlaces(
           clean,
-          undefined,
+          token,
           biasCoords?.latitude,
-          biasCoords?.longitude
+          biasCoords?.longitude,
+          undefined,
+          primaryType
         );
         if (active) {
           setPredictions(resp.predictions || []);
@@ -69,7 +86,7 @@ export function PlaceAutocomplete({
     return () => {
       active = false;
     };
-  }, [debouncedQuery, biasCoords?.latitude, biasCoords?.longitude]);
+  }, [debouncedQuery, biasCoords?.latitude, biasCoords?.longitude, primaryType]);
 
   // Click outside listener
   useEffect(() => {
@@ -85,13 +102,16 @@ export function PlaceAutocomplete({
   const handleSelect = (item: PlaceAutocompletePrediction) => {
     setQuery(item.description);
     setIsOpen(false);
-    onSelectPrediction(item);
+    const token = sessionTokenRef.current || undefined;
+    sessionTokenRef.current = null; // Conclude autocomplete session
+    onSelectPrediction(item, token);
   };
 
   const handleClear = () => {
     setQuery("");
     setPredictions([]);
     setIsOpen(false);
+    sessionTokenRef.current = null;
   };
 
   return (

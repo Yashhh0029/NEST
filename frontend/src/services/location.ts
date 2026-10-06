@@ -10,13 +10,15 @@ export async function autocompletePlaces(
   sessionToken?: string,
   latitude?: number | null,
   longitude?: number | null,
-  radiusMeters?: number | null
+  radiusMeters?: number | null,
+  primaryType?: string
 ): Promise<AutocompleteResponse> {
   const params: Record<string, any> = { input_text: inputText };
   if (sessionToken) params.session_token = sessionToken;
   if (latitude != null) params.latitude = latitude;
   if (longitude != null) params.longitude = longitude;
   if (radiusMeters != null) params.radius_meters = radiusMeters;
+  if (primaryType) params.primary_type = primaryType;
 
   const resp = await api.get<AutocompleteResponse>("/api/location/autocomplete", {
     params,
@@ -40,8 +42,12 @@ export async function reverseGeocodeCoordinates(
   return resp.data;
 }
 
-export async function getPlaceDetails(placeId: string): Promise<ResolvedLocation> {
-  const resp = await api.get<ResolvedLocation>(`/api/location/place/${encodeURIComponent(placeId)}`);
+export async function getPlaceDetails(placeId: string, sessionToken?: string): Promise<ResolvedLocation> {
+  const params: Record<string, any> = {};
+  if (sessionToken) params.session_token = sessionToken;
+  const resp = await api.get<ResolvedLocation>(`/api/location/place/${encodeURIComponent(placeId)}`, {
+    params,
+  });
   return resp.data;
 }
 

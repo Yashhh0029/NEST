@@ -15,6 +15,13 @@ def create_user_request(db: Session, user: User, req_in: RequestCreate) -> Reque
     """Parse natural language request and persist structured requirements and target location."""
     parsed = parse_request(req_in.text)
 
+    # Prioritize explicit client target overrides, falling back to parsed NLP location details
+    target_google_place_id = req_in.target_google_place_id or parsed.location.google_place_id
+    target_lat = req_in.target_latitude if req_in.target_latitude is not None else parsed.location.latitude
+    target_lon = req_in.target_longitude if req_in.target_longitude is not None else parsed.location.longitude
+    target_formatted_addr = req_in.target_formatted_address or parsed.location.formatted_address
+    target_disp_name = req_in.target_display_name or parsed.location.display_name
+
     final_city = req_in.target_city or parsed.location.city
     final_area = req_in.target_area or parsed.location.area
 
@@ -54,12 +61,13 @@ def create_user_request(db: Session, user: User, req_in: RequestCreate) -> Reque
         user=user,
         city_hint=final_city,
         area_hint=final_area,
-        google_place_id=req_in.target_google_place_id,
-        latitude=req_in.target_latitude,
-        longitude=req_in.target_longitude,
-        formatted_address=req_in.target_formatted_address,
-        display_name=req_in.target_display_name,
+        google_place_id=target_google_place_id,
+        latitude=target_lat,
+        longitude=target_lon,
+        formatted_address=target_formatted_addr,
+        display_name=target_disp_name,
     )
+    db.refresh(new_request)
 
     # Dispatch automatic nearby community notifications in parallel
     try:
@@ -189,7 +197,13 @@ def update_user_request(
             user=user,
             city_hint=parsed.location.city,
             area_hint=parsed.location.area,
+            google_place_id=parsed.location.google_place_id,
+            latitude=parsed.location.latitude,
+            longitude=parsed.location.longitude,
+            formatted_address=parsed.location.formatted_address,
+            display_name=parsed.location.display_name,
         )
+        db.refresh(req)
 
     if update_in.status is not None:
         target_status = update_in.status.upper().strip()

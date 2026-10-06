@@ -313,6 +313,14 @@ class ExtractedLocation(BaseModel):
     country: Optional[str] = "India"
     city_source: Optional[str] = None
     area_source: Optional[str] = None
+    display_name: Optional[str] = None
+    formatted_address: Optional[str] = None
+    google_place_id: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    location_precision: Optional[str] = None
+    location_source: Optional[str] = None
+    origin_city: Optional[str] = None
 
 
 class ExtractedRequest(BaseModel):
@@ -332,14 +340,100 @@ class ExtractedRequest(BaseModel):
 # ==========================================
 
 def _extract_location(text: str) -> ExtractedLocation:
-    """Extract and normalize city, area, state, and country from natural text."""
+    """
+    Extract and normalize target destination location from natural language.
+    Strictly separates origin vs destination, supports compound localities (e.g. 'Boisar, Mumbai'),
+    and leverages Google forward geocoding for authoritative coordinates and administrative hierarchy.
+    """
+    from app.services.google_maps_service import google_maps_service
+
     lower_text = text.lower()
     loc = ExtractedLocation()
 
-    # 1. Detect explicit area
+    # 1. Detect Origin City (e.g. "from Bangalore to Pune", "leaving Delhi")
+    # Store strictly in loc.origin_city so it is never confused with target destination
+    origin_match = re.search(
+        r"\b(?:from|origin|leaving|staying in|living in|currently in|native is)\s+([A-Za-z\s]{2,30}?)(?=(?:\s+to\b|,|\.|\s+and|\s+for|$))",
+        lower_text,
+    )
+    if origin_match:
+        cand_origin = origin_match.group(1).strip()
+        for c_key, c_meta in CITY_MAPPINGS.items():
+            if any(alias in cand_origin for alias in c_meta["aliases"]):
+                loc.origin_city = c_meta["city"]
+                break
+        if not loc.origin_city and cand_origin:
+            loc.origin_city = cand_origin.title()
+
+    # 2. Extract Candidate Destination String
+    # Look for relocation destination signals e.g. "shifting to boisar,mumbai", "moving to Kakkanad, Kochi"
+    dest_match = re.search(
+        r"(?:(?:shifting|moving|relocating|relocate|settling|settle|heading|going|new|transferred|transferring)\s+to|(?:living|staying)\s+in)\s+([A-Za-z0-9\s,.-]+?)(?=(?:\s+(?:for|i\s+want|want|looking|need|searching|please|and\s+also|where|flat|pg|mess|room|hostel|job|internship|work|near|with|at|under|budget|next|\.))|$)",
+        lower_text,
+    )
+
+    candidate_dest_raw: Optional[str] = None
+    if dest_match:
+        raw_candidate = dest_match.group(1).strip()
+        for prefix in ["the ", "a ", "an ", "im ", "i'm "]:
+            if raw_candidate.startswith(prefix):
+                raw_candidate = raw_candidate[len(prefix):].strip()
+        if len(raw_candidate) >= 2 and not any(raw_candidate == w for w in ["flat", "pg", "mess", "room", "food", "job"]):
+            candidate_dest_raw = raw_candidate
+
+    # 3. Handle Compound Relocation Destination (e.g. "boisar,mumbai" or "kakkanad, kochi")
+    # If the user provides "Locality, City/State" where the locality is an independent town not in AREA_TO_CITY,
+    # the primary locality must take precedence over the parent metropolitan city.
+    if candidate_dest_raw and any(sep in candidate_dest_raw for sep in [",", "/"]):
+        parts = [p.strip() for p in re.split(r"[,/]", candidate_dest_raw) if p.strip()]
+        p0_lower = parts[0].lower() if parts else ""
+        if p0_lower in AREA_TO_CITY:
+            loc.area = AREA_CANONICAL_NAMES[p0_lower]
+            loc.area_source = "explicit_text"
+            parent_city_key = AREA_TO_CITY[p0_lower]
+            loc.city = CITY_MAPPINGS[parent_city_key]["city"]
+            loc.state = CITY_MAPPINGS[parent_city_key]["state"]
+            loc.country = CITY_MAPPINGS[parent_city_key]["country"]
+            loc.city_source = "explicit_text"
+        else:
+            # Independent locality / suburb (e.g. Boisar)
+            loc.city = parts[0].title()
+            loc.area = None
+            loc.city_source = "explicit_text"
+            loc.country = "India"
+            if len(parts) > 1:
+                sec_lower = parts[1].lower()
+                for c_key, c_meta in CITY_MAPPINGS.items():
+                    if any(alias in sec_lower for alias in c_meta["aliases"]):
+                        loc.state = c_meta["state"]
+                        break
+
+            # Forward geocode to resolve canonical coordinates and administrative details
+            resolved = google_maps_service.geocode_address(candidate_dest_raw)
+            if not resolved or resolved.is_unresolved:
+                resolved = google_maps_service.geocode_address(parts[0])
+
+            if resolved and not resolved.is_unresolved:
+                if resolved.city:
+                    loc.city = resolved.city
+                if resolved.area:
+                    loc.area = resolved.area
+                if resolved.state:
+                    loc.state = resolved.state
+                loc.country = resolved.country or "India"
+                loc.display_name = resolved.display_name or resolved.name or loc.city
+                loc.formatted_address = resolved.formatted_address
+                loc.google_place_id = resolved.google_place_id
+                loc.latitude = resolved.latitude
+                loc.longitude = resolved.longitude
+                loc.location_precision = resolved.location_precision or "locality"
+                loc.location_source = resolved.location_source or "google_places"
+            return loc
+
+    # 4. Standard Detection (Area & City Matching)
+    # Area detection
     detected_area_key: Optional[str] = None
     for area_key in sorted(AREA_TO_CITY.keys(), key=len, reverse=True):
-        # Match whole words for area
         pattern = rf"\b{re.escape(area_key)}\b"
         if re.search(pattern, lower_text):
             detected_area_key = area_key
@@ -347,9 +441,11 @@ def _extract_location(text: str) -> ExtractedLocation:
             loc.area_source = "explicit_text"
             break
 
-    # 2. Detect explicit city
+    # City detection (skipping origin city if detected)
     detected_city_key: Optional[str] = None
     for city_key, city_meta in CITY_MAPPINGS.items():
+        if loc.origin_city and city_meta["city"].lower() == loc.origin_city.lower():
+            continue
         for alias in city_meta["aliases"]:
             if re.search(rf"\b{re.escape(alias)}\b", lower_text):
                 detected_city_key = city_key
@@ -361,7 +457,7 @@ def _extract_location(text: str) -> ExtractedLocation:
         if detected_city_key:
             break
 
-    # 3. Detect destination pattern with Indian states (e.g. "moving to Ranoli, Gujarat")
+    # Indian state pattern detection (e.g. "moving to Ranoli, Gujarat")
     if not loc.city:
         indian_states = [
             "andhra pradesh", "arunachal pradesh", "assam", "bihar", "chhattisgarh",
@@ -377,7 +473,6 @@ def _extract_location(text: str) -> ExtractedLocation:
             state_match = re.search(rf"\b([A-Za-z\s]{{2,30}}?),\s*({states_regex})\b", lower_text)
         if state_match:
             extracted_place = state_match.group(1).strip()
-            # Clean common filler prefixes if captured
             for prefix in [
                 "moving to", "relocating to", "shifted to", "shifting to",
                 "going to", "heading to", "living in", "settling in",
@@ -393,7 +488,7 @@ def _extract_location(text: str) -> ExtractedLocation:
                 loc.country = "India"
                 loc.city_source = "explicit_text"
 
-    # 4. If area was detected but city was not explicitly stated, infer city
+    # Inferred from area if city missing
     if detected_area_key and not loc.city:
         inferred_city_key = AREA_TO_CITY[detected_area_key]
         city_meta = CITY_MAPPINGS[inferred_city_key]
@@ -401,6 +496,27 @@ def _extract_location(text: str) -> ExtractedLocation:
         loc.state = city_meta["state"]
         loc.country = city_meta["country"]
         loc.city_source = "inferred_from_area"
+
+    # 5. Geocode to attach canonical coordinates, display name, and place ID
+    if loc.city or loc.area:
+        geo_query_parts = []
+        if loc.area:
+            geo_query_parts.append(loc.area)
+        if loc.city and (not loc.area or loc.city.lower() != loc.area.lower()):
+            geo_query_parts.append(loc.city)
+        if loc.state:
+            geo_query_parts.append(loc.state)
+        geo_query = ", ".join(filter(None, geo_query_parts + ["India"]))
+        if geo_query and geo_query != "India":
+            resolved = google_maps_service.geocode_address(geo_query)
+            if resolved and not resolved.is_unresolved:
+                loc.latitude = resolved.latitude
+                loc.longitude = resolved.longitude
+                loc.google_place_id = resolved.google_place_id
+                loc.formatted_address = resolved.formatted_address
+                loc.display_name = resolved.display_name or resolved.name or loc.area or loc.city
+                loc.location_precision = resolved.location_precision or "locality"
+                loc.location_source = resolved.location_source or "google_places"
 
     return loc
 
@@ -597,6 +713,11 @@ def parse_request(text: str) -> ExtractedRequest:
         "city_source": location.city_source,
         "area_extracted": location.area,
         "area_source": location.area_source,
+        "display_name": location.display_name,
+        "latitude": location.latitude,
+        "longitude": location.longitude,
+        "google_place_id": location.google_place_id,
+        "origin_city": location.origin_city,
         "needs_count": len(needs),
         "needs_categories": [n.category for n in needs],
         "budget_detected": budget is not None,

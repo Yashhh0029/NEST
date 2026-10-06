@@ -3,6 +3,7 @@ export interface PlaceAutocompletePrediction {
   main_text: string;
   secondary_text?: string | null;
   description: string;
+  types?: string[];
 }
 
 export interface AutocompleteResponse {

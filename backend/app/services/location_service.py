@@ -70,15 +70,15 @@ def resolve_and_upsert_request_location(
     existing_req_loc = db.query(RequestLocation).filter(RequestLocation.request_id == request_id).first()
 
     if resolved:
-        final_city = city_hint or resolved.city
-        final_area = area_hint or resolved.area
+        final_city = resolved.city or city_hint
+        final_area = resolved.area or area_hint
         final_state = resolved.state
         final_country = resolved.country or "India"
         final_postal = resolved.postal_code
         final_lat = resolved.latitude
         final_lon = resolved.longitude
-        final_place_id = google_place_id or resolved.google_place_id
-        final_display_name = display_name or resolved.display_name or resolved.name
+        final_place_id = resolved.google_place_id or google_place_id
+        final_display_name = display_name or resolved.display_name or resolved.name or final_area or final_city
         final_formatted = resolved.formatted_address or formatted_address
         final_source = resolved.location_source or "google_places"
         final_precision = resolved.location_precision or "locality"

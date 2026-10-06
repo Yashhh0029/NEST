@@ -31,13 +31,16 @@ def autocomplete_places_get(
     latitude: Optional[float] = Query(None, ge=-90.0, le=90.0),
     longitude: Optional[float] = Query(None, ge=-180.0, le=180.0),
     radius_meters: Optional[float] = Query(None, ge=100.0, le=100000.0),
+    primary_type: Optional[str] = Query(None),
 ) -> AutocompleteResponse:
+    primary_types = [primary_type] if primary_type else None
     predictions = google_maps_service.autocomplete_places(
         input_text=input_text,
         session_token=session_token,
         latitude=latitude,
         longitude=longitude,
         radius_meters=radius_meters,
+        included_primary_types=primary_types,
     )
     return AutocompleteResponse(predictions=predictions)
 
@@ -61,6 +64,7 @@ def autocomplete_places(
         latitude=payload.latitude,
         longitude=payload.longitude,
         radius_meters=payload.radius_meters,
+        included_primary_types=payload.included_primary_types,
     )
     return AutocompleteResponse(predictions=predictions)
 
@@ -125,11 +129,13 @@ def resolve_address(
 )
 def get_place_details(
     place_id: str,
+    session_token: Optional[str] = Query(None),
 ) -> ResolvedLocation:
     """
     Retrieve place coordinates and formatted address by Google Place ID.
+    Concludes the Places API (New) Autocomplete session when session_token is provided.
     """
-    resolved = google_maps_service.get_place_details(place_id)
+    resolved = google_maps_service.get_place_details(place_id, session_token=session_token)
     if not resolved:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

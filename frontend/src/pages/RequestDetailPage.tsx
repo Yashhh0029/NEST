@@ -382,7 +382,7 @@ export function RequestDetailPage() {
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
               <MapPin className="w-4 h-4 text-brand-primary" />
-              Target Destination Area ({request.target_location?.city || request.city})
+              Target Destination Area ({request.target_location?.display_name || request.target_location?.area || request.target_location?.city || request.city})
             </h3>
             <span className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">
               Geographic Map &middot; Privacy Protected Area

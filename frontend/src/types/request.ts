@@ -10,6 +10,14 @@ export interface ExtractedLocation {
   area?: string | null;
   state?: string | null;
   country?: string | null;
+  display_name?: string | null;
+  formatted_address?: string | null;
+  google_place_id?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  location_precision?: string | null;
+  location_source?: string | null;
+  origin_city?: string | null;
 }
 
 export interface BudgetInfo {
@@ -101,6 +109,7 @@ export interface NewcomerRequest {
   target_location?: {
     id?: string;
     request_id?: string;
+    display_name?: string | null;
     city?: string | null;
     area?: string | null;
     state?: string | null;

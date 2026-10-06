@@ -43,7 +43,8 @@ describe("PlaceAutocomplete Component", () => {
 
     fireEvent.click(screen.getByText("Whitefield"));
     expect(onSelect).toHaveBeenCalledWith(
-      expect.objectContaining({ place_id: "place_123", main_text: "Whitefield" })
+      expect.objectContaining({ place_id: "place_123", main_text: "Whitefield" }),
+      expect.any(String)
     );
   });
 
