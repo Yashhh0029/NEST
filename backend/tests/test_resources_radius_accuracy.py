@@ -10,32 +10,21 @@ from app.services.resource_service import (
 from app.models.user import User
 
 
-def test_resolve_indian_coordinates_pune_localities():
-    """Verify GPS coordinates in Mahalunge, Balewadi, Baner, Wakad do NOT default to Kothrud."""
-    # Mahalunge
-    loc_mahalunge = GoogleMapsService.resolve_indian_coordinates(18.57, 73.75)
-    assert loc_mahalunge is not None
-    assert loc_mahalunge.area == "Mahalunge"
-    assert loc_mahalunge.city == "Pune"
-    assert "Kothrud" not in loc_mahalunge.formatted_address
+def test_resolve_indian_coordinates_generic_fallback():
+    """Verify Indian coordinates fallback preserves exact coordinates without fabricating locality or defaulting to Kothrud."""
+    loc = GoogleMapsService.resolve_indian_coordinates(18.57, 73.75)
+    assert loc is not None
+    assert loc.latitude == 18.57
+    assert loc.longitude == 73.75
+    assert loc.country == "India"
+    assert loc.area is None
+    assert loc.city is None
+    assert loc.taluka is None
+    assert loc.district is None
+    assert loc.postal_code is None
+    assert loc.formatted_address == "India"
+    assert "Kothrud" not in (loc.formatted_address or "")
 
-    # Balewadi
-    loc_balewadi = GoogleMapsService.resolve_indian_coordinates(18.575, 73.78)
-    assert loc_balewadi is not None
-    assert loc_balewadi.area == "Balewadi"
-    assert loc_balewadi.city == "Pune"
-
-    # Baner
-    loc_baner = GoogleMapsService.resolve_indian_coordinates(18.55, 73.785)
-    assert loc_baner is not None
-    assert loc_baner.area == "Baner"
-    assert loc_baner.city == "Pune"
-
-    # Kothrud (Actual Kothrud coordinates)
-    loc_kothrud = GoogleMapsService.resolve_indian_coordinates(18.50, 73.81)
-    assert loc_kothrud is not None
-    assert loc_kothrud.area == "Kothrud"
-    assert loc_kothrud.city == "Pune"
 
 
 def test_strict_radius_enforcement_excludes_distant_places():

@@ -546,22 +546,30 @@ def test_multi_result_address_component_parser():
 def test_indian_coordinates_fallback_and_api(client: TestClient):
     """
     Test coordinate resolver fallback for Indian coordinates (e.g. 18.65, 73.80)
-    never returns 'Unknown City' and provides specific neighborhood Nigdi in Pimpri-Chinchwad.
+    preserves exact coordinates and does NOT fabricate administrative hierarchy
+    without authoritative data.
     """
     # 1. Direct coordinate resolver function
     resolved = google_maps_service.resolve_indian_coordinates(18.65, 73.80)
     assert resolved is not None
-    assert resolved.city == "Pimpri-Chinchwad"
-    assert resolved.area == "Nigdi"
-    assert resolved.state == "Maharashtra"
+    assert resolved.latitude == 18.65
+    assert resolved.longitude == 73.80
+    assert resolved.city is None
+    assert resolved.area is None
+    assert resolved.taluka is None
+    assert resolved.district is None
+    assert resolved.postal_code is None
     assert resolved.country == "India"
-    assert "Nigdi" in resolved.formatted_address
+    assert resolved.location_source == "browser_geolocation"
 
     # 2. Reverse geocode service call
     res_direct = google_maps_service.reverse_geocode(18.65, 73.80)
     assert res_direct is not None
-    assert res_direct.city == "Pimpri-Chinchwad"
-    assert res_direct.city != "Unknown City"
+    assert res_direct.latitude == 18.65
+    assert res_direct.longitude == 73.80
+    assert res_direct.country == "India"
+    assert res_direct.city is None
+    assert res_direct.area is None
 
     # 3. HTTP API endpoint POST /api/location/reverse-geocode
     res_api = client.post("/api/location/reverse-geocode", json={
@@ -570,10 +578,12 @@ def test_indian_coordinates_fallback_and_api(client: TestClient):
     })
     assert res_api.status_code == 200
     data = res_api.json()
-    assert data["city"] == "Pimpri-Chinchwad"
-    assert data["area"] == "Nigdi"
-    assert data["state"] == "Maharashtra"
-    assert data["city"] != "Unknown City"
+    assert abs(data["latitude"] - 18.65) < 1e-4
+    assert abs(data["longitude"] - 73.80) < 1e-4
+    assert data["city"] is None
+    assert data["area"] is None
+    assert data["country"] == "India"
+    assert data["location_source"] == "browser_geolocation"
 
 
 def test_reverse_geocode_api_strips_business_and_nulls_place_id(client: TestClient):
@@ -583,6 +593,7 @@ def test_reverse_geocode_api_strips_business_and_nulls_place_id(client: TestClie
     - Set google_place_id to None (do not adopt business place_id)
     - Not have a commercial establishment name as the location name/display_name
     - Return location_source 'browser_geolocation'
+    - Not fabricate administrative city when unconfigured
     """
     res = client.post("/api/location/reverse-geocode", json={
         "latitude": 18.57382,
@@ -596,6 +607,7 @@ def test_reverse_geocode_api_strips_business_and_nulls_place_id(client: TestClie
     assert "The Orchid Hotel" not in (data.get("name") or "")
     assert "The Orchid Hotel" not in (data.get("display_name") or "")
     assert data["location_source"] == "browser_geolocation"
-    assert data["city"] in ["Pune", "Mahalunge", "Balewadi"]
+    assert data["city"] is None
+    assert data["country"] == "India"
 
 

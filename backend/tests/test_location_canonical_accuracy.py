@@ -603,80 +603,114 @@ def test_pune_user_intentionally_searching_kochi_with_bias():
     assert len(matching) > 0
 
 
-def test_reverse_geocoding_current_gps_around_mahalunge_pune():
+def test_unconfigured_reverse_geocode_does_not_fabricate_admin_hierarchy():
     """
-    Verify that GPS coordinates in the Pune/Balewadi/Mahalunge region (18.5738, 73.7561)
-    resolve to the Pune area (PIN 411045), and NEVER to the Chakan/Khed side (PIN 410501).
+    TEST A: Verify that arbitrary coordinates without Google Geocoding API
+    do NOT magically resolve to hardcoded bounding boxes (e.g., Mahalunge, Khed, 410501).
+    Zero fabrication of administrative hierarchy when unconfigured.
     """
-    resolved = google_maps_service.reverse_geocode(
-        latitude=PLACE_2_LAT,
-        longitude=PLACE_2_LON,
-    )
-    assert resolved is not None
-    # Must resolve to Pune / Mahalunge / Balewadi, not Chakan / 410501
-    assert resolved.postal_code == "411045"
-    assert resolved.postal_code != "410501"
-    assert resolved.city in ["Pune", "Mahalunge", "Balewadi"]
-    assert resolved.state == "Maharashtra"
+    res = google_maps_service.resolve_indian_coordinates(18.755195, 73.809071)
+    assert res is not None
+    assert res.taluka is None
+    assert res.district is None
+    assert res.postal_code is None
+    assert res.area is None
+    assert res.city is None
+    assert res.formatted_address == "India"
 
 
-def test_gps_reverse_geocoding_strips_business_and_preserves_exact_device_coords():
+def test_offline_fallback_preserves_exact_device_coordinates():
     """
-    Verify that reverse-geocoding browser GPS:
-    1. NEVER stores a commercial business Place ID (e.g. hotel, shop, restaurant). google_place_id must be None.
-    2. NEVER uses a business name (e.g. 'The Orchid Hotel Pune') as the user's geographic location.
-    3. Preserves exact device latitude/longitude for authoritative distance matching.
-    4. Extracts clean administrative components (neighborhood/area, locality/city, state, postal_code).
-    5. Sets location_source to 'browser_geolocation'.
+    TEST B: Verify that offline fallback preserves exact device coordinates to 6 decimal places,
+    sets country='India', google_place_id=None, and does not assign business Place IDs.
     """
     gps_lat = 18.57382
     gps_lon = 73.756159
 
-    resolved = google_maps_service.reverse_geocode(
-        latitude=gps_lat,
-        longitude=gps_lon,
-    )
+    resolved = google_maps_service.resolve_indian_coordinates(gps_lat, gps_lon)
     assert resolved is not None
-    # 1. Commercial business Place ID blocked
+    assert resolved.latitude == round(gps_lat, 6)
+    assert resolved.longitude == round(gps_lon, 6)
     assert resolved.google_place_id is None
-
-    # 2. Commercial establishment name stripped
-    assert "The Orchid Hotel" not in resolved.name
-    assert "The Orchid Hotel" not in resolved.display_name
-    assert "The Orchid Hotel" not in resolved.formatted_address
-
-    # 3. Exact device coordinates preserved
-    assert resolved.latitude == pytest.approx(gps_lat, abs=1e-5)
-    assert resolved.longitude == pytest.approx(gps_lon, abs=1e-5)
-
-    # 4. Clean administrative components
-    assert resolved.city in ["Pune", "Mahalunge", "Balewadi"]
-    assert resolved.state == "Maharashtra"
-    assert resolved.postal_code == "411045"
     assert resolved.country == "India"
     assert resolved.location_source == "browser_geolocation"
-    assert resolved.location_precision in ["neighborhood", "locality"]
+    assert resolved.location_precision == "approximate"
+    assert resolved.city is None
+    assert resolved.area is None
 
 
-def test_administrative_hierarchy_and_mahalunge_disambiguation():
+def test_geocoding_api_parses_full_administrative_hierarchy_and_disambiguates(monkeypatch):
     """
-    Verify full administrative hierarchy:
-    - Mahalunge Khed (18.755195, 73.809071) resolves with Taluka Khed, District Pune, PIN 410501
-    - Mahalunge Pune (18.57382, 73.756159) resolves with District Pune, PIN 411045
-    - The two locations are clearly differentiated by coordinates, PIN, and administrative hierarchy
+    TEST C: When Google Geocoding API returns structured components,
+    verify that the generic parser properly extracts area, taluka, district, city, state, postal_code,
+    and differentiates Mahalunge Khed (410501) from Mahalunge Pune (411045).
     """
-    khed_res = google_maps_service.reverse_geocode(18.755195, 73.809071)
+    mock_khed_results = [
+        {
+            "formatted_address": "Mahalunge, Khed Taluka, Pune District, Maharashtra 410501, India",
+            "geometry": {"location_type": "APPROXIMATE"},
+            "address_components": [
+                {"long_name": "Mahalunge", "short_name": "Mahalunge", "types": ["sublocality_level_1", "sublocality"]},
+                {"long_name": "Khed", "short_name": "Khed", "types": ["administrative_area_level_3"]},
+                {"long_name": "Pune", "short_name": "Pune", "types": ["administrative_area_level_2"]},
+                {"long_name": "Maharashtra", "short_name": "MH", "types": ["administrative_area_level_1"]},
+                {"long_name": "India", "short_name": "IN", "types": ["country"]},
+                {"long_name": "410501", "short_name": "410501", "types": ["postal_code"]},
+            ],
+        }
+    ]
+
+    mock_pune_results = [
+        {
+            "formatted_address": "The Orchid Hotel, Mahalunge, Pune, Maharashtra 411045, India",
+            "geometry": {"location_type": "ROOFTOP"},
+            "address_components": [
+                {"long_name": "The Orchid Hotel", "short_name": "The Orchid Hotel", "types": ["establishment", "point_of_interest"]},
+                {"long_name": "Mahalunge", "short_name": "Mahalunge", "types": ["sublocality_level_1", "sublocality"]},
+                {"long_name": "Pune", "short_name": "Pune", "types": ["locality"]},
+                {"long_name": "Pune", "short_name": "Pune", "types": ["administrative_area_level_2"]},
+                {"long_name": "Maharashtra", "short_name": "MH", "types": ["administrative_area_level_1"]},
+                {"long_name": "India", "short_name": "IN", "types": ["country"]},
+                {"long_name": "411045", "short_name": "411045", "types": ["postal_code"]},
+            ],
+        }
+    ]
+
+    class MockResponse:
+        def __init__(self, data):
+            self._data = data
+            self.status_code = 200
+
+        def json(self):
+            return self._data
+
+    def mock_get(url, params=None, timeout=None, **kwargs):
+        latlng = (params or {}).get("latlng", "")
+        if "18.755" in latlng:
+            return MockResponse({"status": "OK", "results": mock_khed_results})
+        return MockResponse({"status": "OK", "results": mock_pune_results})
+
+    monkeypatch.setattr("requests.get", mock_get)
+    monkeypatch.setattr(google_maps_service, "api_key", "AIzaTestKeyForGeocoding123")
+    google_maps_service._cache.clear()
+
+    khed_res = google_maps_service.reverse_geocode(PLACE_1_LAT, PLACE_1_LON)
     assert khed_res is not None
     assert khed_res.taluka == "Khed"
     assert khed_res.district == "Pune"
     assert khed_res.postal_code == "410501"
-    assert "Khed" in khed_res.display_name
-    assert "410501" in khed_res.formatted_address
+    assert khed_res.area == "Mahalunge"
+    assert "Khed" in khed_res.formatted_address
 
-    pune_res = google_maps_service.reverse_geocode(18.57382, 73.756159)
+    pune_res = google_maps_service.reverse_geocode(PLACE_2_LAT, PLACE_2_LON)
     assert pune_res is not None
     assert pune_res.postal_code == "411045"
+    assert pune_res.city == "Pune"
+    assert pune_res.area == "Mahalunge"
     assert pune_res.district == "Pune"
+    assert "The Orchid Hotel" not in (pune_res.name or "")
+    assert "The Orchid Hotel" not in (pune_res.display_name or "")
+    assert pune_res.google_place_id is None
     assert pune_res.postal_code != khed_res.postal_code
 
 

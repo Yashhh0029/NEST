@@ -1065,255 +1065,32 @@ class GoogleMapsService:
 
     @staticmethod
     def resolve_indian_coordinates(latitude: float, longitude: float) -> Optional[ResolvedLocation]:
-
         """
-        Geographic coordinate boundary resolver for Indian metropolitan & urban regions.
-        Acts as an intelligent, deterministic fallback so valid coordinates in India
-        never resolve to 'Unknown City' even if Google Geocoding API is unreachable.
+        Safe, generic coordinate boundary resolver for coordinates within India.
+        Preserves exact input coordinates without guessing or fabricating
+        local administrative hierarchies (neighborhood, taluka, district, or PIN code)
+        when external reverse geocoding is unavailable or unconfigured.
         """
         lat, lon = latitude, longitude
 
-        # 1. Detailed Pune & Pimpri-Chinchwad Micro-Locality Boundary Resolution
-        # Lat: 18.40 to 18.82, Lon: 73.68 to 74.02
-        if 18.40 <= lat <= 18.82 and 73.68 <= lon <= 74.02:
-            taluka = None
-            district = "Pune"
-            # Mahalunge (Khed Taluka, Chakan / Pune District, PIN 410501)
-            if 18.73 <= lat <= 18.78 and 73.79 <= lon <= 73.83:
-                area = "Mahalunge"
-                taluka = "Khed"
-                city = "Mahalunge"
-                postal = "410501"
-            # Mahalunge (Lat: 18.55-18.60, Lon: 73.72-73.77)
-            elif 18.55 <= lat <= 18.60 and 73.72 <= lon <= 73.765:
-                area = "Mahalunge"
-                taluka = "Mulshi"
-                city = "Pune"
-                postal = "411045"
-            # Balewadi (Lat: 18.56-18.60, Lon: 73.765-73.795)
-            elif 18.56 <= lat <= 18.60 and 73.765 < lon <= 73.795:
-                area = "Balewadi"
-                city = "Pune"
-                postal = "411045"
-            # Baner (Lat: 18.535-18.57, Lon: 73.77-73.81)
-            elif 18.535 <= lat <= 18.57 and 73.77 <= lon <= 73.81:
-                area = "Baner"
-                city = "Pune"
-                postal = "411045"
-            # Hinjewadi (Lat: 18.57-18.63, Lon: 73.68-73.75)
-            elif 18.57 <= lat <= 18.63 and 73.68 <= lon <= 73.75:
-                area = "Hinjewadi"
-                taluka = "Mulshi"
-                city = "Pune"
-                postal = "411057"
-            # Wakad (Lat: 18.58-18.625, Lon: 73.75 < lon <= 73.785)
-            elif 18.58 <= lat <= 18.625 and 73.75 < lon <= 73.785:
-                area = "Wakad"
-                city = "Pimpri-Chinchwad"
-                postal = "411057"
-            # Pimple Saudagar / Rahatani
-            elif 18.58 <= lat <= 18.62 and 73.785 < lon <= 73.82:
-                area = "Pimple Saudagar"
-                city = "Pimpri-Chinchwad"
-                postal = "411027"
-            # Aundh (Lat: 18.545-18.58, Lon: 73.80 < lon <= 73.83)
-            elif 18.545 <= lat <= 18.58 and 73.80 < lon <= 73.83:
-                area = "Aundh"
-                city = "Pune"
-                postal = "411007"
-            # Bavdhan & Pashan (Lat: 18.50-18.545, Lon: 73.75-73.80)
-            elif 18.50 <= lat <= 18.545 and 73.75 <= lon <= 73.80:
-                area = "Bavdhan" if lat < 18.525 else "Pashan"
-                city = "Pune"
-                postal = "411021"
-            # Kothrud (Lat: 18.485-18.525, Lon: 73.79-73.835)
-            elif 18.485 <= lat <= 18.525 and 73.79 <= lon <= 73.835:
-                area = "Kothrud"
-                taluka = "Haveli"
-                city = "Pune"
-                postal = "411038"
-            # Shivajinagar / Deccan (Lat: 18.51-18.545, Lon: 73.835 < lon <= 73.87)
-            elif 18.51 <= lat <= 18.545 and 73.835 < lon <= 73.87:
-                area = "Shivajinagar"
-                city = "Pune"
-                postal = "411005"
-            # Viman Nagar / Kalyani Nagar (Lat: 18.535-18.58, Lon: 73.885-73.93)
-            elif 18.535 <= lat <= 18.58 and 73.885 <= lon <= 73.93:
-                area = "Viman Nagar"
-                city = "Pune"
-                postal = "411014"
-            # Kharadi (Lat: 18.535-18.57, Lon: 73.93 < lon <= 73.975)
-            elif 18.535 <= lat <= 18.57 and 73.93 < lon <= 73.975:
-                area = "Kharadi"
-                city = "Pune"
-                postal = "411014"
-            # Hadapsar / Magarpatta (Lat: 18.48-18.53, Lon: 73.90-73.96)
-            elif 18.48 <= lat <= 18.53 and 73.90 <= lon <= 73.96:
-                area = "Hadapsar"
-                city = "Pune"
-                postal = "411028"
-            # Nigdi / Akurdi / PCMC North (Lat: 18.625-18.75, Lon: 73.72-73.86)
-            elif 18.625 < lat <= 18.75 and 73.72 <= lon <= 73.86:
-                area = "Nigdi"
-                city = "Pimpri-Chinchwad"
-                postal = "411044"
-            else:
-                area = None
-                city = "Pune"
-                postal = "411001"
-
-            if area and taluka and area.strip().lower() != taluka.strip().lower() and (city and city.strip().lower() == area.strip().lower()):
-                geo_name = f"{area}, {taluka}"
-            elif area and city and area.strip().lower() != city.strip().lower():
-                geo_name = f"{area}, {city}"
-            elif area and taluka and area.strip().lower() != taluka.strip().lower():
-                geo_name = f"{area}, {taluka}"
-            else:
-                geo_name = area or city
-
-            addr_parts = []
-            if area:
-                addr_parts.append(area)
-            if taluka and district:
-                addr_parts.append(f"{taluka} Taluka, {district} District")
-            elif district and district.lower() != (area or "").lower() and district.lower() != (city or "").lower():
-                addr_parts.append(f"{district} District")
-            elif city and city.lower() != (area or "").lower():
-                addr_parts.append(city)
-            if postal:
-                addr_parts.append(f"Maharashtra — {postal}")
-            else:
-                addr_parts.append("Maharashtra")
-            addr_parts.append("India")
-            addr = ", ".join(addr_parts)
-
-            return ResolvedLocation(
-                google_place_id=None,
-                formatted_address=addr,
-                name=geo_name,
-                display_name=geo_name,
-                city=city,
-                area=area,
-                taluka=taluka,
-                district=district,
-                state="Maharashtra",
-                country="India",
-                postal_code=postal,
-                latitude=round(lat, 6),
-                longitude=round(lon, 6),
-                location_precision="locality" if area is None else "neighborhood",
-                location_source="browser_geolocation",
-            )
-
-        # 3. Kochi / Ernakulam (Kakkanad, Infopark, Fort Kochi, Edappally)
-        # Lat: 9.88 to 10.12, Lon: 76.20 to 76.42
-        if 9.88 <= lat <= 10.12 and 76.20 <= lon <= 76.42:
-            area = "Kakkanad" if lon >= 76.32 else "Fort Kochi"
-            return ResolvedLocation(
-                google_place_id="pc_kochi_region",
-                formatted_address=f"{area}, Kochi, Ernakulam District, Kerala — 682030, India",
-                name=f"{area}, Kochi",
-                display_name=f"{area}, Kochi",
-                city="Kochi",
-                area=area,
-                district="Ernakulam",
-                state="Kerala",
-                country="India",
-                postal_code="682030",
-                latitude=round(lat, 6),
-                longitude=round(lon, 6),
-                location_precision="locality",
-                location_source="coordinate_geocoded",
-            )
-
-        # 4. Bengaluru Urban (Whitefield, Indiranagar, Koramangala)
-        # Lat: 12.82 to 13.15, Lon: 77.45 to 77.78
-        if 12.82 <= lat <= 13.15 and 77.45 <= lon <= 77.78:
-            area = "Whitefield" if lon >= 77.70 else "Indiranagar"
-            pin = "560066" if area == "Whitefield" else "560038"
-            return ResolvedLocation(
-                google_place_id="pc_blr_region",
-                formatted_address=f"{area}, Bengaluru, Bengaluru Urban District, Karnataka — {pin}, India",
-                name=f"{area}, Bengaluru",
-                display_name=f"{area}, Bengaluru",
-                city="Bengaluru",
-                area=area,
-                district="Bengaluru Urban",
-                state="Karnataka",
-                country="India",
-                postal_code=pin,
-                latitude=round(lat, 6),
-                longitude=round(lon, 6),
-                location_precision="locality",
-                location_source="coordinate_geocoded",
-            )
-
-        # 5. Mumbai Metropolitan Region
-        if 18.88 <= lat <= 19.32 and 72.75 <= lon <= 73.05:
-            return ResolvedLocation(
-                google_place_id="pc_mumbai_region",
-                formatted_address="Bandra, Mumbai, Mumbai Suburban District, Maharashtra — 400050, India",
-                name="Bandra, Mumbai",
-                display_name="Bandra, Mumbai",
-                city="Mumbai",
-                area="Bandra",
-                district="Mumbai Suburban",
-                state="Maharashtra",
-                country="India",
-                postal_code="400050",
-                latitude=round(lat, 6),
-                longitude=round(lon, 6),
-                location_precision="locality",
-                location_source="coordinate_geocoded",
-            )
-
-        # 6. Nagpur Region
-        if 21.05 <= lat <= 21.25 and 79.00 <= lon <= 79.20:
-            return ResolvedLocation(
-                google_place_id="pc_nagpur_region",
-                formatted_address="Dharampeth, Nagpur, Nagpur District, Maharashtra — 440010, India",
-                name="Dharampeth, Nagpur",
-                display_name="Dharampeth, Nagpur",
-                city="Nagpur",
-                area="Dharampeth",
-                district="Nagpur",
-                state="Maharashtra",
-                country="India",
-                postal_code="440010",
-                latitude=round(lat, 6),
-                longitude=round(lon, 6),
-                location_precision="locality",
-                location_source="coordinate_geocoded",
-            )
-
-        # 7. Broad Maharashtra state boundary
-        if 15.60 <= lat <= 22.00 and 72.60 <= lon <= 80.90:
-            return ResolvedLocation(
-                google_place_id="pc_mh_region",
-                formatted_address="Maharashtra, India",
-                city="Pune",
-                area=None,
-                state="Maharashtra",
-                country="India",
-                latitude=round(lat, 6),
-                longitude=round(lon, 6),
-                location_precision="administrative_area",
-                location_source="coordinate_geocoded",
-            )
-
-        # 8. Broad India boundary
+        # Broad India geographic bounding box (approx. 8.0°N - 37.0°N, 68.0°E - 97.0°E)
         if 8.00 <= lat <= 37.00 and 68.00 <= lon <= 97.00:
             return ResolvedLocation(
-                google_place_id="pc_india_region",
+                google_place_id=None,
                 formatted_address="India",
-                city="India",
+                name=None,
+                display_name=None,
+                city=None,
                 area=None,
+                taluka=None,
+                district=None,
                 state=None,
                 country="India",
+                postal_code=None,
                 latitude=round(lat, 6),
                 longitude=round(lon, 6),
-                location_precision="country",
-                location_source="coordinate_geocoded",
+                location_precision="approximate",
+                location_source="browser_geolocation",
             )
 
         return None
