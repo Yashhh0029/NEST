@@ -352,3 +352,46 @@ def test_weight_customization_adjusts_final_scores(client: TestClient):
     assert resp_high_loc.status_code == 200
     data_loc = resp_high_loc.json()
     assert data_loc["weights_used"]["effective"]["location"] == 0.80
+
+
+def test_candidate_without_explicit_profile_row_is_evaluated_and_matched(client: TestClient):
+    """
+    Helpers who registered and configured location but have not explicitly saved
+    a Profile row (no record in profiles table) must still be evaluated and recommended.
+    """
+    requester = create_authenticated_user(client, "Requester Boisar", "req_boisar@example.test")
+    client.put(
+        "/api/profile/me/location",
+        headers=requester["headers"],
+        json={"city": "Boisar", "area": "Vijay Colony", "latitude": 19.808163, "longitude": 72.771878},
+    )
+
+    helper = create_authenticated_user(client, "Helper Boisar", "helper_boisar@example.test")
+    # Helper sets location, but never saves a Profile row
+    client.put(
+        "/api/profile/me/location",
+        headers=helper["headers"],
+        json={"city": "Boisar", "area": "Vijay Colony", "latitude": 19.808593, "longitude": 72.771758},
+    )
+
+    req_resp = client.post(
+        "/api/requests",
+        headers=requester["headers"],
+        json={"text": "Looking for accommodation and food in Boisar"},
+    )
+    assert req_resp.status_code == 201
+    request_id = req_resp.json()["id"]
+
+    match_resp = client.post(
+        "/api/matching/find-matches",
+        headers=requester["headers"],
+        json={"request_id": request_id, "max_distance_km": 25.0},
+    )
+    assert match_resp.status_code == 200
+    data = match_resp.json()
+    assert data["total_candidates_evaluated"] >= 1
+    matched_ids = [m["user_id"] for m in data["matches"]]
+    assert str(helper["user"]["id"]) in matched_ids
+    top_match = next(m for m in data["matches"] if m["user_id"] == str(helper["user"]["id"]))
+    assert top_match["distance_km"] < 1.0
+

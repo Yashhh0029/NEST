@@ -459,6 +459,8 @@ def find_candidate_matches(
         .filter(Location.user_id == requesting_user.id, Location.location_label == "Primary")
         .first()
     )
+    if not req_user_loc:
+        req_user_loc = db.query(Location).filter(Location.user_id == requesting_user.id).first()
 
     if req_target_loc and req_target_loc.latitude is not None and req_target_loc.longitude is not None:
         req_lat = req_target_loc.latitude
@@ -541,10 +543,9 @@ def find_candidate_matches(
     else:
         effective_weights = {k: 0.0 for k in raw_weights}
 
-    # 4. Ensure all active candidate users with a profile have an embedding in pgvector
+    # 4. Ensure all active candidate users have an embedding in pgvector
     active_candidates_without_embedding = (
         db.query(User)
-        .join(Profile, Profile.user_id == User.id)
         .filter(
             User.id != requesting_user.id,
             User.is_active == True,
@@ -566,7 +567,7 @@ def find_candidate_matches(
     stmt = (
         select(Embedding.owner_id, dist_expr.label("distance"))
         .join(User, User.id == Embedding.owner_id)
-        .join(Profile, Profile.user_id == User.id)
+        .outerjoin(Profile, Profile.user_id == User.id)
         .filter(
             Embedding.owner_type == "profile",
             Embedding.owner_id != requesting_user.id,
@@ -602,6 +603,8 @@ def find_candidate_matches(
             .filter(Location.user_id == cand_user_id, Location.location_label == "Primary")
             .first()
         )
+        if not cand_loc:
+            cand_loc = db.query(Location).filter(Location.user_id == cand_user_id).first()
         skills_raw = (
             db.query(Skill.name, UserSkill.proficiency, UserSkill.years_experience)
             .join(UserSkill, UserSkill.skill_id == Skill.id)
@@ -775,6 +778,8 @@ def find_candidate_matches(
                 .filter(Location.user_id == cand.user_id, Location.location_label == "Primary")
                 .first()
             )
+            if not c_loc:
+                c_loc = db.query(Location).filter(Location.user_id == cand.user_id).first()
             if c_loc and c_loc.latitude is not None and c_loc.longitude is not None:
                 cand.route_info = google_maps_service.compute_route_travel(
                     origin_lat=c_loc.latitude,
