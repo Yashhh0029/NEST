@@ -21,6 +21,7 @@ export function LocationPicker({
   const [isLocating, setIsLocating] = useState(false);
   const [geoError, setGeoError] = useState<string | null>(null);
   const [pendingDetectedLocation, setPendingDetectedLocation] = useState<LocationCreateOrUpdatePayload | null>(null);
+  const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [showManualFields, setShowManualFields] = useState(
     Boolean(value.city || value.area || value.location_source === "manual")
@@ -77,6 +78,8 @@ export function LocationPicker({
         try {
           const lat = pos.coords.latitude;
           const lon = pos.coords.longitude;
+          const accuracy = pos.coords.accuracy ? Math.round(pos.coords.accuracy) : null;
+          setGpsAccuracy(accuracy);
           const resolved = await reverseGeocodeCoordinates(lat, lon);
 
           const resolvedCity = resolved.city || resolved.area || "Selected Location";
@@ -160,12 +163,17 @@ export function LocationPicker({
 
         <button
           type="button"
+          data-testid="pick-on-map-button"
           onClick={() => setShowMapPicker((prev) => !prev)}
           disabled={disabled}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-brand-dark-border bg-white dark:bg-brand-dark-surface hover:bg-gray-50 dark:hover:bg-brand-dark-muted/40 text-gray-700 dark:text-gray-300 transition-colors disabled:opacity-50"
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all disabled:opacity-50 cursor-pointer ${
+            showMapPicker
+              ? "border-teal-600 bg-teal-50 dark:bg-brand-dark-surface text-brand-primary dark:text-teal-300 ring-1 ring-teal-500 shadow-xs"
+              : "border-gray-200 dark:border-brand-dark-border bg-white dark:bg-brand-dark-surface hover:bg-gray-50 dark:hover:bg-brand-dark-muted/40 text-gray-700 dark:text-gray-300"
+          }`}
         >
           <MapPin className="w-3.5 h-3.5 text-brand-primary" />
-          <span>{showMapPicker ? "Close map" : "Pick on map"}</span>
+          <span>{showMapPicker ? "Close Map" : "Pick on Map"}</span>
         </button>
 
         <button
@@ -234,13 +242,20 @@ export function LocationPicker({
                 {pendingDetectedLocation.formatted_address}
               </p>
             )}
-            <div className="flex items-center gap-3 pt-1 text-[11px] text-gray-500 dark:text-gray-400 font-mono flex-wrap">
+            <div className="flex items-center gap-3 pt-1 text-[11px] text-gray-600 dark:text-gray-300 font-mono flex-wrap">
+              {gpsAccuracy != null && (
+                <span className="font-semibold text-teal-800 dark:text-teal-300">
+                  Accuracy: ±{gpsAccuracy} m
+                </span>
+              )}
+              {pendingDetectedLocation.latitude != null && (
+                <span>
+                  Coordinates: {pendingDetectedLocation.latitude.toFixed(6)}, {pendingDetectedLocation.longitude?.toFixed(6)}
+                </span>
+              )}
               <span>City: {pendingDetectedLocation.city}</span>
               {pendingDetectedLocation.area && <span>Area: {pendingDetectedLocation.area}</span>}
               {pendingDetectedLocation.postal_code && <span>PIN: {pendingDetectedLocation.postal_code}</span>}
-              {pendingDetectedLocation.latitude != null && (
-                <span>({pendingDetectedLocation.latitude.toFixed(4)}°, {pendingDetectedLocation.longitude?.toFixed(4)}°)</span>
-              )}
             </div>
           </div>
           <div className="flex items-center gap-2 pt-0.5">

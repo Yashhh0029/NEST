@@ -585,10 +585,85 @@ class GoogleMapsService:
             logger.warning("Places API searchText geocoding failed gracefully: %s", exc)
             return None
 
+    def _geocode_latlng_api(self, latitude: float, longitude: float) -> Optional[ResolvedLocation]:
+        """
+        Reverse geocode GPS coordinates using official Google Maps Geocoding API.
+        Endpoint: GET https://maps.googleapis.com/maps/api/geocode/json?latlng={lat},{lon}&key={key}
+        Uses exact device latitude and longitude as authoritative source of truth.
+        Never replaces coordinates with a nearby place and never adopts a commercial establishment name.
+        """
+        if not self.is_configured:
+            return None
+
+        url = "https://maps.googleapis.com/maps/api/geocode/json"
+        params = {
+            "latlng": f"{latitude},{longitude}",
+            "key": self.api_key,
+            "language": "en",
+        }
+        try:
+            resp = requests.get(url, params=params, timeout=6.0)
+            if resp.status_code != 200:
+                logger.warning("Google Geocoding API returned status %d: %s", resp.status_code, resp.text[:200])
+                return None
+            data = resp.json()
+            if data.get("status") != "OK":
+                logger.warning("Google Geocoding API status: %s", data.get("status"))
+                return None
+            results = data.get("results", [])
+            if not results:
+                return None
+
+            city, area, state, country, postal, formatted, _ = self.parse_google_address_components_multi(results)
+
+            # Inspect most specific result (top result) for verified society/premise/building or route
+            top = results[0]
+            premise_name = None
+            route_name = None
+            for comp in top.get("address_components", []):
+                types = comp.get("types", [])
+                name = comp.get("long_name") or comp.get("short_name")
+                if ("premise" in types or "subpremise" in types) and not premise_name:
+                    premise_name = name
+                if "route" in types and not route_name:
+                    route_name = name
+
+            geom_type = top.get("geometry", {}).get("location_type", "")
+            precision = "rooftop" if (geom_type == "ROOFTOP" or premise_name) else ("neighborhood" if area else "locality")
+
+            # Build human-readable display name: prefer premise + area if available, else area + city
+            if premise_name and area and premise_name.strip().lower() != area.strip().lower():
+                display_name = f"{premise_name}, {area}"
+            elif area and city:
+                display_name = f"{area}, {city}"
+            else:
+                display_name = city or area or "Current Location"
+
+            return ResolvedLocation(
+                google_place_id=None,  # Do NOT assign commercial business place_id to GPS point
+                formatted_address=top.get("formatted_address") or formatted,
+                name=display_name,
+                display_name=display_name,
+                city=city,
+                area=area,
+                state=state,
+                country=country or "India",
+                postal_code=postal,
+                latitude=round(latitude, 6),
+                longitude=round(longitude, 6),
+                location_precision=precision,
+                location_source="browser_geolocation",
+                road=route_name,
+            )
+        except Exception as exc:
+            logger.warning("Google Geocoding API reverse-geocode call failed gracefully: %s", exc)
+            return None
+
     def reverse_geocode(self, latitude: float, longitude: float) -> Optional[ResolvedLocation]:
         """
         Reverse geocode GPS coordinates to human-readable canonical area & city.
-        Uses supported Google Places API (New) searchNearby architecture when configured.
+        Uses authoritative Google Geocoding API when configured.
+        Preserves exact input coordinates as authoritative source of truth.
         Falls back to resilient coordinate boundaries when offline or unconfigured.
         """
         if not (-90.0 <= latitude <= 90.0 and -180.0 <= longitude <= 180.0):
@@ -599,74 +674,14 @@ class GoogleMapsService:
         if cached is not None:
             return cached
 
-        # Live Google Places API (New) nearby search for geographic context
+        # 1. Authoritative Google Maps Geocoding API
         if self.is_configured:
-            for radius in [1000.0, 5000.0]:
-                places = self.search_places_nearby(
-                    latitude=latitude,
-                    longitude=longitude,
-                    radius_meters=radius,
-                    max_result_count=5,
-                )
-                if places:
-                    # Aggregate geographic address components across nearby places
-                    # NEVER adopt a commercial establishment's displayName or business place_id as the user's location identity!
-                    city = None
-                    area = None
-                    state = None
-                    country = "India"
-                    postal = None
+            geo_res = self._geocode_latlng_api(latitude, longitude)
+            if geo_res:
+                self._set_in_cache(cache_key, geo_res)
+                return geo_res
 
-                    for p in places:
-                        c, a, s, co, post = self._extract_address_components(p.get("addressComponents", []))
-                        if not city or (not city.isascii() and c and c.isascii()):
-                            city = c or city
-                        if not area or (not area.isascii() and a and a.isascii()):
-                            area = a or area
-                        if not state or (not state.isascii() and s and s.isascii()):
-                            state = s or state
-                        if not country or (not country.isascii() and co and co.isascii()):
-                            country = co or country
-                        if not postal and post:
-                            postal = post
-
-                    # Build clean geographic-only display name and formatted address
-                    geo_parts = [part for part in [area, city] if part]
-                    geo_display = ", ".join(geo_parts) if geo_parts else (city or area or "Current Location")
-
-                    addr_parts = [part for part in [
-                        area,
-                        city,
-                        f"{state} {postal}".strip() if (state or postal) else state,
-                        country,
-                    ] if part]
-                    geo_formatted = ", ".join(addr_parts) if addr_parts else "India"
-
-                    precision = "neighborhood" if area else ("locality" if city else "approximate")
-
-                    # Per canonical Place ID rule:
-                    # Do NOT store a commercial business's Place ID for GPS coordinates.
-                    # Do NOT blindly forward-geocode text which could cause duplicate-name ambiguity.
-                    # The exact device latitude/longitude remains the authoritative geographic identity.
-                    resolved = ResolvedLocation(
-                        google_place_id=None,
-                        formatted_address=geo_formatted,
-                        name=geo_display,
-                        display_name=geo_display,
-                        city=city,
-                        area=area,
-                        state=state,
-                        country=country or "India",
-                        postal_code=postal,
-                        latitude=round(latitude, 6),
-                        longitude=round(longitude, 6),
-                        location_precision=precision,
-                        location_source="browser_geolocation",
-                    )
-                    self._set_in_cache(cache_key, resolved)
-                    return resolved
-
-        # Resilient offline coordinate boundary resolver for Indian coordinates
+        # 2. Resilient deterministic coordinate boundary resolver for Indian coordinates
         fallback = self.resolve_indian_coordinates(latitude, longitude)
         if fallback:
             self._set_in_cache(cache_key, fallback)

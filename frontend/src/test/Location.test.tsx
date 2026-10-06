@@ -151,6 +151,7 @@ describe("LocationPicker Component", () => {
         screen.getByText(/Current Location Detected via Device GPS/i)
       ).toBeInTheDocument();
       expect(screen.getByText(/Mahalunge, Pune, Maharashtra 411045, India/i)).toBeInTheDocument();
+      expect(screen.getByText(/Coordinates: 18.573800, 73.756100/i)).toBeInTheDocument();
     });
 
     // Clicking 'Use this location' explicitly confirms and calls onChange
