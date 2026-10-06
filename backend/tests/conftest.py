@@ -109,21 +109,41 @@ def clean_test_data():
             ).all()
             user_ids = [u.id for u in test_users]
             if user_ids:
-                # Remove embeddings owned by test users or their requests
-                db.query(Embedding).filter(Embedding.owner_id.in_(user_ids)).delete(synchronize_session=False)
+                from sqlalchemy import text
+                from app.models.request import Request
+                from app.models.request_location import RequestLocation
+                from app.models.connection import Connection
+                from app.models.location import Location
+                from app.models.profile import Profile
+                req_ids = [str(r[0]) for r in db.query(Request.id).filter(Request.user_id.in_(user_ids)).all()]
+                if req_ids:
+                    formatted_ids = ", ".join(f"'{rid}'" for rid in req_ids)
+                    db.execute(text(f"DELETE FROM connections WHERE request_id IN ({formatted_ids})"))
+                    db.execute(text(f"DELETE FROM request_locations WHERE request_id IN ({formatted_ids})"))
+                    db.execute(text(f"DELETE FROM requests WHERE id IN ({formatted_ids})"))
+                db.query(Connection).filter((Connection.requester_id.in_(user_ids)) | (Connection.helper_id.in_(user_ids))).delete(synchronize_session=False)
+                db.query(Location).filter(Location.user_id.in_(user_ids)).delete(synchronize_session=False)
+                db.query(Profile).filter(Profile.user_id.in_(user_ids)).delete(synchronize_session=False)
+                try:
+                    db.query(Embedding).filter(Embedding.owner_id.in_(user_ids)).delete(synchronize_session=False)
+                except Exception:
+                    db.rollback()
                 # Cascade deletes profiles, locations, user_skills for test accounts
                 db.query(User).filter(User.id.in_(user_ids)).delete(synchronize_session=False)
                 db.commit()
-            # Clean any orphan profile embeddings
-            valid_user_ids = [u[0] for u in db.query(User.id).all()]
-            if valid_user_ids:
-                db.query(Embedding).filter(
-                    Embedding.owner_type == "profile",
-                    ~Embedding.owner_id.in_(valid_user_ids)
-                ).delete(synchronize_session=False)
-            else:
-                db.query(Embedding).filter(Embedding.owner_type == "profile").delete(synchronize_session=False)
-            db.commit()
+            try:
+                # Clean any orphan profile embeddings
+                valid_user_ids = [u[0] for u in db.query(User.id).all()]
+                if valid_user_ids:
+                    db.query(Embedding).filter(
+                        Embedding.owner_type == "profile",
+                        ~Embedding.owner_id.in_(valid_user_ids)
+                    ).delete(synchronize_session=False)
+                else:
+                    db.query(Embedding).filter(Embedding.owner_type == "profile").delete(synchronize_session=False)
+                db.commit()
+            except Exception:
+                db.rollback()
         except Exception:
             try:
                 db.rollback()

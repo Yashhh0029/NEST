@@ -1,6 +1,7 @@
 import abc
 import json
 import logging
+import re
 import smtplib
 import urllib.error
 import urllib.request
@@ -211,6 +212,49 @@ class ResendProvider(BaseEmailProvider):
                 resend_msg = err_json.get("message") or err_json.get("name") or "Dispatch rejected by provider"
             except Exception:
                 resend_msg = "Email dispatch rejected by provider"
+
+            # Check for Resend testing domain sandbox restriction:
+            # When using onboarding@resend.dev without a verified domain, Resend rejects any recipient
+            # other than the registered account owner with:
+            # "You can only send testing emails to your own email address (owner@example.com)..."
+            if exc.code == 403 and "to your own email address" in resend_msg:
+                owner_match = re.search(r"\(([^)]+@[^)]+)\)", resend_msg)
+                sandbox_owner = owner_match.group(1) if owner_match else None
+                if sandbox_owner and sandbox_owner.lower() != message.to_email.lower():
+                    logger.warning(
+                        "[ResendProvider] Resend sandbox restriction active (no verified domain). "
+                        "Redirecting verification email for '%s' to sandbox owner '%s'.",
+                        message.to_email,
+                        sandbox_owner,
+                    )
+                    sandbox_payload = {
+                        "from": sender,
+                        "to": [sandbox_owner],
+                        "subject": f"[Sandbox for {message.to_email}] {message.subject}",
+                        "html": (
+                            f"<div style='background:#fef3c7;border:1px solid #f59e0b;padding:12px;border-radius:8px;margin-bottom:16px;font-size:13px;color:#92400e;'>"
+                            f"<strong>Resend Testing Sandbox Notice:</strong> This email was originally addressed to <code>{message.to_email}</code>. "
+                            f"Because the Resend account is using the sandbox domain (<code>onboarding@resend.dev</code>), Resend only delivers to your account owner address."
+                            f"</div>"
+                        ) + message.html_body,
+                        "text": f"[Sandbox Notice: Intended recipient: {message.to_email}]\n\n" + message.text_body,
+                    }
+                    sandbox_data = json.dumps(sandbox_payload).encode("utf-8")
+                    sandbox_req = urllib.request.Request(url, data=sandbox_data, headers=headers, method="POST")
+                    try:
+                        with urllib.request.urlopen(sandbox_req, timeout=10) as s_resp:
+                            if 200 <= s_resp.status < 300:
+                                s_bytes = s_resp.read()
+                                s_json = json.loads(s_bytes.decode("utf-8")) if s_bytes else {}
+                                logger.info(
+                                    "[ResendProvider] Dispatched sandbox email to %s (Resend ID: %s)",
+                                    sandbox_owner,
+                                    s_json.get("id"),
+                                )
+                                return True
+                    except Exception as s_exc:
+                        logger.error("[ResendProvider] Failed sandbox fallback send: %s", type(s_exc).__name__)
+
             # Never leak tokens or credentials
             raise RuntimeError(f"Email delivery error ({exc.code}): {resend_msg}")
         except Exception as exc:

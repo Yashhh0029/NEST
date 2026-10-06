@@ -145,6 +145,28 @@ def get_request_with_privacy(
             detail="Only active verified members may access community requests.",
         )
 
+    # Enforce profile location requirement for accessing other members' community requests
+    from app.models.location import Location
+    viewer_loc = (
+        db.query(Location)
+        .filter(Location.user_id == user.id, Location.location_label == "Primary")
+        .first()
+    )
+    if not viewer_loc:
+        viewer_loc = db.query(Location).filter(Location.user_id == user.id).first()
+    has_viewer_loc = bool(
+        viewer_loc
+        and (
+            (viewer_loc.latitude is not None and viewer_loc.longitude is not None)
+            or bool(viewer_loc.city and viewer_loc.city.strip())
+        )
+    )
+    if not has_viewer_loc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Location setup required. Please configure your profile location to access community requests.",
+        )
+
     # An unrelated newcomer has no authorization to view another newcomer's private request
     from app.models.connection import Connection
     is_connected = db.query(Connection).filter(
@@ -303,6 +325,20 @@ def get_nearby_requests_for_helper(
     helper_lat = float(helper_loc.latitude) if helper_loc and helper_loc.latitude is not None else None
     helper_lon = float(helper_loc.longitude) if helper_loc and helper_loc.longitude is not None else None
 
+    has_usable_location = bool(
+        helper_loc
+        and (
+            (helper_lat is not None and helper_lon is not None)
+            or bool(helper_city)
+        )
+    )
+    if not has_usable_location:
+        from fastapi import HTTPException, status
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Location setup required. Please configure your profile location before discovering community requests.",
+        )
+
     # Helper skills and profile keywords
     helper_keywords: Set[str] = set()
     if helper.profile:
@@ -388,7 +424,7 @@ def get_nearby_requests_for_helper(
         else:
             # Helper has no coordinates configured: filter by city if target city is known
             req_target_city = (req_loc.city if req_loc and req_loc.city else req.city) or ""
-            if req_target_city and helper_city and req_target_city.strip().lower() != helper_city:
+            if not req_target_city or req_target_city.strip().lower() != helper_city:
                 continue
 
         # Extract needs

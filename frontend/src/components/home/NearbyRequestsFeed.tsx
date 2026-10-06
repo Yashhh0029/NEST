@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { requestsService } from "@/services/requests";
 import { createConnection } from "@/services/connections";
 import { refreshCoordinator } from "@/services/refreshCoordinator";
@@ -82,6 +83,55 @@ export function NearbyRequestsFeed() {
           <Skeleton className="h-44 rounded-2xl" />
           <Skeleton className="h-44 rounded-2xl" />
         </div>
+      </div>
+    );
+  }
+
+  const isLocationRequired = Boolean(
+    refreshError &&
+      typeof refreshError === "object" &&
+      "response" in refreshError &&
+      ((refreshError as any).response?.status === 400 || (refreshError as any).response?.status === 403) &&
+      String((refreshError as any).response?.data?.detail || "").toLowerCase().includes("location")
+  );
+
+  if (isLocationRequired) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-teal-100 dark:bg-teal-950/80 text-teal-700 dark:text-teal-300">
+              <MapPin className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold font-heading text-slate-900 dark:text-white">
+                Help Requests Near You
+              </h2>
+            </div>
+          </div>
+        </div>
+
+        <Card className="p-8 text-center space-y-4 rounded-3xl border-teal-200/70 dark:border-teal-900/40 bg-teal-50/30 dark:bg-teal-950/20 backdrop-blur-sm">
+          <div className="w-14 h-14 mx-auto rounded-2xl bg-teal-100 dark:bg-teal-900/60 text-teal-700 dark:text-teal-300 flex items-center justify-center font-bold text-xl shadow-sm">
+            <MapPin className="w-7 h-7" />
+          </div>
+          <div className="space-y-1.5 max-w-md mx-auto">
+            <h3 className="text-base font-bold font-heading text-slate-900 dark:text-white">
+              Set Up Your Location to Discover Requests
+            </h3>
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+              To discover open newcomer requests in your neighborhood and ensure relevant, privacy-safe community matching, please configure your primary profile location.
+            </p>
+          </div>
+          <div className="pt-2">
+            <Link to="/profile/edit#location">
+              <Button size="sm" variant="primary" className="gap-2">
+                <MapPin className="w-3.5 h-3.5" />
+                <span>Configure Profile Location</span>
+              </Button>
+            </Link>
+          </div>
+        </Card>
       </div>
     );
   }

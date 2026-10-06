@@ -361,8 +361,19 @@ def test_nearby_requests_feed(client: TestClient):
         headers=newcomer["headers"],
     )
 
-    # 2. Helper lists nearby requests
+    # 2. Unconfigured helper without location MUST be rejected with 400 Location Required
+    unconfigured_helper = create_authenticated_user(client, "Unconfigured Helper", "unconfigured.hlp@example.test", role="helper")
+    unconf_resp = client.get("/api/requests/nearby", headers=unconfigured_helper["headers"])
+    assert unconf_resp.status_code == status.HTTP_400_BAD_REQUEST
+    assert "Location setup required" in unconf_resp.json()["detail"]
+
+    # 3. Helper sets location in Pune, now successfully retrieves nearby requests
     helper = create_authenticated_user(client, "Anita Helper", "anita.hlp@example.test", role="helper")
+    client.put(
+        "/api/profile/me/location",
+        json={"city": "Pune", "area": "Hinjewadi", "latitude": 18.5913, "longitude": 73.7389, "country": "India"},
+        headers=helper["headers"],
+    )
     resp = client.get("/api/requests/nearby", headers=helper["headers"])
     assert resp.status_code == status.HTTP_200_OK
     data = resp.json()
@@ -374,6 +385,11 @@ def test_nearby_requests_feed(client: TestClient):
     assert req_item["city"] == "Pune"
     assert "requester_name" in req_item
     assert len(req_item["match_reasons"]) >= 1
+
+    # 4. Unconfigured user attempting to fetch specific request by ID is blocked with 403
+    unconf_req_resp = client.get(f"/api/requests/{req_item['id']}", headers=unconfigured_helper["headers"])
+    assert unconf_req_resp.status_code == status.HTTP_403_FORBIDDEN
+    assert "Location setup required" in unconf_req_resp.json()["detail"]
 
 
 def test_helper_dashboard_target_location_filtering_ranoli(client: TestClient):
@@ -395,6 +411,7 @@ def test_helper_dashboard_target_location_filtering_ranoli(client: TestClient):
         # 1. Newcomer whose CURRENT/PROFILE location is in Pune (e.g. Wagholi, Pune)
         newcomer = create_authenticated_user(client, "Dev Newcomer", "dev.ranoli.nc@example.test", role="newcomer")
         nc_user = db.query(User).filter(User.email == "dev.ranoli.nc@example.test").first()
+        db.query(Location).filter(Location.user_id == nc_user.id).delete()
         nc_profile_loc = Location(
             user_id=nc_user.id,
             city="Pune",
@@ -443,6 +460,7 @@ def test_helper_dashboard_target_location_filtering_ranoli(client: TestClient):
         # 2. Helper in Pune/Mahalunge (~18.5512, 73.7489)
         helper_pune = create_authenticated_user(client, "Pooja PuneHelper", "pooja.pune@example.test", role="helper")
         hp_user = db.query(User).filter(User.email == "pooja.pune@example.test").first()
+        db.query(Location).filter(Location.user_id == hp_user.id).delete()
         hp_loc = Location(
             user_id=hp_user.id,
             city="Pune",
@@ -458,6 +476,7 @@ def test_helper_dashboard_target_location_filtering_ranoli(client: TestClient):
         # 3. Helper near Ranoli, Gujarat (~22.3800, 73.1800 - approx 5.4 km from Ranoli)
         helper_ranoli = create_authenticated_user(client, "Jayesh GujaratHelper", "jayesh.guj@example.test", role="helper")
         hg_user = db.query(User).filter(User.email == "jayesh.guj@example.test").first()
+        db.query(Location).filter(Location.user_id == hg_user.id).delete()
         hg_loc = Location(
             user_id=hg_user.id,
             city="Ranoli",
