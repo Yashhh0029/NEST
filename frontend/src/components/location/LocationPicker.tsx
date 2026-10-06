@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Navigation, ChevronDown, ChevronUp, Check, AlertCircle, Loader2 } from "lucide-react";
+import { Navigation, ChevronDown, ChevronUp, Check, AlertCircle, Loader2, MapPin } from "lucide-react";
 import { PlaceAutocomplete } from "./PlaceAutocomplete";
 import { GoogleMap } from "./GoogleMap";
+import { MapLocationPicker } from "./MapLocationPicker";
 import { getPlaceDetails, reverseGeocodeCoordinates } from "../../services/location";
 import type { PlaceAutocompletePrediction } from "../../types/google-location";
 import type { LocationCreateOrUpdatePayload } from "../../types/profile";
@@ -20,6 +21,7 @@ export function LocationPicker({
   const [isLocating, setIsLocating] = useState(false);
   const [geoError, setGeoError] = useState<string | null>(null);
   const [pendingDetectedLocation, setPendingDetectedLocation] = useState<LocationCreateOrUpdatePayload | null>(null);
+  const [showMapPicker, setShowMapPicker] = useState(false);
   const [showManualFields, setShowManualFields] = useState(
     Boolean(value.city || value.area || value.location_source === "manual")
   );
@@ -140,7 +142,7 @@ export function LocationPicker({
         />
       </div>
 
-      {/* Geolocation Button */}
+      {/* Geolocation & Map Picker Buttons */}
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
@@ -158,6 +160,16 @@ export function LocationPicker({
 
         <button
           type="button"
+          onClick={() => setShowMapPicker((prev) => !prev)}
+          disabled={disabled}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-brand-dark-border bg-white dark:bg-brand-dark-surface hover:bg-gray-50 dark:hover:bg-brand-dark-muted/40 text-gray-700 dark:text-gray-300 transition-colors disabled:opacity-50"
+        >
+          <MapPin className="w-3.5 h-3.5 text-brand-primary" />
+          <span>{showMapPicker ? "Close map" : "Pick on map"}</span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => setShowManualFields(!showManualFields)}
           className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
         >
@@ -165,6 +177,37 @@ export function LocationPicker({
           {showManualFields ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
         </button>
       </div>
+
+      {/* Interactive Map Location Picker */}
+      {showMapPicker && (
+        <MapLocationPicker
+          initialLocation={{
+            latitude: value.latitude,
+            longitude: value.longitude,
+            city: value.city,
+            area: value.area,
+          }}
+          onConfirm={(picked) => {
+            onChange({
+              city: picked.city,
+              area: picked.area,
+              state: picked.state,
+              country: picked.country || "India",
+              latitude: picked.latitude,
+              longitude: picked.longitude,
+              google_place_id: picked.google_place_id,
+              display_name: picked.display_name,
+              formatted_address: picked.formatted_address,
+              postal_code: picked.postal_code,
+              private_unit: value.private_unit,
+              location_source: picked.location_source,
+              location_precision: picked.location_precision,
+            });
+            setShowMapPicker(false);
+          }}
+          onCancel={() => setShowMapPicker(false)}
+        />
+      )}
 
       {geoError && (
         <div className="flex items-center gap-2 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 text-xs border border-amber-200 dark:border-amber-800/40">

@@ -194,6 +194,94 @@ describe("LocationPicker Component", () => {
       ).toBeInTheDocument();
     });
   });
+
+  it("opens map picker, allows selecting a location, and confirms location with map_picker source", async () => {
+    vi.spyOn(locationService, "reverseGeocodeCoordinates").mockResolvedValue({
+      google_place_id: "place_map_1",
+      city: "Pune",
+      area: "Baner",
+      state: "Maharashtra",
+      country: "India",
+      postal_code: "411045",
+      formatted_address: "Baner, Pune, Maharashtra 411045, India",
+      latitude: 18.559,
+      longitude: 73.7868,
+      location_precision: "locality",
+      location_source: "google_places_reverse_nearby",
+    });
+
+    const onChange = vi.fn();
+    render(
+      <LocationPicker
+        value={{
+          city: "Mumbai",
+          country: "India",
+        }}
+        onChange={onChange}
+      />
+    );
+
+    // Initial state: "Pick on map" button is visible
+    const pickMapBtn = screen.getByRole("button", { name: /pick on map/i });
+    expect(pickMapBtn).toBeInTheDocument();
+
+    // Open map picker
+    fireEvent.click(pickMapBtn);
+
+    // Map picker region and canvas are displayed
+    expect(screen.getByRole("region", { name: /map location picker/i })).toBeInTheDocument();
+    const canvas = screen.getByTestId("map-picker-canvas");
+    expect(canvas).toBeInTheDocument();
+
+    // Click canvas to drop a pin / select a location
+    fireEvent.click(canvas);
+
+    // Should resolve address and display readable location
+    await waitFor(() => {
+      expect(screen.getByText(/Baner, Pune, Maharashtra 411045, India/i)).toBeInTheDocument();
+    });
+
+    // Confirm button is enabled and clicked
+    const confirmBtn = screen.getByRole("button", { name: /confirm location/i });
+    fireEvent.click(confirmBtn);
+
+    // Verify onChange was called with map_picker source and correct values
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        city: "Pune",
+        area: "Baner",
+        country: "India",
+        latitude: 18.5738,
+        longitude: 73.7561,
+        location_source: "map_picker",
+      })
+    );
+
+    // Map picker is closed
+    expect(screen.queryByRole("region", { name: /map location picker/i })).not.toBeInTheDocument();
+  });
+
+  it("closes map picker on cancel without applying changes", async () => {
+    const onChange = vi.fn();
+    render(
+      <LocationPicker
+        value={{
+          city: "Pune",
+          country: "India",
+        }}
+        onChange={onChange}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /pick on map/i }));
+    expect(screen.getByRole("region", { name: /map location picker/i })).toBeInTheDocument();
+
+    // Click cancel button inside map picker
+    fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+
+    expect(screen.queryByRole("region", { name: /map location picker/i })).not.toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
+  });
 });
 
 describe("GoogleMap Component", () => {
