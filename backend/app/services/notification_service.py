@@ -71,6 +71,45 @@ class NotificationConnectionManager:
 
 notification_manager = NotificationConnectionManager()
 
+_test_online_overrides: Dict[uuid.UUID, bool] = {}
+
+
+def set_user_online_override_for_testing(user_id: uuid.UUID, is_online: Optional[bool]) -> None:
+    """Testing hook to explicitly simulate a user being online or offline."""
+    if is_online is None:
+        _test_online_overrides.pop(user_id, None)
+    else:
+        _test_online_overrides[user_id] = is_online
+
+
+def clear_test_online_overrides() -> None:
+    """Clear all active testing presence overrides."""
+    _test_online_overrides.clear()
+
+
+def is_user_actively_online(user_id: uuid.UUID, conversation_id: Optional[uuid.UUID] = None) -> bool:
+    """
+    Determine if a user is currently actively present on the website or in a specific conversation room.
+    If the user is active, in-app WebSocket messaging is used instead of email dispatch.
+    """
+    if user_id in _test_online_overrides:
+        return _test_online_overrides[user_id]
+
+    if user_id in notification_manager.active_connections and notification_manager.active_connections[user_id]:
+        return True
+
+    try:
+        from app.api.ws_chat import manager as ws_chat_manager
+        if conversation_id and ws_chat_manager.is_user_in_conversation(user_id, conversation_id):
+            return True
+        if ws_chat_manager.is_user_connected(user_id):
+            return True
+    except Exception:
+        pass
+
+    return False
+
+
 
 def notify_nearby_helpers_for_request(
     db: Session,
@@ -255,7 +294,8 @@ def notify_nearby_helpers_for_request(
             logger.warning("Failed to commit nearby community notifications: %s", exc)
             return []
 
-        # Deliver via real-time WebSocket if recipient is actively connected
+        # Deliver via real-time WebSocket if recipient is actively connected;
+        # deliver email notification asynchronously if helper is offline
         for notif in created_notifications:
             try:
                 loop = asyncio.get_event_loop()
@@ -281,6 +321,41 @@ def notify_nearby_helpers_for_request(
                     )
             except Exception:
                 pass
+
+            # Asynchronous email delivery if helper is NOT actively present on website
+            try:
+                if not is_user_actively_online(notif.user_id):
+                    helper_user = db.query(User).filter(User.id == notif.user_id).first()
+                    if helper_user and helper_user.email and helper_user.email_verified and helper_user.is_active:
+                        from app.services.email_service import dispatch_email_async, render_nearby_request_email
+                        frontend_base = settings.FRONTEND_URL.rstrip("/")
+                        req_url = f"{frontend_base}/requests/{request.id}"
+                        coarse_loc = f"{coarse_area or ''}, {coarse_city or ''}".strip(", ") or "your local area"
+                        html_body, text_body = render_nearby_request_email(
+                            helper_name=helper_user.name or "Neighbor",
+                            request_title=request.raw_text[:120] if request.raw_text else f"Help with {category_name}",
+                            coarse_location=coarse_loc,
+                            category=category_name,
+                            request_url=req_url,
+                        )
+                        idempotency_key = f"nearby_req_{request.id}_{helper_user.id}"
+                        dispatch_email_async(
+                            to_email=helper_user.email,
+                            subject="New request near you — NEST",
+                            html_body=html_body,
+                            text_body=text_body,
+                            idempotency_key=idempotency_key,
+                            recipient_id=helper_user.id,
+                            notification_type="nearby_request",
+                            metadata_payload={
+                                "request_id": str(request.id),
+                                "category": category_name,
+                                "city": coarse_city,
+                                "area": coarse_area,
+                            },
+                        )
+            except Exception as e_err:
+                logger.warning(f"Failed to dispatch offline email notification to user {notif.user_id}: {e_err}")
 
     return created_notifications
 

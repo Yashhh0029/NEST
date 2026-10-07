@@ -1,12 +1,16 @@
+import logging
 from datetime import datetime, timezone
 from typing import List, Optional, Tuple
 import uuid
 from fastapi import HTTPException, status
 from sqlalchemy import desc, func, or_
 from sqlalchemy.orm import Session
+from app.core.config import settings
 from app.models.connection import Connection, ConnectionStatus
 from app.models.conversation import Conversation, Message
 from app.models.user import User
+
+logger = logging.getLogger(__name__)
 from app.schemas.chat import (
     ConversationResponse,
     MessageCreate,
@@ -361,6 +365,44 @@ def send_message(
     conversation.updated_at = now
     db.commit()
     db.refresh(message)
+
+    # Check recipient online presence and dispatch email notification if recipient is offline
+    try:
+        recipient_id = connection.helper_id if user_id == connection.requester_id else connection.requester_id
+        recipient = connection.helper if user_id == connection.requester_id else connection.requester
+        if recipient and recipient.email and recipient.email_verified and recipient.is_active:
+            from app.services.notification_service import is_user_actively_online
+            if not is_user_actively_online(recipient_id, conversation.id):
+                from app.services.email_service import dispatch_email_async, render_new_message_email
+                frontend_base = settings.FRONTEND_URL.rstrip("/")
+                conv_url = f"{frontend_base}/connections"
+                safe_preview = payload.content[:100] + ("..." if len(payload.content) > 100 else "")
+                sender_user = db.query(User).filter(User.id == user_id).first()
+                sender_name = sender_user.name if sender_user else "A community member"
+                html_body, text_body = render_new_message_email(
+                    recipient_name=recipient.name or "Neighbor",
+                    sender_name=sender_name,
+                    message_preview=safe_preview,
+                    conversation_url=conv_url,
+                )
+                idempotency_key = f"chat_msg_{message.id}_{recipient_id}"
+                dispatch_email_async(
+                    to_email=recipient.email,
+                    subject=f"You have a new message on NEST from {sender_name}",
+                    html_body=html_body,
+                    text_body=text_body,
+                    idempotency_key=idempotency_key,
+                    recipient_id=recipient_id,
+                    notification_type="new_message",
+                    metadata_payload={
+                        "conversation_id": str(conversation.id),
+                        "message_id": str(message.id),
+                        "sender_id": str(user_id),
+                    },
+                )
+    except Exception as exc:
+        logger.warning("Failed to dispatch offline chat email notification: %s", exc)
+
     return message
 
 

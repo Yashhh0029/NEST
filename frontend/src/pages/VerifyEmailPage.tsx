@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { authService } from "@/services/auth";
 import { Card } from "@/components/ui/Card";
@@ -20,18 +20,23 @@ export function VerifyEmailPage() {
   const [resendCooldown, setResendCooldown] = useState(0);
 
   const { success: toastSuccess, error: toastError } = useToast();
+  const verifiedTokenRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!token) return;
+    if (verifiedTokenRef.current === token) return;
+    verifiedTokenRef.current = token;
 
-    let isMounted = true;
     authService
       .verifyEmail(token)
-      .then(() => {
-        if (isMounted) setState("success");
+      .then((res) => {
+        if (res.email_verified) {
+          setState("success");
+        } else {
+          setState("invalid");
+        }
       })
       .catch((err: unknown) => {
-        if (!isMounted) return;
         let detail = "Verification failed.";
         if (err && typeof err === "object" && "response" in err) {
           const resp = (err as { response?: { data?: { detail?: string } } }).response;
@@ -45,10 +50,6 @@ export function VerifyEmailPage() {
           setState("invalid");
         }
       });
-
-    return () => {
-      isMounted = false;
-    };
   }, [token]);
 
   useEffect(() => {

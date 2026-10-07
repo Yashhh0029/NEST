@@ -1,8 +1,10 @@
+import logging
 from datetime import datetime, timezone
 from typing import List, Optional
 import uuid
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
+from app.core.config import settings
 from app.models.connection import Connection, ConnectionStatus
 from app.models.location import Location
 from app.models.profile import Profile
@@ -19,6 +21,10 @@ from app.services.safety_service import (
     is_blocked_bidirectional,
     is_connection_safety_restricted,
 )
+from app.services.notification_service import is_user_actively_online
+from app.services.email_service import dispatch_email_async, render_connection_event_email
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -69,6 +75,82 @@ def _hydrate_connection_response(db: Session, conn: Connection) -> ConnectionRes
         helper=helper_summary,
         request=request_summary,
     )
+
+
+def _maybe_send_connection_request_email(current_user: User, helper: User, conn: Connection) -> None:
+    try:
+        if not helper.email:
+            return
+        if not getattr(helper, "is_active", True):
+            return
+        if is_user_actively_online(helper.id):
+            logger.info("Helper %s is actively online; skipping connection request email", helper.id)
+            return
+
+        requester_name = current_user.name or (current_user.email.split("@")[0].capitalize() if current_user.email else "A NEST member")
+        helper_name = helper.name or (helper.email.split("@")[0].capitalize() if helper.email else "Neighbor")
+        action_url = f"{settings.FRONTEND_URL}/dashboard"
+        event_title = "New Connection Request"
+        event_message = f"{requester_name} sent you a connection request on NEST regarding their request. Visit your dashboard to view the message and respond."
+        html_body, text_body = render_connection_event_email(
+            recipient_name=helper_name,
+            event_title=event_title,
+            event_message=event_message,
+            action_url=action_url,
+            action_label="View Connection Request",
+        )
+        updated_stamp = conn.updated_at.isoformat() if conn.updated_at else "init"
+        idempotency_key = f"conn_req_{conn.id}_{updated_stamp}"
+        dispatch_email_async(
+            to_email=helper.email,
+            recipient_id=helper.id,
+            notification_type="connection_requested",
+            subject=f"New connection request from {requester_name} — NEST",
+            html_body=html_body,
+            text_body=text_body,
+            idempotency_key=idempotency_key,
+            metadata_payload={"connection_id": str(conn.id), "requester_id": str(current_user.id)},
+        )
+    except Exception as exc:
+        logger.warning("Failed to dispatch connection request email asynchronously: %s", exc)
+
+
+def _maybe_send_connection_accepted_email(helper_user: User, requester: User, conn: Connection) -> None:
+    try:
+        if not requester.email:
+            return
+        if not getattr(requester, "is_active", True):
+            return
+        if is_user_actively_online(requester.id):
+            logger.info("Requester %s is actively online; skipping connection accepted email", requester.id)
+            return
+
+        helper_name = helper_user.name or (helper_user.email.split("@")[0].capitalize() if helper_user.email else "A helper")
+        requester_name = requester.name or (requester.email.split("@")[0].capitalize() if requester.email else "Neighbor")
+        action_url = f"{settings.FRONTEND_URL}/chat"
+        event_title = "Connection Request Accepted"
+        event_message = f"{helper_name} accepted your connection request on NEST! You can now chat and coordinate directly."
+        html_body, text_body = render_connection_event_email(
+            recipient_name=requester_name,
+            event_title=event_title,
+            event_message=event_message,
+            action_url=action_url,
+            action_label="Open Chat",
+        )
+        accepted_stamp = conn.accepted_at.isoformat() if conn.accepted_at else "init"
+        idempotency_key = f"conn_acc_{conn.id}_{accepted_stamp}"
+        dispatch_email_async(
+            to_email=requester.email,
+            recipient_id=requester.id,
+            notification_type="connection_accepted",
+            subject=f"{helper_name} accepted your connection request — NEST",
+            html_body=html_body,
+            text_body=text_body,
+            idempotency_key=idempotency_key,
+            metadata_payload={"connection_id": str(conn.id), "helper_id": str(helper_user.id)},
+        )
+    except Exception as exc:
+        logger.warning("Failed to dispatch connection accepted email asynchronously: %s", exc)
 
 
 def create_connection_request(
@@ -141,6 +223,7 @@ def create_connection_request(
         existing_conn.declined_at = None
         db.commit()
         db.refresh(existing_conn)
+        _maybe_send_connection_request_email(current_user, helper, existing_conn)
         return _hydrate_connection_response(db, existing_conn)
 
     # 5. Create new Connection
@@ -156,6 +239,7 @@ def create_connection_request(
     db.add(new_conn)
     db.commit()
     db.refresh(new_conn)
+    _maybe_send_connection_request_email(current_user, helper, new_conn)
 
     return _hydrate_connection_response(db, new_conn)
 
@@ -360,4 +444,6 @@ def update_connection_status(
 
     db.commit()
     db.refresh(conn)
+    if clean_action == "accept" and conn.requester:
+        _maybe_send_connection_accepted_email(current_user, conn.requester, conn)
     return _hydrate_connection_response(db, conn)

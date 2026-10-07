@@ -33,6 +33,8 @@ class User(Base):
         default=UserRole.NEWCOMER,
     )
     is_active = Column(Boolean, default=True, nullable=False)
+    deactivated_reason = Column(String(500), nullable=True)
+    google_id = Column(String(255), unique=True, index=True, nullable=True)
     is_verified = Column(Boolean, default=False, nullable=False)
     email_verified = Column(Boolean, default=False, nullable=False)
     email_verified_at = Column(DateTime(timezone=True), nullable=True)

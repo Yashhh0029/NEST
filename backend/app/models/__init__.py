@@ -12,6 +12,7 @@ from app.models.community import (
 )
 from app.models.connection import Connection, ConnectionStatus
 from app.models.conversation import Conversation, Message
+from app.models.email_notification import EmailDeliveryStatus, EmailNotification
 from app.models.embedding import Embedding
 from app.models.location import Location
 from app.models.notification import Notification, NotificationType
@@ -44,6 +45,8 @@ __all__ = [
     "Connection",
     "ConnectionStatus",
     "Conversation",
+    "EmailDeliveryStatus",
+    "EmailNotification",
     "Embedding",
     "HelperAvailabilityException",
     "HelperAvailabilitySlot",

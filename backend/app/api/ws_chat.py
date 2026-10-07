@@ -20,18 +20,56 @@ class ConnectionManager:
     def __init__(self):
         # Maps conversation_id -> set of active WebSockets
         self.rooms: Dict[uuid.UUID, Set[WebSocket]] = {}
+        # Maps user_id -> set of active WebSockets
+        self.user_sockets: Dict[uuid.UUID, Set[WebSocket]] = {}
+        # Maps conversation_id -> set of active user_ids in this conversation
+        self.conversation_users: Dict[uuid.UUID, Set[uuid.UUID]] = {}
+        # Maps websocket -> (conversation_id, user_id)
+        self.socket_meta: Dict[WebSocket, tuple[uuid.UUID, uuid.UUID]] = {}
 
-    async def connect(self, websocket: WebSocket, conversation_id: uuid.UUID):
+    async def connect(self, websocket: WebSocket, conversation_id: uuid.UUID, user_id: Optional[uuid.UUID] = None):
         await websocket.accept()
         if conversation_id not in self.rooms:
             self.rooms[conversation_id] = set()
         self.rooms[conversation_id].add(websocket)
 
+        if user_id:
+            if user_id not in self.user_sockets:
+                self.user_sockets[user_id] = set()
+            self.user_sockets[user_id].add(websocket)
+
+            if conversation_id not in self.conversation_users:
+                self.conversation_users[conversation_id] = set()
+            self.conversation_users[conversation_id].add(user_id)
+
+            self.socket_meta[websocket] = (conversation_id, user_id)
+
     def disconnect(self, websocket: WebSocket, conversation_id: uuid.UUID):
+        meta = self.socket_meta.pop(websocket, None)
+        user_id = meta[1] if meta else None
+
         if conversation_id in self.rooms:
             self.rooms[conversation_id].discard(websocket)
             if not self.rooms[conversation_id]:
                 del self.rooms[conversation_id]
+
+        if user_id and user_id in self.user_sockets:
+            self.user_sockets[user_id].discard(websocket)
+            if not self.user_sockets[user_id]:
+                del self.user_sockets[user_id]
+
+        if conversation_id in self.conversation_users:
+            active_uids = {self.socket_meta[ws][1] for ws in self.rooms.get(conversation_id, set()) if ws in self.socket_meta}
+            if active_uids:
+                self.conversation_users[conversation_id] = active_uids
+            else:
+                del self.conversation_users[conversation_id]
+
+    def is_user_in_conversation(self, user_id: uuid.UUID, conversation_id: uuid.UUID) -> bool:
+        return user_id in self.conversation_users.get(conversation_id, set())
+
+    def is_user_connected(self, user_id: uuid.UUID) -> bool:
+        return bool(self.user_sockets.get(user_id))
 
     async def broadcast(self, conversation_id: uuid.UUID, message_dict: dict):
         if conversation_id in self.rooms:
@@ -42,7 +80,7 @@ class ConnectionManager:
                 except Exception:
                     disconnected_sockets.add(ws)
             for ws in disconnected_sockets:
-                self.rooms[conversation_id].discard(ws)
+                self.disconnect(ws, conversation_id)
 
 
 manager = ConnectionManager()
@@ -119,7 +157,7 @@ async def websocket_chat_endpoint(
         return
 
     # 3. Accept socket connection
-    await manager.connect(websocket, conversation.id)
+    await manager.connect(websocket, conversation.id, user_id)
     try:
         # Acknowledge connection
         await websocket.send_text(

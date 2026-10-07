@@ -3,9 +3,12 @@ import json
 import logging
 import re
 import smtplib
+import threading
 import urllib.error
 import urllib.request
+import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import List, Optional
@@ -417,3 +420,281 @@ def send_verification_email(to_email: str, name: str, verification_url: str) -> 
     )
     provider = get_email_provider()
     return provider.send(message)
+
+
+def render_nearby_request_email(
+    helper_name: str,
+    request_title: str,
+    coarse_location: str,
+    category: str,
+    request_url: str,
+) -> tuple[str, str]:
+    """Render notification email for an eligible helper when a new request is posted nearby."""
+    subject = "New request near you — NEST"
+    html_body = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>New request near you — NEST</title>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #1e293b;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+    <tr>
+      <td style="padding: 28px 32px; background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%); text-align: center;">
+        <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 700;">NEST</h1>
+        <p style="margin: 4px 0 0; color: #ccfbf1; font-size: 13px;">Find Your People. Find Your Place.</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 32px;">
+        <h2 style="margin: 0 0 12px; font-size: 18px; color: #0f172a;">Hello {helper_name},</h2>
+        <p style="margin: 0 0 20px; font-size: 14px; line-height: 1.6; color: #334155;">
+          A newcomer in your area has posted a community request that matches your skills.
+        </p>
+        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px; margin-bottom: 24px;">
+          <p style="margin: 0 0 8px; font-size: 14px; font-weight: 600; color: #0f172a;">"{request_title}"</p>
+          <div style="font-size: 13px; color: #64748b; line-height: 1.5;">
+            <span><strong>Category:</strong> {category}</span><br>
+            <span><strong>Approximate Area:</strong> {coarse_location}</span>
+          </div>
+        </div>
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 24px 0;">
+          <tr>
+            <td align="center">
+              <a href="{request_url}" target="_blank" style="display: inline-block; padding: 12px 28px; background-color: #0d9488; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; border-radius: 8px;">
+                View Request on NEST
+              </a>
+            </td>
+          </tr>
+        </table>
+        <p style="margin: 0; font-size: 12px; color: #94a3b8; line-height: 1.5;">
+          No exact private home coordinates are ever shared. You received this notification because your helper profile indicates availability in this neighborhood.
+        </p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 16px 32px; background-color: #f8fafc; border-top: 1px solid #e2e8f0; text-align: center; font-size: 12px; color: #94a3b8;">
+        © {settings.PROJECT_NAME}. Community safety & privacy first.
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+    text_body = f"""Hello {helper_name},
+
+A newcomer in your area has posted a community request matching your profile:
+
+"{request_title}"
+Category: {category}
+Area: {coarse_location}
+
+View this request on NEST:
+{request_url}
+
+No exact private home coordinates are shared.
+"""
+    return html_body, text_body
+
+
+def render_new_message_email(
+    recipient_name: str,
+    sender_name: str,
+    message_preview: str,
+    conversation_url: str,
+) -> tuple[str, str]:
+    """Render notification email when a user receives a new message while offline."""
+    subject = f"You have a new message on NEST from {sender_name}"
+    html_body = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>New Message on NEST</title>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #1e293b;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+    <tr>
+      <td style="padding: 28px 32px; background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%); text-align: center;">
+        <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 700;">NEST</h1>
+        <p style="margin: 4px 0 0; color: #ccfbf1; font-size: 13px;">Find Your People. Find Your Place.</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 32px;">
+        <h2 style="margin: 0 0 12px; font-size: 18px; color: #0f172a;">Hello {recipient_name},</h2>
+        <p style="margin: 0 0 16px; font-size: 14px; line-height: 1.6; color: #334155;">
+          <strong>{sender_name}</strong> sent you a message on NEST while you were away:
+        </p>
+        <div style="background-color: #f1f5f9; border-left: 4px solid #0d9488; border-radius: 8px; padding: 14px 18px; margin-bottom: 24px; font-size: 14px; color: #1e293b; font-style: italic;">
+          "{message_preview}"
+        </div>
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 24px 0;">
+          <tr>
+            <td align="center">
+              <a href="{conversation_url}" target="_blank" style="display: inline-block; padding: 12px 28px; background-color: #0d9488; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; border-radius: 8px;">
+                Reply on NEST
+              </a>
+            </td>
+          </tr>
+        </table>
+        <p style="margin: 0; font-size: 12px; color: #94a3b8; line-height: 1.5;">
+          To preserve personal privacy, keep communications within NEST.
+        </p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 16px 32px; background-color: #f8fafc; border-top: 1px solid #e2e8f0; text-align: center; font-size: 12px; color: #94a3b8;">
+        © {settings.PROJECT_NAME}. Community safety & privacy first.
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+    text_body = f"""Hello {recipient_name},
+
+{sender_name} sent you a message on NEST:
+
+"{message_preview}"
+
+Open your conversation on NEST:
+{conversation_url}
+"""
+    return html_body, text_body
+
+
+def render_connection_event_email(
+    recipient_name: str,
+    event_title: str,
+    event_message: str,
+    action_url: str,
+    action_label: str = "Open NEST",
+) -> tuple[str, str]:
+    """Render notification email for lifecycle events like connection requested or accepted."""
+    subject = f"{event_title} — NEST"
+    html_body = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{event_title} — NEST</title>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #1e293b;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+    <tr>
+      <td style="padding: 28px 32px; background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%); text-align: center;">
+        <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 700;">NEST</h1>
+        <p style="margin: 4px 0 0; color: #ccfbf1; font-size: 13px;">Find Your People. Find Your Place.</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 32px;">
+        <h2 style="margin: 0 0 12px; font-size: 18px; color: #0f172a;">Hello {recipient_name},</h2>
+        <p style="margin: 0 0 20px; font-size: 14px; line-height: 1.6; color: #334155;">
+          {event_message}
+        </p>
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 24px 0;">
+          <tr>
+            <td align="center">
+              <a href="{action_url}" target="_blank" style="display: inline-block; padding: 12px 28px; background-color: #0d9488; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; border-radius: 8px;">
+                {action_label}
+              </a>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 16px 32px; background-color: #f8fafc; border-top: 1px solid #e2e8f0; text-align: center; font-size: 12px; color: #94a3b8;">
+        © {settings.PROJECT_NAME}. Community safety & privacy first.
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+    text_body = f"""Hello {recipient_name},
+
+{event_message}
+
+View on NEST:
+{action_url}
+"""
+    return html_body, text_body
+
+
+def dispatch_email_async(
+    to_email: str,
+    subject: str,
+    html_body: str,
+    text_body: str,
+    idempotency_key: str,
+    recipient_id: uuid.UUID,
+    notification_type: str,
+    metadata_payload: Optional[dict] = None,
+) -> None:
+    """
+    Asynchronously and idempotently deliver an email notification without blocking caller.
+    Records delivery state in email_notifications table.
+    """
+    def _worker():
+        from app.db.database import SessionLocal
+        from app.models.email_notification import EmailNotification, EmailDeliveryStatus
+        db = SessionLocal()
+        try:
+            # Check idempotency: if record already exists, skip sending
+            existing = (
+                db.query(EmailNotification)
+                .filter(EmailNotification.idempotency_key == idempotency_key)
+                .first()
+            )
+            if existing:
+                if existing.status in [EmailDeliveryStatus.SENT.value, EmailDeliveryStatus.SKIPPED_ONLINE.value]:
+                    logger.info(f"[EmailService] Idempotent skip for key: {idempotency_key}")
+                    return
+                record = existing
+            else:
+                record = EmailNotification(
+                    idempotency_key=idempotency_key,
+                    recipient_id=recipient_id,
+                    recipient_email=to_email,
+                    notification_type=notification_type,
+                    subject=subject,
+                    status=EmailDeliveryStatus.PENDING.value,
+                    metadata_payload=metadata_payload or {},
+                )
+                db.add(record)
+                db.commit()
+                db.refresh(record)
+
+            # Dispatch email through configured provider
+            msg = EmailMessage(
+                to_email=to_email,
+                subject=subject,
+                html_body=html_body,
+                text_body=text_body,
+            )
+            provider = get_email_provider()
+            success = provider.send(msg)
+
+            if success:
+                record.status = EmailDeliveryStatus.SENT.value
+                record.sent_at = datetime.now(timezone.utc)
+                record.error_message = None
+                db.commit()
+                logger.info(f"[EmailService] Successfully delivered email {notification_type} to {to_email}")
+            else:
+                record.status = EmailDeliveryStatus.FAILED.value
+                record.error_message = "Provider returned false without exception"
+                db.commit()
+        except Exception as exc:
+            logger.warning(f"[EmailService] Delivery failed for {notification_type} to {to_email}: {exc}")
+            try:
+                if 'record' in locals():
+                    record.status = EmailDeliveryStatus.FAILED.value
+                    record.error_message = str(exc)[:1000]
+                    db.commit()
+            except Exception:
+                db.rollback()
+        finally:
+            db.close()
+
+    thread = threading.Thread(target=_worker, daemon=True)
+    thread.start()
+

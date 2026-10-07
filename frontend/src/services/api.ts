@@ -38,10 +38,10 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    const detailStr = String(error.response?.data?.detail || "").toLowerCase();
     const isDeactivated =
       error.response?.status === 403 &&
-      (error.response?.data?.detail === "User account is deactivated." ||
-        error.response?.data?.detail === "Inactive user account.");
+      (detailStr.includes("deactivated") || detailStr.includes("inactive user"));
 
     if (error.response?.status === 401 || isDeactivated) {
       sessionStorage.removeItem(TOKEN_STORAGE_KEY);

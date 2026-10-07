@@ -3,7 +3,7 @@ import logging
 import urllib.parse
 import urllib.request
 from typing import Tuple
-from app.schemas.translation import normalize_language_code
+from app.schemas.translation import SUPPORTED_LANGUAGES, normalize_language_code
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +29,11 @@ class TranslationService:
             return "", source_language
 
         target_code = normalize_language_code(target_language)
+        if target_code not in SUPPORTED_LANGUAGES:
+            raise ValueError(
+                f"Unsupported target language '{target_language}'. Supported: {', '.join(SUPPORTED_LANGUAGES.keys())}"
+            )
+
         source_code = "auto" if source_language == "auto" else normalize_language_code(source_language)
 
         # Optimization: if source and target are the same, return text as is
@@ -63,8 +68,8 @@ class TranslationService:
             return translated_text, detected_lang
 
         except Exception as exc:
-            logger.warning(f"[TranslationService] Translation request failed: {exc}. Returning original text.")
-            return text, source_code
+            logger.error(f"[TranslationService] Translation request failed: {exc}")
+            raise RuntimeError(f"Translation upstream provider error: {exc}") from exc
 
 
 class VoiceTranslationExtensionPoint:

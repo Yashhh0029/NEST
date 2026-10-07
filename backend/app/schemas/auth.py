@@ -54,6 +54,8 @@ class UserResponse(BaseModel):
     email: str
     role: UserRole
     is_active: bool
+    deactivated_reason: Optional[str] = None
+    google_id: Optional[str] = None
     is_verified: bool
     email_verified: bool = False
     email_verified_at: Optional[datetime] = None

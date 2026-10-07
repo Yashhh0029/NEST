@@ -41,13 +41,27 @@ import {
   RotateCcw,
 } from "lucide-react";
 
+const LANGUAGE_LABELS: Record<string, string> = {
+  en: "English",
+  hi: "Hindi",
+  ml: "Malayalam",
+  mr: "Marathi",
+  ta: "Tamil",
+  te: "Telugu",
+  kn: "Kannada",
+  bn: "Bengali",
+  gu: "Gujarati",
+  pa: "Punjabi",
+  ur: "Urdu",
+};
+
 interface MessageTranslation {
   translatedText: string;
   sourceLang: string;
   targetLang: string;
   loading: boolean;
   showOriginal: boolean;
-  error?: string;
+  error?: string | null;
 }
 
 export function ChatPage() {
@@ -82,33 +96,62 @@ export function ChatPage() {
   const [targetLang, setTargetLang] = useState<string>("en");
   const [translations, setTranslations] = useState<Record<string, MessageTranslation>>({});
 
-  const handleTranslateMessage = async (msg: MessageItem) => {
-    // If already translated for this message, just toggle showOriginal
-    const current = translations[msg.id];
-    if (current && current.translatedText) {
-      setTranslations((prev) => ({
+  const targetLangRef = useRef<string>(targetLang);
+  useEffect(() => {
+    targetLangRef.current = targetLang;
+  }, [targetLang]);
+
+  const requestSeqRef = useRef<Record<string, number>>({});
+
+  const handleToggleShowOriginal = (msgId: string) => {
+    setTranslations((prev) => {
+      const cur = prev[msgId];
+      if (!cur) return prev;
+      return {
         ...prev,
-        [msg.id]: {
-          ...current,
-          showOriginal: !current.showOriginal,
+        [msgId]: {
+          ...cur,
+          showOriginal: !cur.showOriginal,
         },
-      }));
+      };
+    });
+  };
+
+  const handleTranslateMessage = async (msg: MessageItem, customLang?: string) => {
+    const selectedTarget = customLang || targetLangRef.current || targetLang;
+    const current = translations[msg.id];
+
+    // If already translated for this exact target language without error:
+    if (
+      current &&
+      current.targetLang === selectedTarget &&
+      current.translatedText &&
+      !current.error
+    ) {
+      handleToggleShowOriginal(msg.id);
       return;
     }
+
+    const seq = (requestSeqRef.current[msg.id] || 0) + 1;
+    requestSeqRef.current[msg.id] = seq;
 
     setTranslations((prev) => ({
       ...prev,
       [msg.id]: {
-        translatedText: "",
-        sourceLang: "auto",
-        targetLang: targetLang,
+        translatedText: prev[msg.id]?.translatedText || "",
+        sourceLang: prev[msg.id]?.sourceLang || "auto",
+        targetLang: selectedTarget,
         loading: true,
+        error: null,
         showOriginal: false,
       },
     }));
 
     try {
-      const result = await translateChatMessage(msg.content, targetLang, "auto", msg.id);
+      // Always translate from original text msg.content
+      const result = await translateChatMessage(msg.content, selectedTarget, "auto", msg.id);
+      if (requestSeqRef.current[msg.id] !== seq) return;
+
       setTranslations((prev) => ({
         ...prev,
         [msg.id]: {
@@ -116,19 +159,22 @@ export function ChatPage() {
           sourceLang: result.detected_source_language,
           targetLang: result.target_language,
           loading: false,
+          error: null,
           showOriginal: false,
         },
       }));
-    } catch {
+    } catch (err: any) {
+      if (requestSeqRef.current[msg.id] !== seq) return;
+      const detail = err?.response?.data?.detail || "Translation failed. Please retry.";
       setTranslations((prev) => ({
         ...prev,
         [msg.id]: {
-          translatedText: "",
-          sourceLang: "",
-          targetLang: targetLang,
+          translatedText: prev[msg.id]?.translatedText || "",
+          sourceLang: prev[msg.id]?.sourceLang || "",
+          targetLang: selectedTarget,
           loading: false,
-          showOriginal: true,
-          error: "Translation failed. Check connection.",
+          showOriginal: false,
+          error: detail,
         },
       }));
     }
@@ -631,56 +677,78 @@ export function ChatPage() {
                           isDeleted ? "italic opacity-70" : ""
                         }`}
                       >
-                        {translations[msg.id]?.translatedText && !translations[msg.id]?.showOriginal
-                          ? translations[msg.id].translatedText
-                          : msg.content}
+                        {msg.content}
                       </p>
 
                       {/* Multilingual Translation Details Box */}
                       {translations[msg.id] && !isDeleted && (
                         <div
-                          className={`mt-2 pt-1.5 border-t text-[11px] leading-tight space-y-1 ${
+                          className={`mt-2 pt-1.5 border-t text-[11px] leading-relaxed rounded-lg p-2 ${
                             isMine
-                              ? "border-teal-400/40 text-teal-100"
-                              : "border-gray-200 dark:border-brand-dark-border text-gray-600 dark:text-gray-300"
+                              ? "border-teal-400/40 bg-teal-800/30 text-teal-100"
+                              : "border-gray-200 dark:border-brand-dark-border bg-gray-50 dark:bg-brand-dark-muted/40 text-gray-700 dark:text-gray-200"
                           }`}
                         >
                           {translations[msg.id].loading ? (
                             <div className="flex items-center gap-1.5 py-0.5">
-                              <Loader2 className="w-3 h-3 animate-spin" />
-                              <span>Translating message...</span>
+                              <Loader2 className="w-3 h-3 animate-spin text-brand-primary" />
+                              <span>
+                                Translating to {LANGUAGE_LABELS[translations[msg.id].targetLang] || translations[msg.id].targetLang}...
+                              </span>
                             </div>
                           ) : translations[msg.id].error ? (
-                            <div className="text-red-400 text-[10px]">
-                              {translations[msg.id].error}
+                            <div className="flex items-center justify-between text-rose-500 dark:text-rose-400 text-[10px]">
+                              <span>{translations[msg.id].error}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleTranslateMessage(msg)}
+                                className="underline font-semibold ml-2 hover:opacity-80"
+                              >
+                                Retry
+                              </button>
                             </div>
                           ) : (
                             <div className="space-y-1">
                               <div className="flex items-center justify-between gap-2 text-[10px]">
-                                <span className="font-semibold flex items-center gap-1">
-                                  <Languages className="w-3 h-3 text-brand-primary" />
-                                  {translations[msg.id].showOriginal
-                                    ? "Original text shown"
-                                    : `Translated (${translations[msg.id].sourceLang.toUpperCase()} → ${translations[msg.id].targetLang.toUpperCase()})`}
+                                <span className="font-semibold flex items-center gap-1 text-teal-600 dark:text-teal-400">
+                                  <Languages className="w-3 h-3" />
+                                  Language: {LANGUAGE_LABELS[translations[msg.id].targetLang] || translations[msg.id].targetLang}
+                                  {translations[msg.id].sourceLang && translations[msg.id].sourceLang !== "auto" && (
+                                    <span className="opacity-75 font-normal">
+                                      (detected: {LANGUAGE_LABELS[translations[msg.id].sourceLang] || translations[msg.id].sourceLang})
+                                    </span>
+                                  )}
                                 </span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleTranslateMessage(msg)}
-                                  className="underline cursor-pointer hover:opacity-100 text-[10px]"
-                                >
-                                  {translations[msg.id].showOriginal
-                                    ? "Show translation"
-                                    : "Show original"}
-                                </button>
+                                <div className="flex items-center gap-2">
+                                  {translations[msg.id].targetLang !== targetLang && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleTranslateMessage(msg, targetLang)}
+                                      className="underline hover:opacity-100 text-[10px] text-teal-600 dark:text-teal-300 font-medium"
+                                    >
+                                      Translate to {LANGUAGE_LABELS[targetLang] || targetLang}
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleShowOriginal(msg.id)}
+                                    className="underline cursor-pointer hover:opacity-100 text-[10px]"
+                                  >
+                                    {translations[msg.id].showOriginal
+                                      ? "Show translation"
+                                      : "Show original"}
+                                  </button>
+                                </div>
                               </div>
                               {translations[msg.id].showOriginal ? (
-                                <p className="italic opacity-85 text-[11px]">
-                                  {translations[msg.id].translatedText}
-                                </p>
-                              ) : (
                                 <p className="italic opacity-80 text-[10px]">
                                   Original: "{msg.content}"
                                 </p>
+                              ) : (
+                                <div className="text-xs font-medium">
+                                  <span className="opacity-75 font-normal">Translated: </span>
+                                  {translations[msg.id].translatedText}
+                                </div>
                               )}
                             </div>
                           )}
@@ -695,15 +763,25 @@ export function ChatPage() {
                         }`}
                       >
                         {/* Inline translate toggle for quick access */}
-                        {!isDeleted && !translations[msg.id] && (
+                        {!isDeleted && (
                           <button
                             type="button"
                             onClick={() => handleTranslateMessage(msg)}
                             className="flex items-center gap-0.5 hover:underline opacity-75 hover:opacity-100 transition-opacity"
-                            title="Translate this message"
+                            title={
+                              translations[msg.id] && translations[msg.id].targetLang !== targetLang
+                                ? `Translate to ${LANGUAGE_LABELS[targetLang] || targetLang}`
+                                : "Translate message"
+                            }
                           >
                             <Languages className="w-2.5 h-2.5" />
-                            <span>Translate</span>
+                            <span>
+                              {translations[msg.id]
+                                ? (translations[msg.id].targetLang !== targetLang
+                                    ? `Translate (${targetLang.toUpperCase()})`
+                                    : "Translated")
+                                : "Translate"}
+                            </span>
                           </button>
                         )}
                         {msg.edited_at && !isDeleted && (

@@ -96,9 +96,10 @@ def authenticate_user(db: Session, credentials: UserLogin) -> User:
         )
 
     if not user.is_active:
+        reason = user.deactivated_reason or "Account has been deactivated. Please contact support."
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is deactivated.",
+            detail=f"User account is deactivated. Reason: {reason}",
         )
 
     if not user.email_verified:
@@ -148,25 +149,19 @@ def verify_email_token(db: Session, token: str) -> dict:
         )
 
     now = datetime.now(timezone.utc)
+
+    # If the user is already verified, return successful response immediately
+    if user.email_verified:
+        return {"message": "Email is already verified. You can log in.", "email_verified": True}
+
     if user.email_verification_expires_at and user.email_verification_expires_at < now:
-        user.email_verification_token_hash = None
-        user.email_verification_expires_at = None
-        db.commit()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Verification link has expired. Please request a new verification link.",
         )
 
-    if user.email_verified:
-        user.email_verification_token_hash = None
-        user.email_verification_expires_at = None
-        db.commit()
-        return {"message": "Email is already verified.", "email_verified": True}
-
     user.email_verified = True
     user.email_verified_at = now
-    user.email_verification_token_hash = None
-    user.email_verification_expires_at = None
     db.commit()
     db.refresh(user)
 
@@ -254,8 +249,14 @@ def authenticate_google_user(db: Session, token_str: str) -> Token:
     try:
         req = google_requests.Request()
         audience = settings.GOOGLE_CLIENT_ID if settings.GOOGLE_CLIENT_ID else None
-        id_info = google_id_token.verify_oauth2_token(token_str.strip(), req, audience=audience)
+        id_info = google_id_token.verify_oauth2_token(
+            token_str.strip(),
+            req,
+            audience=audience,
+            clock_skew_in_seconds=15,
+        )
     except Exception as exc:
+        logger.warning("Google ID token verification failed: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Google authentication failed: {str(exc)}",
@@ -268,6 +269,14 @@ def authenticate_google_user(db: Session, token_str: str) -> Token:
             detail="Invalid Google token issuer.",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    google_sub = id_info.get("sub")
+    if not google_sub or not str(google_sub).strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Google token payload does not contain a subject identifier (sub).",
+        )
+    google_sub = str(google_sub).strip()
 
     email = id_info.get("email")
     if not email:
@@ -282,40 +291,55 @@ def authenticate_google_user(db: Session, token_str: str) -> Token:
             detail="Google account email is not verified.",
         )
 
-    email = email.strip().lower()
-    name = id_info.get("name") or email.split("@")[0]
-
-    user = db.query(User).filter(User.email == email).first()
+    norm_email = email.strip().lower()
+    name = (id_info.get("name") or norm_email.split("@")[0]).strip()
     now = datetime.now(timezone.utc)
+
+    # 1. Primary lookup by stable Google sub identifier
+    user = db.query(User).filter(User.google_id == google_sub).first()
+
+    # 2. Secondary lookup by email for account linking
     if not user:
-        random_pw = secrets.token_urlsafe(32)
-        hashed_pw = hash_password(random_pw)
-        user = User(
-            name=name,
-            email=email,
-            password_hash=hashed_pw,
-            role=UserRole.NEWCOMER,
-            is_active=True,
-            is_verified=True,
-            email_verified=True,
-            email_verified_at=now,
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-    else:
-        if not user.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="User account is deactivated.",
-            )
-        if not user.email_verified:
-            user.email_verified = True
-            user.email_verified_at = now
-            user.email_verification_token_hash = None
-            user.email_verification_expires_at = None
+        user = db.query(User).filter(User.email == norm_email).first()
+        if user:
+            # Safely link Google identity to existing account, preserving profile, connections, reputation
+            user.google_id = google_sub
+            if not user.email_verified:
+                user.email_verified = True
+                user.email_verified_at = now
             db.commit()
             db.refresh(user)
+        else:
+            # 3. Create new account with Google ID
+            random_pw = secrets.token_urlsafe(32)
+            hashed_pw = hash_password(random_pw)
+            user = User(
+                name=name,
+                email=norm_email,
+                google_id=google_sub,
+                password_hash=hashed_pw,
+                role=UserRole.NEWCOMER,
+                is_active=True,
+                is_verified=True,
+                email_verified=True,
+                email_verified_at=now,
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+
+    if not user.is_active:
+        reason = user.deactivated_reason or "Account has been deactivated. Please contact support."
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"User account is deactivated. Reason: {reason}",
+        )
+
+    if not user.email_verified:
+        user.email_verified = True
+        user.email_verified_at = now
+        db.commit()
+        db.refresh(user)
 
     access_token = create_access_token(
         subject=str(user.id),
