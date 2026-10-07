@@ -22,6 +22,7 @@ import {
   Loader2,
   Compass,
   Sparkles,
+  AlertCircle,
 } from "lucide-react";
 
 export function NearbyRequestsFeed() {
@@ -136,6 +137,65 @@ export function NearbyRequestsFeed() {
     );
   }
 
+  // API FAILURE STATE (when initial load failed or no cached data exists)
+  if (refreshError && requests.length === 0) {
+    const errorMsg =
+      (refreshError as any).response?.data?.detail ||
+      (refreshError as any).message ||
+      "We encountered an issue retrieving open requests in your area. Please retry.";
+
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-teal-100 dark:bg-teal-950/80 text-teal-700 dark:text-teal-300">
+              <HeartHandshake className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold font-heading text-slate-900 dark:text-white">
+                Help Requests Near You
+              </h2>
+            </div>
+          </div>
+          <RefreshStatus
+            lastUpdated={lastUpdated}
+            isRefreshing={isRefreshing}
+            isOffline={isOffline}
+            error={refreshError}
+            onRefresh={refreshNow}
+          />
+        </div>
+
+        <Card className="p-8 text-center space-y-4 rounded-3xl border-rose-200/80 dark:border-rose-900/40 bg-rose-50/30 dark:bg-rose-950/20 backdrop-blur-sm">
+          <div className="w-14 h-14 mx-auto rounded-2xl bg-rose-100 dark:bg-rose-900/60 text-rose-600 dark:text-rose-400 flex items-center justify-center font-bold text-xl shadow-xs">
+            <AlertCircle className="w-7 h-7" />
+          </div>
+          <div className="space-y-1.5 max-w-md mx-auto">
+            <h3 className="text-base font-bold font-heading text-slate-900 dark:text-white">
+              Couldn't Load Requests
+            </h3>
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+              {errorMsg}
+            </p>
+          </div>
+          <div className="pt-2">
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={refreshNow}
+              disabled={isRefreshing}
+              className="gap-2"
+            >
+              {isRefreshing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+              <span>{isRefreshing ? "Retrying…" : "Retry Loading Requests"}</span>
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  // SUCCESS WITH ZERO RESULTS (strictly when API succeeded and returned 0 items)
   if (requests.length === 0) {
     return (
       <div className="space-y-3">
@@ -295,7 +355,7 @@ export function NearbyRequestsFeed() {
 
                 {/* Extracted category pills */}
                 <div className="flex flex-wrap gap-1.5">
-                  {item.needs.map((n, idx) => (
+                  {(item.needs || []).map((n, idx) => (
                     <span
                       key={idx}
                       className="px-2.5 py-0.5 rounded-md text-[11px] font-semibold bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300"
@@ -319,9 +379,9 @@ export function NearbyRequestsFeed() {
                 </div>
 
                 {/* Truthful Match Reasons */}
-                {item.match_reasons.length > 0 && (
+                {(item.match_reasons || []).length > 0 && (
                   <div className="space-y-1 pt-1">
-                    {item.match_reasons.slice(0, 2).map((reason, idx) => (
+                    {(item.match_reasons || []).slice(0, 2).map((reason, idx) => (
                       <div
                         key={idx}
                         className="text-[11px] text-teal-700 dark:text-teal-400 font-medium flex items-center gap-1.5"

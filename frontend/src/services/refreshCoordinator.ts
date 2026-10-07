@@ -153,6 +153,20 @@ class RefreshCoordinator {
     this.inFlightRequests.set(key, promise);
     return promise;
   }
+
+  /**
+   * Clear an in-flight request by key (e.g. when cancelled or manually retried).
+   */
+  public clearInFlight(key: string): void {
+    this.inFlightRequests.delete(key);
+  }
+
+  /**
+   * Clear all in-flight requests (useful for tests or hard resets).
+   */
+  public clearAllInFlight(): void {
+    this.inFlightRequests.clear();
+  }
 }
 
 export const refreshCoordinator = new RefreshCoordinator();

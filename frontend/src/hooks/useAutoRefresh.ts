@@ -121,9 +121,10 @@ export function useAutoRefresh<T>({
 
       setIsOffline(false);
 
-      // Abort previous in-flight request if present
+      // Abort previous in-flight request if present and clear from deduplication
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
+        refreshCoordinator.clearInFlight(queryKey);
       }
 
       const controller = new AbortController();
@@ -186,6 +187,21 @@ export function useAutoRefresh<T>({
           return undefined;
         }
 
+        // Ignore cancellations/aborts — do not treat cancellation as a user-facing API error!
+        const isCanceled =
+          Boolean(
+            err &&
+              typeof err === "object" &&
+              ("name" in err || "code" in err) &&
+              ((err as any).name === "CanceledError" ||
+                (err as any).name === "AbortError" ||
+                (err as any).code === "ERR_CANCELED")
+          ) || controller.signal.aborted;
+
+        if (isCanceled) {
+          return undefined;
+        }
+
         const status =
           err && typeof err === "object" && "response" in err
             ? (err as { response?: { status?: number } }).response?.status
@@ -224,11 +240,12 @@ export function useAutoRefresh<T>({
     // Reset backoff on intentional user refresh
     currentIntervalRef.current = interval;
     hasAuthErrorRef.current = false;
+    refreshCoordinator.clearInFlight(queryKey);
     // Discard staged state and fetch fresh
     stagedDataRef.current = null;
     setNewItemsCount(0);
     return executeFetch(false);
-  }, [executeFetch, interval]);
+  }, [executeFetch, interval, queryKey]);
 
   // Apply staged new items
   const applyNewItems = useCallback(() => {

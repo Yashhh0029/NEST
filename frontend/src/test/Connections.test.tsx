@@ -344,5 +344,47 @@ describe("Phase 7 Connection System UI", () => {
         expect(reactivateSpy).toHaveBeenCalledWith("conn-4");
       });
     });
+
+    it("displays API failure card with Retry button when initial load fails and does NOT show empty state", async () => {
+      vi.spyOn(connectionsService, "listConnections").mockRejectedValue(
+        new Error("Failed to connect to backend server")
+      );
+
+      render(
+        <BrowserRouter>
+          <ConnectionsPage />
+        </BrowserRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("Couldn't Load Connections")).toBeInTheDocument();
+      });
+
+      expect(screen.getByText(/Failed to connect to backend server/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Retry Loading Connections/i })).toBeInTheDocument();
+
+      // Must NOT display "No incoming requests" or "No connections yet"
+      expect(screen.queryByText(/No incoming requests/i)).not.toBeInTheDocument();
+    });
+
+    it("displays empty state when API succeeds with 0 connections", async () => {
+      vi.spyOn(connectionsService, "listConnections").mockResolvedValue({
+        total: 0,
+        connections: [],
+      });
+
+      render(
+        <BrowserRouter>
+          <ConnectionsPage />
+        </BrowserRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText(/No incoming requests/i)).toBeInTheDocument();
+      });
+
+      // Must NOT display "Couldn't Load Connections"
+      expect(screen.queryByText("Couldn't Load Connections")).not.toBeInTheDocument();
+    });
   });
 });

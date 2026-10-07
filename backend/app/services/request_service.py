@@ -368,26 +368,29 @@ def get_nearby_requests_for_helper(
                 target_query_parts = [req.area, req.city, req.state]
             target_query = ", ".join(filter(None, target_query_parts + ["India"]))
             if target_query and target_query != "India":
-                resolved_geo = google_maps_service.geocode_address(target_query)
-                if resolved_geo and resolved_geo.latitude is not None and resolved_geo.longitude is not None:
-                    target_lat = float(resolved_geo.latitude)
-                    target_lon = float(resolved_geo.longitude)
-                    if req_loc:
-                        req_loc.latitude = target_lat
-                        req_loc.longitude = target_lon
-                        if not req_loc.city and resolved_geo.city:
-                            req_loc.city = resolved_geo.city
-                        if not req_loc.area and resolved_geo.area:
-                            req_loc.area = resolved_geo.area
-                        if not req_loc.state and resolved_geo.state:
-                            req_loc.state = resolved_geo.state
-                        if not req_loc.formatted_address and resolved_geo.formatted_address:
-                            req_loc.formatted_address = resolved_geo.formatted_address
-                        db.add(req_loc)
-                        try:
-                            db.commit()
-                        except Exception:
-                            db.rollback()
+                try:
+                    resolved_geo = google_maps_service.geocode_address(target_query)
+                    if resolved_geo and resolved_geo.latitude is not None and resolved_geo.longitude is not None:
+                        target_lat = float(resolved_geo.latitude)
+                        target_lon = float(resolved_geo.longitude)
+                        if req_loc:
+                            req_loc.latitude = target_lat
+                            req_loc.longitude = target_lon
+                            if not req_loc.city and resolved_geo.city:
+                                req_loc.city = resolved_geo.city
+                            if not req_loc.area and resolved_geo.area:
+                                req_loc.area = resolved_geo.area
+                            if not req_loc.state and resolved_geo.state:
+                                req_loc.state = resolved_geo.state
+                            if not req_loc.formatted_address and resolved_geo.formatted_address:
+                                req_loc.formatted_address = resolved_geo.formatted_address
+                            db.add(req_loc)
+                            try:
+                                db.commit()
+                            except Exception:
+                                db.rollback()
+                except Exception as geo_exc:
+                    logger.warning("Geocoding failed for request %s (%s): %s", req.id, target_query, geo_exc)
 
         CANONICAL_NEARBY_RADIUS_KM: float = 20.0
         effective_radius_km: float = (

@@ -359,4 +359,78 @@ describe("Production-Grade Smart Auto-Refresh Architecture", () => {
     expect(result.current.newItemsCount).toBe(0);
     expect(result.current.data).toEqual([{ id: "1" }, { id: "2" }]);
   });
+
+  it("11. ignores cancellation/abort errors without setting error state or clearing data", async () => {
+    const cancelError = new Error("Request aborted");
+    cancelError.name = "CanceledError";
+
+    let callCount = 0;
+    const fetchFn = vi.fn().mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return Promise.resolve(["initial-item"]);
+      }
+      return Promise.reject(cancelError);
+    });
+
+    const { result } = renderHook(() =>
+      useAutoRefresh({
+        queryKey: "test-cancellation",
+        fetchFn,
+        interval: 30000,
+      })
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(result.current.data).toEqual(["initial-item"]);
+    expect(result.current.error).toBeNull();
+
+    // Trigger second fetch which rejects with CanceledError
+    await act(async () => {
+      await result.current.refreshNow();
+    });
+
+    // Cancellation must NOT set error or wipe data
+    expect(result.current.data).toEqual(["initial-item"]);
+    expect(result.current.error).toBeNull();
+  });
+
+  it("12. non-destructive refresh: preserves existing data when background refresh fails", async () => {
+    let callCount = 0;
+    const fetchFn = vi.fn().mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return Promise.resolve(["cached-item-1", "cached-item-2"]);
+      }
+      return Promise.reject(new Error("Network gateway timeout"));
+    });
+
+    const { result } = renderHook(() =>
+      useAutoRefresh({
+        queryKey: "test-preserves-data",
+        fetchFn,
+        interval: 20000,
+      })
+    );
+
+    // Initial successful fetch
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(result.current.data).toEqual(["cached-item-1", "cached-item-2"]);
+    expect(result.current.error).toBeNull();
+
+    // Background fetch failure after timer
+    await act(async () => {
+      vi.advanceTimersByTime(20000);
+      await Promise.resolve();
+    });
+
+    // Existing data MUST be preserved, error recorded for non-destructive indicator
+    expect(result.current.data).toEqual(["cached-item-1", "cached-item-2"]);
+    expect(result.current.error).not.toBeNull();
+    expect(result.current.error?.message).toBe("Network gateway timeout");
+  });
 });

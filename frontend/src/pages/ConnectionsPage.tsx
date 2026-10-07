@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { useAuthStore } from "@/store/useAuthStore";
 import {
@@ -13,6 +13,7 @@ import type { ConnectionItem } from "@/types/connection";
 import type { ReviewItem } from "@/types/review";
 import { ReviewModal } from "@/components/review/ReviewModal";
 import { refreshCoordinator } from "@/services/refreshCoordinator";
+import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { RefreshStatus } from "@/components/common/RefreshStatus";
 import { useToast } from "@/hooks/useToast";
 import { Card } from "@/components/ui/Card";
@@ -34,6 +35,8 @@ import {
   Star,
   Check,
   RotateCcw,
+  AlertCircle,
+  Loader2,
 } from "lucide-react";
 import { ReactivateConfirmModal } from "@/components/common/ReactivateConfirmModal";
 
@@ -44,11 +47,7 @@ export function ConnectionsPage() {
   const { success: toastSuccess, error: toastError } = useToast();
 
   const [activeTab, setActiveTab] = useState<TabType>("incoming");
-  const [connections, setConnections] = useState<ConnectionItem[]>([]);
   const [reviewsMap, setReviewsMap] = useState<Record<string, ReviewItem[]>>({});
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [isReviewModalOpen, setIsReviewModalOpen] = useState<boolean>(false);
   const [selectedConnection, setSelectedConnection] = useState<ConnectionItem | null>(null);
@@ -57,6 +56,7 @@ export function ConnectionsPage() {
 
   const fetchReviewsForCompleted = useCallback(async (conns: ConnectionItem[]) => {
     const completedConns = conns.filter((c) => c.status === "COMPLETED");
+    if (completedConns.length === 0) return;
     const reviewsEntries = await Promise.all(
       completedConns.map(async (c) => {
         try {
@@ -68,60 +68,37 @@ export function ConnectionsPage() {
         }
       })
     );
-    setReviewsMap(Object.fromEntries(reviewsEntries));
+    setReviewsMap((prev) => ({ ...prev, ...Object.fromEntries(reviewsEntries) }));
   }, []);
 
-  const fetchConnections = useCallback(async (isBackground = false) => {
-    if (isBackground) {
-      setIsRefreshing(true);
-    } else {
-      setIsLoading(true);
-    }
-    try {
+  const {
+    data: connections = [],
+    setData: setConnections,
+    isLoading,
+    isRefreshing,
+    isOffline,
+    error: connectionsError,
+    lastUpdated,
+    refreshNow,
+  } = useAutoRefresh<ConnectionItem[]>({
+    queryKey: "connections_list",
+    fetchFn: async () => {
       const data = await listConnections();
       const list = data.connections || [];
-      setConnections(list);
-      setLastUpdated(new Date());
-      await fetchReviewsForCompleted(list);
-    } catch {
-      toastError("Failed to load connections. Please refresh.");
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
-  }, [toastError, fetchReviewsForCompleted]);
-
-  useEffect(() => {
-    fetchConnections(false);
-
-    const unsubscribe = refreshCoordinator.subscribe((scopes) => {
-      if (
-        scopes.includes("connections") ||
-        scopes.includes("visibility_visible") ||
-        scopes.includes("network_online")
-      ) {
-        fetchConnections(true);
-      }
-    }, ["connections"]);
-
-    const timer = setInterval(() => {
-      if (refreshCoordinator.isTabVisible() && refreshCoordinator.isOnline()) {
-        fetchConnections(true);
-      }
-    }, 30000);
-
-    return () => {
-      unsubscribe();
-      clearInterval(timer);
-    };
-  }, [fetchConnections]);
+      // Hydrate reviews asynchronously in background without blocking connections
+      fetchReviewsForCompleted(list);
+      return list;
+    },
+    interval: 30000,
+    scopes: ["connections"],
+  });
 
   const handleComplete = async (connectionId: string) => {
     setActionLoadingId(connectionId);
     try {
       const updated = await completeConnection(connectionId);
       setConnections((prev) =>
-        prev.map((c) => (c.id === connectionId ? updated : c))
+        (prev ?? []).map((c) => (c.id === connectionId ? updated : c))
       );
       toastSuccess("Interaction completed! You can now leave a review.");
       setSelectedConnection(updated);
@@ -147,7 +124,7 @@ export function ConnectionsPage() {
     try {
       const updated = await updateConnectionStatus(connectionId, action);
       setConnections((prev) =>
-        prev.map((c) => (c.id === connectionId ? updated : c))
+        (prev ?? []).map((c) => (c.id === connectionId ? updated : c))
       );
       if (action === "accept") {
         toastSuccess("Connection accepted! You can now collaborate.");
@@ -196,7 +173,9 @@ export function ConnectionsPage() {
         <RefreshStatus
           lastUpdated={lastUpdated}
           isRefreshing={isRefreshing}
-          onRefresh={() => fetchConnections(false)}
+          isOffline={isOffline}
+          error={connectionsError}
+          onRefresh={refreshNow}
         />
       </div>
 
@@ -260,6 +239,34 @@ export function ConnectionsPage() {
           <CardSkeleton />
           <CardSkeleton />
         </div>
+      ) : connectionsError && connections.length === 0 ? (
+        <Card className="p-8 text-center space-y-4 rounded-3xl border-rose-200/80 dark:border-rose-900/40 bg-rose-50/30 dark:bg-rose-950/20 backdrop-blur-sm">
+          <div className="w-14 h-14 mx-auto rounded-2xl bg-rose-100 dark:bg-rose-900/60 text-rose-600 dark:text-rose-400 flex items-center justify-center font-bold text-xl shadow-xs">
+            <AlertCircle className="w-7 h-7" />
+          </div>
+          <div className="space-y-1.5 max-w-md mx-auto">
+            <h3 className="text-base font-bold font-heading text-slate-900 dark:text-white">
+              Couldn't Load Connections
+            </h3>
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+              {(connectionsError as any)?.response?.data?.detail ||
+                (connectionsError as any)?.message ||
+                "Failed to retrieve your connections. Please check your connection and retry."}
+            </p>
+          </div>
+          <div className="pt-2">
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={refreshNow}
+              disabled={isRefreshing}
+              className="gap-2"
+            >
+              {isRefreshing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+              <span>{isRefreshing ? "Retrying…" : "Retry Loading Connections"}</span>
+            </Button>
+          </div>
+        </Card>
       ) : activeTab === "incoming" ? (
         incomingPending.length === 0 ? (
           <EmptyState
@@ -636,7 +643,7 @@ export function ConnectionsPage() {
           }}
           onSuccess={() => {
             toastSuccess("Conversation reactivated ✓");
-            fetchConnections(false);
+            refreshNow();
             refreshCoordinator.invalidate(["connections", "chat", "notifications"]);
           }}
         />
