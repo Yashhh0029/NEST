@@ -1,6 +1,6 @@
 import uuid
 from typing import Optional
-from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, Query, Request, WebSocket, WebSocketDisconnect, status
 from sqlalchemy.orm import Session
 from app.core.dependencies import get_current_user, get_db
 from app.core.security import decode_access_token
@@ -146,3 +146,54 @@ async def notifications_websocket_endpoint(
         notification_manager.disconnect(websocket, user.id)
     except Exception:
         notification_manager.disconnect(websocket, user.id)
+
+
+@router.post(
+    "/webhooks/resend",
+    status_code=status.HTTP_200_OK,
+    summary="Resend Delivery Webhook",
+    description="Webhook handler for Resend delivery events (sent, delivered, bounced, failed).",
+)
+async def resend_delivery_webhook(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict:
+    from app.models.email_notification import EmailNotification, EmailDeliveryStatus
+    try:
+        body = await request.json()
+    except Exception:
+        return {"status": "ignored", "reason": "invalid_json"}
+
+    event_type = body.get("type", "")
+    data = body.get("data", {})
+    email_id = data.get("email_id") or data.get("id")
+
+    if not email_id:
+        return {"status": "ignored", "reason": "missing_email_id"}
+
+    records = db.query(EmailNotification).all()
+    target_record = None
+    for r in records:
+        if (r.metadata_payload or {}).get("resend_message_id") == str(email_id):
+            target_record = r
+            break
+
+    if not target_record:
+        return {"status": "ignored", "reason": "notification_not_found", "email_id": email_id}
+
+    if event_type == "email.delivered":
+        target_record.status = EmailDeliveryStatus.DELIVERED.value
+    elif event_type == "email.bounced":
+        target_record.status = EmailDeliveryStatus.BOUNCED.value
+        target_record.error_message = (
+            data.get("bounce", {}).get("message") or "Email bounced by destination MTA"
+        )
+    elif event_type in ["email.failed", "email.delivery_delayed"]:
+        target_record.status = EmailDeliveryStatus.FAILED.value
+        target_record.error_message = data.get("message") or f"Delivery error: {event_type}"
+    elif event_type == "email.sent":
+        target_record.status = EmailDeliveryStatus.SENT.value
+
+    db.commit()
+    return {"status": "processed", "event_type": event_type, "email_id": email_id}
+

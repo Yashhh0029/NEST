@@ -8,7 +8,7 @@ import urllib.error
 import urllib.request
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import List, Optional
@@ -32,6 +32,11 @@ class BaseEmailProvider(abc.ABC):
         """Send an email message."""
         pass
 
+    def send_with_details(self, message: EmailMessage) -> tuple[bool, Optional[str]]:
+        """Send message and return (success, provider_message_id)."""
+        success = self.send(message)
+        return (success, None)
+
 
 class TestEmailProvider(BaseEmailProvider):
     """In-memory provider for automated tests and local verification without real external network dispatch."""
@@ -43,6 +48,12 @@ class TestEmailProvider(BaseEmailProvider):
         self.sent_emails.append(message)
         logger.info(f"[TestEmailProvider] Recorded email to {message.to_email}: {message.subject}")
         return True
+
+    def send_with_details(self, message: EmailMessage) -> tuple[bool, Optional[str]]:
+        self.sent_emails.append(message)
+        msg_id = f"test_msg_{uuid.uuid4().hex[:12]}"
+        logger.info(f"[TestEmailProvider] Recorded email to {message.to_email} with ID {msg_id}")
+        return (True, msg_id)
 
     def clear(self):
         self.sent_emails.clear()
@@ -174,6 +185,10 @@ class ResendProvider(BaseEmailProvider):
     """Transactional email provider via Resend HTTP REST API."""
 
     def send(self, message: EmailMessage) -> bool:
+        success, _ = self.send_with_details(message)
+        return success
+
+    def send_with_details(self, message: EmailMessage) -> tuple[bool, Optional[str]]:
         api_key = settings.EMAIL_API_KEY or settings.RESEND_API_KEY
         if not api_key:
             err_msg = "Resend provider selected, but RESEND_API_KEY is not configured in environment variables."
@@ -204,7 +219,7 @@ class ResendProvider(BaseEmailProvider):
                 msg_id = resp_json.get("id")
                 if 200 <= resp.status < 300:
                     logger.info(f"[ResendProvider] Dispatched email (Resend ID: {msg_id})")
-                    return True
+                    return (True, str(msg_id) if msg_id else None)
                 logger.error(f"[ResendProvider] Unexpected status {resp.status}")
                 raise RuntimeError(f"Resend API returned unexpected status {resp.status}")
         except urllib.error.HTTPError as exc:
@@ -249,12 +264,13 @@ class ResendProvider(BaseEmailProvider):
                             if 200 <= s_resp.status < 300:
                                 s_bytes = s_resp.read()
                                 s_json = json.loads(s_bytes.decode("utf-8")) if s_bytes else {}
+                                s_id = s_json.get("id")
                                 logger.info(
                                     "[ResendProvider] Dispatched sandbox email to %s (Resend ID: %s)",
                                     sandbox_owner,
-                                    s_json.get("id"),
+                                    s_id,
                                 )
-                                return True
+                                return (True, str(s_id) if s_id else None)
                     except Exception as s_exc:
                         logger.error("[ResendProvider] Failed sandbox fallback send: %s", type(s_exc).__name__)
 
@@ -671,14 +687,23 @@ def dispatch_email_async(
                 text_body=text_body,
             )
             provider = get_email_provider()
-            success = provider.send(msg)
+            success, provider_msg_id = (
+                provider.send_with_details(msg)
+                if hasattr(provider, "send_with_details")
+                else (provider.send(msg), None)
+            )
 
             if success:
                 record.status = EmailDeliveryStatus.SENT.value
                 record.sent_at = datetime.now(timezone.utc)
                 record.error_message = None
+                meta = dict(record.metadata_payload or {})
+                if provider_msg_id:
+                    meta["resend_message_id"] = provider_msg_id
+                meta["provider"] = settings.EMAIL_PROVIDER
+                record.metadata_payload = meta
                 db.commit()
-                logger.info(f"[EmailService] Successfully delivered email {notification_type} to {to_email}")
+                logger.info(f"[EmailService] Successfully delivered email {notification_type} to {to_email} (MsgID: {provider_msg_id})")
             else:
                 record.status = EmailDeliveryStatus.FAILED.value
                 record.error_message = "Provider returned false without exception"
@@ -697,4 +722,65 @@ def dispatch_email_async(
 
     thread = threading.Thread(target=_worker, daemon=True)
     thread.start()
+
+
+def process_email_outbox_retries(db, max_age_minutes: int = 60, limit: int = 10) -> int:
+    """
+    Process pending or failed email notifications as a durable background outbox.
+    Ensures emails are not lost during process restarts or transient network drops.
+    """
+    from app.models.email_notification import EmailNotification, EmailDeliveryStatus
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=max_age_minutes)
+    pending_records = (
+        db.query(EmailNotification)
+        .filter(
+            EmailNotification.status.in_([EmailDeliveryStatus.PENDING.value, EmailDeliveryStatus.FAILED.value]),
+            EmailNotification.created_at >= cutoff,
+        )
+        .order_by(EmailNotification.created_at.asc())
+        .limit(limit)
+        .all()
+    )
+
+    retried_count = 0
+    provider = get_email_provider()
+    for record in pending_records:
+        retry_count = (record.metadata_payload or {}).get("retry_count", 0)
+        if retry_count >= 3:
+            continue
+        try:
+            msg = EmailMessage(
+                to_email=record.recipient_email,
+                subject=record.subject,
+                html_body=f"<p>{record.subject}</p>",
+                text_body=record.subject,
+            )
+            success, provider_msg_id = (
+                provider.send_with_details(msg)
+                if hasattr(provider, "send_with_details")
+                else (provider.send(msg), None)
+            )
+            meta = dict(record.metadata_payload or {})
+            meta["retry_count"] = retry_count + 1
+            if provider_msg_id:
+                meta["resend_message_id"] = provider_msg_id
+            record.metadata_payload = meta
+
+            if success:
+                record.status = EmailDeliveryStatus.SENT.value
+                record.sent_at = datetime.now(timezone.utc)
+                record.error_message = None
+                retried_count += 1
+            else:
+                record.status = EmailDeliveryStatus.FAILED.value
+            db.commit()
+        except Exception as exc:
+            meta = dict(record.metadata_payload or {})
+            meta["retry_count"] = retry_count + 1
+            record.metadata_payload = meta
+            record.status = EmailDeliveryStatus.FAILED.value
+            record.error_message = str(exc)[:1000]
+            db.commit()
+
+    return retried_count
 

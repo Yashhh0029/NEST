@@ -53,9 +53,10 @@ def wait_for_notification(
     db_session: Session,
     notification_type: str,
     recipient_id: uuid.UUID,
-    max_wait: float = 2.0,
+    max_wait: float = 3.0,
 ) -> Optional[EmailNotification]:
     start = time.time()
+    last_record = None
     while time.time() - start < max_wait:
         db_session.expire_all()
         record = db_session.query(EmailNotification).filter(
@@ -63,9 +64,11 @@ def wait_for_notification(
             EmailNotification.recipient_id == recipient_id,
         ).first()
         if record:
-            return record
+            last_record = record
+            if record.status in [EmailDeliveryStatus.SENT.value, EmailDeliveryStatus.FAILED.value, EmailDeliveryStatus.SKIPPED_ONLINE.value]:
+                return record
         time.sleep(0.05)
-    return None
+    return last_record
 
 
 # ==============================================================================
@@ -500,3 +503,175 @@ def test_manual_email_verification_idempotent_and_cooldown(db_session: Session):
     res2 = verify_email_token(db_session, raw_token)
     assert res2["email_verified"] is True
     assert "already verified" in res2["message"].lower()
+
+
+# ==============================================================================
+# ISSUE 1 & 7: RESEND WEBHOOKS & OUTBOX RELIABILITY
+# ==============================================================================
+
+def test_resend_webhook_delivery_tracking(db_session: Session, client: TestClient):
+    """Resend delivery webhooks update notification status to DELIVERED or BOUNCED."""
+    user = User(
+        name="Webhook User",
+        email="webhook.user@example.test",
+        password_hash=hash_password("Password123!"),
+        role=UserRole.NEWCOMER,
+        is_active=True,
+        email_verified=True,
+    )
+    db_session.add(user)
+    db_session.commit()
+
+    test_email_id = "resend_msg_test_987654"
+    record = EmailNotification(
+        idempotency_key="webhook_test_idempotency_1",
+        recipient_id=user.id,
+        recipient_email=user.email,
+        notification_type="NEW_MESSAGE",
+        subject="You have a new message",
+        status=EmailDeliveryStatus.SENT.value,
+        metadata_payload={"resend_message_id": test_email_id},
+    )
+    db_session.add(record)
+    db_session.commit()
+
+    # 1. Simulate email.delivered webhook
+    resp = client.post(
+        "/api/notifications/webhooks/resend",
+        json={
+            "type": "email.delivered",
+            "data": {
+                "email_id": test_email_id,
+                "to": [user.email],
+            },
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "processed"
+
+    db_session.refresh(record)
+    assert record.status == EmailDeliveryStatus.DELIVERED.value
+
+    # 2. Simulate email.bounced webhook
+    resp_bounce = client.post(
+        "/api/notifications/webhooks/resend",
+        json={
+            "type": "email.bounced",
+            "data": {
+                "email_id": test_email_id,
+                "to": [user.email],
+                "bounce": {"message": "Mailbox does not exist"},
+            },
+        },
+    )
+    assert resp_bounce.status_code == 200
+    db_session.refresh(record)
+    assert record.status == EmailDeliveryStatus.BOUNCED.value
+    assert "Mailbox does not exist" in record.error_message
+
+
+def test_process_email_outbox_retries(db_session: Session):
+    """Durable outbox retry worker retries PENDING and FAILED notifications safely."""
+    from app.services.email_service import process_email_outbox_retries
+
+    user = User(
+        name="Outbox User",
+        email="outbox.user@example.test",
+        password_hash=hash_password("Password123!"),
+        role=UserRole.NEWCOMER,
+        is_active=True,
+        email_verified=True,
+    )
+    db_session.add(user)
+    db_session.commit()
+
+    record = EmailNotification(
+        idempotency_key="outbox_test_retry_1",
+        recipient_id=user.id,
+        recipient_email=user.email,
+        notification_type="NEARBY_REQUEST",
+        subject="New request near you",
+        status=EmailDeliveryStatus.PENDING.value,
+        metadata_payload={"retry_count": 0},
+    )
+    db_session.add(record)
+    db_session.commit()
+
+    retried = process_email_outbox_retries(db_session, max_age_minutes=60, limit=10)
+    assert retried >= 1
+
+    db_session.refresh(record)
+    assert record.status == EmailDeliveryStatus.SENT.value
+    assert record.metadata_payload.get("retry_count") == 1
+
+
+# ==============================================================================
+# REQUIREMENT 6: FAILURE ISOLATION
+# ==============================================================================
+
+def test_failure_isolation_resend_down(db_session: Session):
+    """When email provider throws exceptions, core request & chat operations succeed without failing."""
+    requester = User(
+        name="Req User",
+        email="req.isolate@example.test",
+        password_hash=hash_password("Password123!"),
+        role=UserRole.NEWCOMER,
+        is_active=True,
+        email_verified=True,
+    )
+    helper = User(
+        name="Helper User",
+        email="helper.isolate@example.test",
+        password_hash=hash_password("Password123!"),
+        role=UserRole.HELPER,
+        is_active=True,
+        email_verified=True,
+    )
+    db_session.add_all([requester, helper])
+    db_session.commit()
+
+    # Broken email provider that raises RuntimeError
+    class BrokenEmailProvider:
+        def send(self, msg):
+            raise RuntimeError("Resend provider 500 error / connection refused")
+        def send_with_details(self, msg):
+            raise RuntimeError("Resend provider 500 error / connection refused")
+
+    with patch("app.services.email_service.get_email_provider", return_value=BrokenEmailProvider()):
+        # Chat message creation must succeed even if async email explodes
+        from app.services.chat_service import send_message
+        from app.models.connection import Connection, ConnectionStatus
+        from app.models.conversation import Conversation
+        from app.models.request import Request
+
+        req = Request(
+            user_id=requester.id,
+            raw_text="Test request for isolation",
+            intent="HOUSING",
+            status="OPEN",
+        )
+        db_session.add(req)
+        db_session.commit()
+
+        conn = Connection(
+            request_id=req.id,
+            requester_id=requester.id,
+            helper_id=helper.id,
+            status=ConnectionStatus.ACCEPTED,
+        )
+        db_session.add(conn)
+        db_session.commit()
+
+        conv = Conversation(
+            connection_id=conn.id,
+        )
+        db_session.add(conv)
+        db_session.commit()
+
+        from app.schemas.chat import MessageCreate
+
+        # Send message from requester to helper
+        msg = send_message(db_session, conv.id, requester.id, MessageCreate(content="Hello! Is this isolated?"))
+        assert msg is not None
+        assert msg.content == "Hello! Is this isolated?"
+

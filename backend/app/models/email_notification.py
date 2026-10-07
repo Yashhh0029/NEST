@@ -10,7 +10,9 @@ from app.db.database import Base
 class EmailDeliveryStatus(str, enum.Enum):
     PENDING = "PENDING"
     SENT = "SENT"
+    DELIVERED = "DELIVERED"
     FAILED = "FAILED"
+    BOUNCED = "BOUNCED"
     SKIPPED_ONLINE = "SKIPPED_ONLINE"
 
 
