@@ -2,7 +2,6 @@ import logging
 from typing import Optional
 import uuid
 from sqlalchemy.orm import Session
-from app.models.location import Location
 from app.models.request import Request
 from app.models.request_location import RequestLocation
 from app.models.user import User

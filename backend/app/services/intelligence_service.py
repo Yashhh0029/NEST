@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 import uuid
 
 from fastapi import HTTPException, status
@@ -16,7 +16,6 @@ from app.schemas.community import CommunitySearchItem
 from app.schemas.intelligence import (
     ActiveConnectionSummary,
     NeedIntelligenceBundle,
-    NeedProgressItem,
     NeedProgressUpdate,
     NeedStatusEnum,
     RequestIntelligenceResponse,

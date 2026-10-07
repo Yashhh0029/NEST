@@ -9,7 +9,6 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.models.connection import Connection, ConnectionStatus
-from app.models.profile import Profile
 from app.models.request import Request
 from app.models.session import AssistanceSession, SessionModality, SessionStatus
 from app.models.user import User

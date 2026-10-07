@@ -1,12 +1,10 @@
 import asyncio
 import json
 import logging
-import math
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set
 import uuid
 from fastapi import HTTPException, WebSocket, status
-from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.location import Location
@@ -18,25 +16,10 @@ from app.schemas.notification import (
     NotificationListResponse,
     NotificationResponse,
 )
+from app.services.google_maps_service import haversine_km
 from app.services.safety_service import get_blocked_user_ids
 
 logger = logging.getLogger(__name__)
-
-
-def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Calculate the great-circle distance between two points on the Earth in kilometers."""
-    r = 6371.0  # Earth's mean radius in km
-    phi1 = math.radians(lat1)
-    phi2 = math.radians(lat2)
-    delta_phi = math.radians(lat2 - lat1)
-    delta_lambda = math.radians(lon2 - lon1)
-
-    a = (
-        math.sin(delta_phi / 2.0) ** 2
-        + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2.0) ** 2
-    )
-    c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(max(0.0, 1.0 - a)))
-    return r * c
 
 
 class NotificationConnectionManager:

@@ -1,4 +1,3 @@
-from typing import Optional
 import uuid
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session

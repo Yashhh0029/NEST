@@ -1,6 +1,5 @@
 import uuid
 import logging
-from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 from fastapi import HTTPException, status
@@ -8,7 +7,6 @@ from sqlalchemy.orm import Session
 
 from app.models.request import Request
 from app.models.connection import Connection, ConnectionStatus
-from app.models.session import AssistanceSession, SessionStatus
 from app.models.safety import Block
 from app.models.user import User
 

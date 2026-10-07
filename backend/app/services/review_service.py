@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import List, Optional, Tuple
+from typing import List
 import uuid
 from fastapi import HTTPException, status
 from sqlalchemy import desc, func

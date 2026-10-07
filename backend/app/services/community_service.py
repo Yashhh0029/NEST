@@ -1,6 +1,6 @@
 import hashlib
 from datetime import datetime, timezone
-from typing import List, Optional, Set, Tuple
+from typing import List, Optional
 import uuid
 
 from fastapi import HTTPException, status
@@ -18,11 +18,9 @@ from app.models.community import (
 from app.models.connection import Connection, ConnectionStatus
 from app.models.embedding import Embedding
 from app.models.request import Request
-from app.models.review import Review
 from app.models.user import User
 from app.schemas.community import (
     AnswerCreate,
-    AnswerListResponse,
     AnswerResponse,
     AnswerUpdate,
     AuthorTrustSignals,

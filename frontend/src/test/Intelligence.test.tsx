@@ -8,7 +8,6 @@ import { ResolveRequestModal } from "@/components/intelligence/ResolveRequestMod
 import type {
   NeedIntelligenceBundle,
   SavedResource,
-  SavedResourceCreate,
 } from "@/types/intelligence";
 
 describe("Phase 13: Request Intelligence Hub Components", () => {

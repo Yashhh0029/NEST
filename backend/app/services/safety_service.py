@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 import logging
-from typing import Any, Dict, List, Optional, Set
+from typing import List, Optional, Set
 import uuid
 from fastapi import HTTPException, status
 from sqlalchemy import or_
@@ -13,7 +13,6 @@ from app.models.safety import (
     ModerationAction,
     ModerationActionType,
     Report,
-    ReportReason,
     ReportStatus,
 )
 from app.models.user import User, UserRole
@@ -28,7 +27,6 @@ from app.schemas.safety import (
     ReportDetailResponse,
     ReportListResponse,
     ReportReasonEnum,
-    ReportResponse,
     ReportStatusEnum,
     ReportUpdateStatus,
     ReportUserSummary,

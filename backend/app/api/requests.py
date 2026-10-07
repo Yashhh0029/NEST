@@ -18,7 +18,6 @@ from app.services.request_service import (
     delete_user_request,
     get_nearby_requests_for_helper,
     get_request_with_privacy,
-    get_user_request_by_id,
     get_user_requests,
     update_user_request,
 )

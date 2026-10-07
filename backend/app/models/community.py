@@ -3,13 +3,11 @@ import uuid
 from datetime import datetime, timezone
 from sqlalchemy import (
     Boolean,
-    CheckConstraint,
     Column,
     DateTime,
     Enum,
     ForeignKey,
     Index,
-    Integer,
     String,
     Text,
     UniqueConstraint,

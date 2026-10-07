@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from app.core.email_validator import EMAIL_REGEX, validate_email_address
+from app.core.email_validator import validate_email_address
 from app.models.user import UserRole
 
 

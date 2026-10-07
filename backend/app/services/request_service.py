@@ -4,8 +4,8 @@ from typing import List, Optional
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from app.models.request import Request
-from app.models.user import User
 from app.schemas.request import RequestCreate, RequestUpdate
+from app.services.google_maps_service import haversine_km as _haversine_distance
 from app.services.location_service import resolve_and_upsert_request_location
 from app.services.request_parser import parse_request
 from app.services.request_state_machine import validate_request_transition
@@ -271,22 +271,6 @@ def delete_user_request(
     db.delete(req)
     db.commit()
     return True
-
-
-def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Calculate Haversine distance in kilometers between two lat/lon coordinates."""
-    import math
-    R = 6371.0
-    d_lat = math.radians(lat2 - lat1)
-    d_lon = math.radians(lon2 - lon1)
-    a = (
-        math.sin(d_lat / 2.0) ** 2
-        + math.cos(math.radians(lat1))
-        * math.cos(math.radians(lat2))
-        * math.sin(d_lon / 2.0) ** 2
-    )
-    c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
-    return R * c
 
 
 def get_nearby_requests_for_helper(

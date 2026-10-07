@@ -1,5 +1,4 @@
 import uuid
-from typing import List
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 from app.core.dependencies import get_current_user, get_db

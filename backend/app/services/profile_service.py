@@ -9,7 +9,6 @@ from app.schemas.auth import UserResponse
 from app.schemas.location import LocationCreate, LocationResponse
 from app.schemas.profile import (
     FullProfileResponse,
-    ProfileCreate,
     ProfilePatch,
     ProfileResponse,
     ProfileUpdate,
@@ -268,7 +267,6 @@ def get_public_profile(
     Excludes exact coordinates, phone numbers, and emails.
     Includes verified reputation and coarse availability.
     """
-    import uuid
     from fastapi import HTTPException, status
     from app.models.safety import Block
     from app.schemas.profile import (

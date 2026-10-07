@@ -8,7 +8,6 @@ import { ProposeSessionModal } from "@/components/session/ProposeSessionModal";
 import { RescheduleModal } from "@/components/session/RescheduleModal";
 import { SessionsPage } from "@/pages/SessionsPage";
 import { sessionService } from "@/services/sessions";
-import { availabilityService } from "@/services/availability";
 import { useAuthStore } from "@/store/useAuthStore";
 import type {
   HelperAvailabilitySlot,

@@ -21,7 +21,6 @@ from app.schemas.availability import (
     ExceptionCreatePayload,
     MyAvailabilityResponse,
     PublicAvailabilityResponse,
-    SlotItem,
     SlotsUpdatePayload,
 )
 
