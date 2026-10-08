@@ -73,6 +73,14 @@ test_engine = create_engine(test_db_url, pool_pre_ping=True)
 app_db.engine = test_engine
 app_db.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
+with test_engine.connect() as _test_conn:
+    from sqlalchemy import text
+    try:
+        _test_conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMP WITH TIME ZONE;"))
+        _test_conn.commit()
+    except Exception:
+        pass
+
 from app.db.database import SessionLocal, get_db
 from app.main import app
 
@@ -94,6 +102,16 @@ def client():
     """FastAPI TestClient fixture."""
     with TestClient(app) as c:
         yield c
+
+
+@pytest.fixture
+def db_session():
+    """Transactional test session fixture."""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
 @pytest.fixture(autouse=True)

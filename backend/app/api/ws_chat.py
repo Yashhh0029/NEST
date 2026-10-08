@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import datetime, timezone
 from typing import Dict, Optional, Set
 import uuid
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect, status
@@ -71,10 +72,12 @@ class ConnectionManager:
     def is_user_connected(self, user_id: uuid.UUID) -> bool:
         return bool(self.user_sockets.get(user_id))
 
-    async def broadcast(self, conversation_id: uuid.UUID, message_dict: dict):
+    async def broadcast(self, conversation_id: uuid.UUID, message_dict: dict, exclude: Optional[WebSocket] = None):
         if conversation_id in self.rooms:
             disconnected_sockets = set()
             for ws in self.rooms[conversation_id]:
+                if exclude is not None and ws == exclude:
+                    continue
                 try:
                     await ws.send_text(json.dumps(message_dict))
                 except Exception:
@@ -158,6 +161,10 @@ async def websocket_chat_endpoint(
 
     # 3. Accept socket connection
     await manager.connect(websocket, conversation.id, user_id)
+    from app.services.presence_service import presence_service
+    presence_service.record_user_connected(user_id, conversation_id=conversation.id, socket_ref=websocket, db=db)
+    partner_id = connection.helper_id if user_id == connection.requester_id else connection.requester_id
+
     try:
         # Acknowledge connection
         await websocket.send_text(
@@ -166,6 +173,29 @@ async def websocket_chat_endpoint(
                 "conversation_id": str(conversation.id),
                 "user_id": str(user_id),
             })
+        )
+
+        # Dispatch real presence of the other conversation participant
+        partner_is_online, partner_last_seen = presence_service.get_user_presence(partner_id, db=db)
+        await websocket.send_text(
+            json.dumps({
+                "type": "presence",
+                "user_id": str(partner_id),
+                "is_online": partner_is_online,
+                "last_seen_at": partner_last_seen.isoformat() if partner_last_seen else None,
+            })
+        )
+
+        # Broadcast current user's presence to the room
+        await manager.broadcast(
+            conversation.id,
+            {
+                "type": "presence",
+                "user_id": str(user_id),
+                "is_online": True,
+                "last_seen_at": datetime.now(timezone.utc).isoformat(),
+            },
+            exclude=websocket,
         )
 
         while True:
@@ -180,10 +210,12 @@ async def websocket_chat_endpoint(
 
             msg_type = data.get("type", "message")
             if msg_type == "ping":
+                presence_service.record_user_heartbeat(user_id, db=db)
                 await websocket.send_text(json.dumps({"type": "pong"}))
                 continue
 
             if msg_type == "message":
+                presence_service.record_user_heartbeat(user_id, db=db)
                 raw_content = data.get("content", "")
                 if not isinstance(raw_content, str) or not raw_content.strip():
                     await websocket.send_text(
@@ -260,7 +292,21 @@ async def websocket_chat_endpoint(
                 await manager.broadcast(conversation.id, broadcast_payload)
 
     except WebSocketDisconnect:
-        manager.disconnect(websocket, conversation.id)
+        pass
     except Exception as exc:
         logger.warning("WebSocket error for conversation %s: %s", conversation.id, str(exc))
+    finally:
         manager.disconnect(websocket, conversation.id)
+        presence_service.record_user_disconnected(user_id, conversation_id=conversation.id, socket_ref=websocket, db=db)
+        is_still_online = presence_service.is_user_online(user_id)
+        _, my_last_seen = presence_service.get_user_presence(user_id, db=db)
+        await manager.broadcast(
+            conversation.id,
+            {
+                "type": "presence",
+                "user_id": str(user_id),
+                "is_online": is_still_online,
+                "last_seen_at": my_last_seen.isoformat() if my_last_seen else None,
+            },
+            exclude=websocket,
+        )

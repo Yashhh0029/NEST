@@ -72,3 +72,12 @@ class MessageListResponse(BaseModel):
     total: int
     has_more: bool
     messages: List[MessageResponse]
+
+
+class ConversationPresenceResponse(BaseModel):
+    conversation_id: uuid.UUID
+    partner_id: uuid.UUID
+    is_online: bool
+    last_seen_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)

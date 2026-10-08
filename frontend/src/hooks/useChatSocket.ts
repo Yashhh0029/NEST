@@ -7,15 +7,18 @@ import type { MessageItem } from "@/types/chat";
 interface UseChatSocketOptions {
   conversationId?: string | null;
   onMessageReceived?: (message: MessageItem) => void;
+  onPresenceReceived?: (presence: { user_id: string; is_online: boolean; last_seen_at?: string | null }) => void;
   onReconnect?: () => void;
 }
 
 export function useChatSocket({
   conversationId,
   onMessageReceived,
+  onPresenceReceived,
   onReconnect,
 }: UseChatSocketOptions) {
   const [isConnected, setIsConnected] = useState<boolean>(false);
+  const [isReconnecting, setIsReconnecting] = useState<boolean>(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -63,6 +66,7 @@ export function useChatSocket({
 
       ws.onopen = () => {
         setIsConnected(true);
+        setIsReconnecting(false);
         setConnectionError(null);
 
         // If this was a reconnection after disconnect, fire onReconnect callback to catch up
@@ -84,6 +88,12 @@ export function useChatSocket({
           const data = JSON.parse(event.data);
           if (data.type === "message" && data.message) {
             onMessageReceived?.(data.message);
+          } else if (data.type === "presence" && data.user_id) {
+            onPresenceReceived?.({
+              user_id: data.user_id,
+              is_online: Boolean(data.is_online),
+              last_seen_at: data.last_seen_at || null,
+            });
           }
         } catch {
           // Ignore invalid parse
@@ -103,6 +113,7 @@ export function useChatSocket({
 
         // Reconnect with backoff if not cleanly closed or policy violation
         if (event.code !== 1000 && event.code !== 1008) {
+          setIsReconnecting(true);
           reconnectTimeoutRef.current = setTimeout(() => {
             if (refreshCoordinator.isOnline() && refreshCoordinator.isTabVisible()) {
               connect();
@@ -113,7 +124,7 @@ export function useChatSocket({
     } catch {
       setConnectionError("Failed to initiate WebSocket connection.");
     }
-  }, [conversationId, onMessageReceived, onReconnect]);
+  }, [conversationId, onMessageReceived, onPresenceReceived, onReconnect]);
 
   useEffect(() => {
     connect();
@@ -159,6 +170,7 @@ export function useChatSocket({
 
   return {
     isConnected,
+    isReconnecting,
     connectionError,
     sendRealtimeMessage,
     reconnect: connect,

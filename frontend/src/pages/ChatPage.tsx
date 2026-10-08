@@ -9,12 +9,18 @@ import {
   editMessage,
   deleteMessage,
   translateChatMessage,
+  getConversationPresence,
 } from "@/services/chat";
 import { getConnectionById } from "@/services/connections";
 import { useToast } from "@/hooks/useToast";
 import { useChatSocket } from "@/hooks/useChatSocket";
 import { refreshCoordinator } from "@/services/refreshCoordinator";
-import type { ConversationItem, MessageItem } from "@/types/chat";
+import type {
+  ConversationItem,
+  MessageItem,
+  ConversationPresenceResponse,
+} from "@/types/chat";
+import { LanguageDropdown } from "@/components/chat/LanguageDropdown";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -33,8 +39,6 @@ import {
   X,
   FileText,
   AlertCircle,
-  Wifi,
-  WifiOff,
   ShieldAlert,
   Flag,
   Languages,
@@ -62,6 +66,26 @@ interface MessageTranslation {
   loading: boolean;
   showOriginal: boolean;
   error?: string | null;
+}
+
+function formatLastSeen(lastSeenAt?: string | null): string {
+  if (!lastSeenAt) return "Offline";
+  try {
+    const date = new Date(lastSeenAt);
+    if (isNaN(date.getTime())) return "Offline";
+    const now = Date.now();
+    const diffSec = Math.max(0, Math.floor((now - date.getTime()) / 1000));
+    if (diffSec < 60) return "Active just now";
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `Last seen ${diffMin}m ago`;
+    const diffHour = Math.floor(diffMin / 60);
+    if (diffHour < 24) return `Last seen ${diffHour}h ago`;
+    const diffDay = Math.floor(diffHour / 24);
+    if (diffDay < 7) return `Last seen ${diffDay}d ago`;
+    return `Last seen ${date.toLocaleDateString()}`;
+  } catch {
+    return "Offline";
+  }
 }
 
 export function ChatPage() {
@@ -95,6 +119,9 @@ export function ChatPage() {
   // Multilingual translation state
   const [targetLang, setTargetLang] = useState<string>("en");
   const [translations, setTranslations] = useState<Record<string, MessageTranslation>>({});
+
+  // Real-time partner presence state
+  const [partnerPresence, setPartnerPresence] = useState<ConversationPresenceResponse | null>(null);
 
   const targetLangRef = useRef<string>(targetLang);
   useEffect(() => {
@@ -212,15 +239,72 @@ export function ChatPage() {
     setTimeout(scrollToBottom, 50);
   }, []);
 
-  const { isConnected } = useChatSocket({
+  const loadPresence = useCallback(async (convId: string) => {
+    try {
+      const pres = await getConversationPresence(convId);
+      setPartnerPresence(pres);
+    } catch {
+      // Silently keep previous or null
+    }
+  }, []);
+
+  const handlePresenceReceived = useCallback(
+    (presence: { user_id: string; is_online: boolean; last_seen_at?: string | null }) => {
+      setPartnerPresence((prev) => {
+        if (!prev) {
+          return {
+            conversation_id: conversation?.id || "",
+            partner_id: presence.user_id,
+            is_online: presence.is_online,
+            last_seen_at: presence.last_seen_at || null,
+          };
+        }
+        if (prev.partner_id === presence.user_id) {
+          return {
+            ...prev,
+            is_online: presence.is_online,
+            last_seen_at: presence.last_seen_at !== undefined ? presence.last_seen_at : prev.last_seen_at,
+          };
+        }
+        return prev;
+      });
+    },
+    [conversation?.id]
+  );
+
+  const { isConnected, isReconnecting } = useChatSocket({
     conversationId: conversation?.id,
     onMessageReceived: handleIncomingRealtimeMessage,
+    onPresenceReceived: handlePresenceReceived,
     onReconnect: () => {
       if (conversation?.id) {
         syncLatestMessages(conversation.id);
+        loadPresence(conversation.id);
       }
     },
   });
+
+  // Periodic partner presence sync & tab visibility listener
+  useEffect(() => {
+    if (!conversation?.id) return;
+
+    const intervalTimer = setInterval(() => {
+      if (refreshCoordinator.isTabVisible() && refreshCoordinator.isOnline()) {
+        loadPresence(conversation.id);
+      }
+    }, 30000);
+
+    const unsubscribe = refreshCoordinator.subscribe((scopes) => {
+      if (scopes.includes("visibility_visible") || scopes.includes("network_online")) {
+        loadPresence(conversation.id);
+      }
+    });
+
+    return () => {
+      clearInterval(intervalTimer);
+      unsubscribe();
+    };
+  }, [conversation?.id, loadPresence]);
 
   // Background fallback polling ONLY when WebSocket is disconnected
   useEffect(() => {
@@ -276,6 +360,7 @@ export function ChatPage() {
 
         if (!isMounted) return;
         setConversation(conv);
+        loadPresence(conv.id);
         if (conv.connection_status) {
           setConnectionStatus(conv.connection_status);
         }
@@ -464,8 +549,16 @@ export function ChatPage() {
             <ArrowLeft className="w-5 h-5" />
           </Link>
 
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-teal-100 dark:bg-brand-dark-muted text-brand-primary dark:text-teal-300 flex items-center justify-center font-bold font-heading text-sm sm:text-base shrink-0">
-            {partner?.name?.charAt(0) || "U"}
+          <div className="relative shrink-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-teal-100 dark:bg-brand-dark-muted text-brand-primary dark:text-teal-300 flex items-center justify-center font-bold font-heading text-sm sm:text-base">
+              {partner?.name?.charAt(0) || "U"}
+            </div>
+            {partnerPresence?.is_online && (
+              <span
+                className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-white dark:border-brand-dark-card rounded-full"
+                title="Online"
+              />
+            )}
           </div>
 
           <div className="min-w-0">
@@ -483,6 +576,20 @@ export function ChatPage() {
               </span>
             </div>
             <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-gray-500 dark:text-gray-400 truncate">
+              {partnerPresence?.is_online ? (
+                <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium shrink-0">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Online
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 text-gray-500 dark:text-gray-400 shrink-0">
+                  <span className="w-1.5 h-1.5 rounded-full bg-gray-400 dark:bg-gray-500" />
+                  {formatLastSeen(partnerPresence?.last_seen_at)}
+                </span>
+              )}
+              {(partner?.headline || partner?.city || partner?.area) && (
+                <span className="text-gray-300 dark:text-gray-600">•</span>
+              )}
               {partner?.headline && (
                 <span className="truncate">{partner.headline}</span>
               )}
@@ -502,28 +609,7 @@ export function ChatPage() {
         {/* Header Right Actions */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           {/* Multilingual Translation Preference */}
-          <div className="flex items-center gap-1 bg-white dark:bg-brand-dark-card border border-gray-200 dark:border-brand-dark-border px-1.5 sm:px-2.5 py-1 rounded-xl shadow-2xs text-xs">
-            <Languages className="w-3.5 h-3.5 text-brand-primary shrink-0" />
-            <span className="hidden md:inline text-[11px] text-gray-500 dark:text-gray-400 font-medium">Translate:</span>
-            <select
-              value={targetLang}
-              onChange={(e) => setTargetLang(e.target.value)}
-              className="bg-transparent text-[11px] sm:text-xs font-semibold text-gray-800 dark:text-gray-200 focus:outline-none cursor-pointer max-w-[58px] sm:max-w-none"
-              title="Select target language for message translation"
-            >
-              <option value="en">EN</option>
-              <option value="hi">HI (हिंदी)</option>
-              <option value="ml">ML (മലയാളം)</option>
-              <option value="mr">MR (मराठी)</option>
-              <option value="ta">TA (தமிழ்)</option>
-              <option value="te">TE (తెలుగు)</option>
-              <option value="kn">KN (ಕನ್ನಡ)</option>
-              <option value="bn">BN (বাংলা)</option>
-              <option value="gu">GU (ગુજરાતી)</option>
-              <option value="pa">PA (ਪੰਜਾਬੀ)</option>
-              <option value="ur">UR (اردو)</option>
-            </select>
-          </div>
+          <LanguageDropdown value={targetLang} onChange={setTargetLang} />
 
           {partner && (
             <div className="flex items-center gap-0.5 sm:gap-1">
@@ -565,25 +651,33 @@ export function ChatPage() {
             </Button>
           )}
 
-          {/* Live status badge */}
+          {/* Real Human Presence Badge */}
           <div
-            className="flex items-center gap-1 text-xs text-gray-400 border-l border-gray-200 dark:border-brand-dark-border pl-1.5 sm:pl-2.5"
-            title={isConnected ? "Real-time socket active" : "REST polling mode"}
+            className="flex items-center gap-1 text-xs border-l border-gray-200 dark:border-brand-dark-border pl-1.5 sm:pl-2.5"
+            title={partnerPresence?.is_online ? "Partner is currently online" : formatLastSeen(partnerPresence?.last_seen_at)}
           >
-            {isConnected ? (
-              <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium text-[11px]">
-                <Wifi className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Live</span>
+            {partnerPresence?.is_online ? (
+              <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium text-[11px] sm:text-xs">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="hidden sm:inline">Online</span>
               </span>
             ) : (
-              <span className="flex items-center gap-1 text-gray-400 text-[11px]">
-                <WifiOff className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">REST</span>
+              <span className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400 text-[11px] sm:text-xs">
+                <span className="w-2 h-2 rounded-full bg-gray-400 dark:bg-gray-500" />
+                <span className="hidden sm:inline">{formatLastSeen(partnerPresence?.last_seen_at)}</span>
+                <span className="sm:hidden">Offline</span>
               </span>
             )}
           </div>
         </div>
       </div>
+
+      {/* Real-time transport reconnecting banner */}
+      {isReconnecting && (
+        <div className="bg-amber-500/10 dark:bg-amber-500/15 border-b border-amber-500/20 px-3 py-1 text-center text-[11px] text-amber-700 dark:text-amber-300">
+          Reconnecting to real-time chat...
+        </div>
+      )}
 
       {/* Associated Request Pill */}
       {conversation.request && (

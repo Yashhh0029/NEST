@@ -33,12 +33,22 @@ class NotificationConnectionManager:
         if user_id not in self.active_connections:
             self.active_connections[user_id] = set()
         self.active_connections[user_id].add(websocket)
+        try:
+            from app.services.presence_service import presence_service
+            presence_service.record_user_connected(user_id, socket_ref=websocket)
+        except Exception:
+            pass
 
     def disconnect(self, websocket: WebSocket, user_id: uuid.UUID):
         if user_id in self.active_connections:
             self.active_connections[user_id].discard(websocket)
             if not self.active_connections[user_id]:
                 del self.active_connections[user_id]
+        try:
+            from app.services.presence_service import presence_service
+            presence_service.record_user_disconnected(user_id, socket_ref=websocket)
+        except Exception:
+            pass
 
     async def send_to_user(self, user_id: uuid.UUID, message_dict: dict):
         if user_id in self.active_connections:
@@ -63,11 +73,15 @@ def set_user_online_override_for_testing(user_id: uuid.UUID, is_online: Optional
         _test_online_overrides.pop(user_id, None)
     else:
         _test_online_overrides[user_id] = is_online
+    from app.services.presence_service import presence_service
+    presence_service.set_test_override(user_id, is_online)
 
 
 def clear_test_online_overrides() -> None:
     """Clear all active testing presence overrides."""
     _test_online_overrides.clear()
+    from app.services.presence_service import presence_service
+    presence_service.clear_test_overrides()
 
 
 def is_user_actively_online(user_id: uuid.UUID, conversation_id: Optional[uuid.UUID] = None) -> bool:
@@ -77,6 +91,12 @@ def is_user_actively_online(user_id: uuid.UUID, conversation_id: Optional[uuid.U
     """
     if user_id in _test_online_overrides:
         return _test_online_overrides[user_id]
+
+    from app.services.presence_service import presence_service
+    if conversation_id and presence_service.is_user_in_conversation(user_id, conversation_id):
+        return True
+    if presence_service.is_user_online(user_id):
+        return True
 
     if user_id in notification_manager.active_connections and notification_manager.active_connections[user_id]:
         return True

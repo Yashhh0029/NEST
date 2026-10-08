@@ -9,6 +9,7 @@ from app.models.user import User
 from app.schemas.chat import (
     ConversationCreate,
     ConversationListResponse,
+    ConversationPresenceResponse,
     ConversationResponse,
     MessageCreate,
     MessageListResponse,
@@ -235,3 +236,23 @@ def delete_message(
         current_user.id,
     )
     return chat_service.format_message_response(message, current_user.id)
+
+
+@router.get(
+    "/conversations/{conversation_id}/presence",
+    response_model=ConversationPresenceResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get partner online presence and last seen for a conversation",
+    description="Returns true presence of the conversation partner based on server-side heartbeat and session state.",
+)
+def get_conversation_presence_endpoint(
+    conversation_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ConversationPresenceResponse:
+    from app.services.presence_service import presence_service
+    return presence_service.get_conversation_presence(
+        db=db,
+        conversation_id=conversation_id,
+        current_user_id=current_user.id,
+    )

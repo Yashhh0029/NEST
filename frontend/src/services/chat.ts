@@ -2,6 +2,7 @@ import { api } from "./api";
 import type {
   ConversationItem,
   ConversationListResponse,
+  ConversationPresenceResponse,
   MessageItem,
   MessageListResponse,
 } from "../types/chat";
@@ -98,5 +99,14 @@ export async function translateChatMessage(
     source_language,
     message_id,
   });
+  return resp.data;
+}
+
+export async function getConversationPresence(
+  conversation_id: string
+): Promise<ConversationPresenceResponse> {
+  const resp = await api.get<ConversationPresenceResponse>(
+    `/api/conversations/${conversation_id}/presence`
+  );
   return resp.data;
 }

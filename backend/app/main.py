@@ -38,6 +38,11 @@ async def lifespan(app: FastAPI):
         # Pre-verify database connection on startup
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
+            try:
+                conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMP WITH TIME ZONE;"))
+                conn.commit()
+            except Exception:
+                pass
         logger.info("Database connection successfully established.")
     except Exception as exc:
         logger.warning(f"Database pre-flight check warning (will retry on requests): {exc}")

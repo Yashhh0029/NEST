@@ -44,3 +44,10 @@ export interface SendMessagePayload {
 export interface EditMessagePayload {
   content: string;
 }
+
+export interface ConversationPresenceResponse {
+  conversation_id: string;
+  partner_id: string;
+  is_online: boolean;
+  last_seen_at?: string | null;
+}
