@@ -1,14 +1,18 @@
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from app.models.request import Request
+from app.models.user import User
 from app.schemas.request import RequestCreate, RequestUpdate
 from app.services.google_maps_service import haversine_km as _haversine_distance
 from app.services.location_service import resolve_and_upsert_request_location
 from app.services.request_parser import parse_request
 from app.services.request_state_machine import validate_request_transition
+
+logger = logging.getLogger(__name__)
 
 
 def create_user_request(db: Session, user: User, req_in: RequestCreate) -> Request:
