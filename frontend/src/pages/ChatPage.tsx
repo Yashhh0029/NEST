@@ -272,7 +272,7 @@ export function ChatPage() {
     [conversation?.id]
   );
 
-  const { isConnected, isReconnecting } = useChatSocket({
+  const { isConnected } = useChatSocket({
     conversationId: conversation?.id,
     onMessageReceived: handleIncomingRealtimeMessage,
     onPresenceReceived: handlePresenceReceived,
@@ -671,13 +671,6 @@ export function ChatPage() {
           </div>
         </div>
       </div>
-
-      {/* Real-time transport reconnecting banner */}
-      {isReconnecting && (
-        <div className="bg-amber-500/10 dark:bg-amber-500/15 border-b border-amber-500/20 px-3 py-1 text-center text-[11px] text-amber-700 dark:text-amber-300">
-          Reconnecting to real-time chat...
-        </div>
-      )}
 
       {/* Associated Request Pill */}
       {conversation.request && (
