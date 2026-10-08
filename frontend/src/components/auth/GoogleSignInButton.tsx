@@ -58,6 +58,7 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
           },
           callback: async (response: any) => {
             if (response.credential) {
+              if (loading) return;
               setLoading(true);
               try {
                 // Clear any stale local session before fresh Google authentication
@@ -67,11 +68,17 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
                 onSuccess?.();
                 navigate("/home");
               } catch (err: any) {
-                const detail =
-                  err.response?.data?.detail ||
-                  (err.message === "Network Error"
-                    ? "Cannot reach backend server. Please verify network."
-                    : "Google Sign-In verification failed.");
+                let detail = "Google Sign-In verification failed.";
+                const status = err.response?.status;
+                if (status === 502 || status === 503 || status === 504) {
+                  detail = "Server is waking up. Please try again in a moment.";
+                } else if (err.code === "ECONNABORTED") {
+                  detail = "Server is waking up. Please try again in a moment.";
+                } else if (err.response?.data?.detail) {
+                  detail = err.response.data.detail;
+                } else if (err.message === "Network Error") {
+                  detail = "Unable to reach NEST. Please try again.";
+                }
                 const title = detail.toLowerCase().includes("deactivated")
                   ? "Account Deactivated"
                   : "Authentication Error";

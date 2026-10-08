@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
+import { api } from "@/services/api";
 import { authService } from "@/services/auth";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useToast } from "@/hooks/useToast";
@@ -23,6 +24,7 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
   const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [isResending, setIsResending] = useState(false);
@@ -33,6 +35,11 @@ export function LoginPage() {
   const { success: toastSuccess, error: toastError } = useToast();
 
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname || "/home";
+
+  // Pre-warm backend while user is filling the login form to eliminate cold-start delay
+  useEffect(() => {
+    api.get("/health").catch(() => {});
+  }, []);
 
   const {
     register,
@@ -74,6 +81,8 @@ export function LoginPage() {
   };
 
   const onSubmit = async (data: LoginFormData) => {
+    if (isSubmittingRef.current || isSubmitting) return;
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
     setApiError(null);
     setUnverifiedEmail(null);
@@ -83,17 +92,52 @@ export function LoginPage() {
       toastSuccess("Welcome back to NEST!", "Login Successful");
       navigate(from, { replace: true });
     } catch (err: unknown) {
-      let msg = "Invalid email or password.";
-      if (err && typeof err === "object" && "response" in err) {
-        const responseData = (err as { response?: { data?: { detail?: string } } }).response?.data;
-        if (responseData?.detail && typeof responseData.detail === "string") {
-          msg = responseData.detail;
-        }
-      }
+      isSubmittingRef.current = false;
+      let msg = "Unable to reach NEST. Please try again.";
+      let isUnverified = false;
 
-      const isUnverified =
-        msg.includes("EMAIL_NOT_VERIFIED") ||
-        msg.toLowerCase().includes("verify your email");
+      if (err && typeof err === "object" && "response" in err) {
+        const response = (err as { response?: { status?: number; data?: { detail?: string } } }).response;
+        const status = response?.status;
+        const detail = response?.data?.detail;
+        const detailStr = typeof detail === "string" ? detail : "";
+
+        if (
+          detailStr.includes("EMAIL_NOT_VERIFIED") ||
+          detailStr.toLowerCase().includes("verify your email")
+        ) {
+          isUnverified = true;
+          msg = "Please verify your email before signing in.";
+        } else if (status === 401) {
+          msg = detailStr || "Invalid email or password.";
+        } else if (status === 403) {
+          if (detailStr.toLowerCase().includes("deactivated")) {
+            msg = "Your account is deactivated. Please contact support.";
+          } else {
+            msg = detailStr || "Account access restricted.";
+          }
+        } else if (status === 502 || status === 503 || status === 504) {
+          msg = "Server is waking up. Please try again in a moment.";
+        } else if (detailStr) {
+          msg = detailStr;
+        } else {
+          msg = "Server is waking up. Please try again in a moment.";
+        }
+      } else if (
+        err &&
+        typeof err === "object" &&
+        "code" in err &&
+        (err as { code?: string }).code === "ECONNABORTED"
+      ) {
+        msg = "Server is waking up. Please try again in a moment.";
+      } else if (
+        err &&
+        typeof err === "object" &&
+        "message" in err &&
+        String((err as { message?: string }).message).toLowerCase().includes("network")
+      ) {
+        msg = "Unable to reach NEST. Please try again.";
+      }
 
       if (isUnverified) {
         setUnverifiedEmail(data.email);
@@ -209,8 +253,13 @@ export function LoginPage() {
             })}
           />
 
-          <Button type="submit" isLoading={isSubmitting} className="w-full mt-2 font-semibold">
-            Log In
+          <Button
+            type="submit"
+            isLoading={isSubmitting}
+            disabled={isSubmitting}
+            className="w-full mt-2 font-semibold"
+          >
+            {isSubmitting ? "Signing in..." : "Log In"}
           </Button>
         </form>
 
