@@ -100,7 +100,6 @@ export function LoginPage() {
         setResendCooldown(45);
       } else {
         setApiError(msg);
-        toastError(msg);
       }
     } finally {
       setIsSubmitting(false);
@@ -181,7 +180,11 @@ export function LoginPage() {
             type="email"
             placeholder="you@example.com"
             error={errors.email?.message}
-            {...register("email")}
+            {...register("email", {
+              onChange: () => {
+                if (apiError) setApiError(null);
+              },
+            })}
           />
 
           <Input
@@ -199,7 +202,11 @@ export function LoginPage() {
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             }
-            {...register("password")}
+            {...register("password", {
+              onChange: () => {
+                if (apiError) setApiError(null);
+              },
+            })}
           />
 
           <Button type="submit" isLoading={isSubmitting} className="w-full mt-2 font-semibold">

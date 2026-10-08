@@ -15,7 +15,14 @@ export const useToastStore = create<ToastStore>((set) => ({
     const duration = toast.duration ?? 4000;
     const newToast: ToastMessage = { ...toast, id };
 
-    set((state) => ({ toasts: [...state.toasts, newToast] }));
+    set((state) => {
+      // Avoid stacking duplicate identical toasts
+      const exists = state.toasts.some(
+        (t) => t.message === toast.message && t.type === toast.type
+      );
+      if (exists) return state;
+      return { toasts: [...state.toasts, newToast] };
+    });
 
     if (duration > 0) {
       setTimeout(() => {

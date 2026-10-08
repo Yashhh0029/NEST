@@ -422,6 +422,7 @@ def test_google_auth_sub_and_account_linking(db_session: Session):
 
     fake_id_info = {
         "iss": "https://accounts.google.com",
+        "aud": "161378154091-a5q3ifr8k9j5a8u4v81namd2v6ff4ocv.apps.googleusercontent.com",
         "sub": google_sub,
         "email": "priya.googlelink@example.test",
         "email_verified": True,
@@ -458,6 +459,7 @@ def test_google_auth_deactivated_account_with_reason(db_session: Session):
 
     fake_id_info = {
         "iss": "https://accounts.google.com",
+        "aud": "161378154091-a5q3ifr8k9j5a8u4v81namd2v6ff4ocv.apps.googleusercontent.com",
         "sub": "deactivated_sub_9999",
         "email": "deactivated.user@example.test",
         "email_verified": True,

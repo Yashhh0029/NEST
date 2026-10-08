@@ -8,7 +8,7 @@ export const api = axios.create({
   headers: {
     "Content-Type": "application/json",
   },
-  timeout: 15000,
+  timeout: 45000,
 });
 
 // Request interceptor: attach bearer token from sessionStorage if present, except for public auth routes

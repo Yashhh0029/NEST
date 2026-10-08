@@ -248,12 +248,10 @@ def authenticate_google_user(db: Session, token_str: str) -> Token:
 
     try:
         req = google_requests.Request()
-        audience = settings.GOOGLE_CLIENT_ID if settings.GOOGLE_CLIENT_ID else None
         id_info = google_id_token.verify_oauth2_token(
             token_str.strip(),
             req,
-            audience=audience,
-            clock_skew_in_seconds=15,
+            clock_skew_in_seconds=60,
         )
     except Exception as exc:
         logger.warning("Google ID token verification failed: %s", exc)
@@ -269,6 +267,28 @@ def authenticate_google_user(db: Session, token_str: str) -> Token:
             detail="Invalid Google token issuer.",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # Validate token audience / authorized party against known client IDs
+    expected_cids = {
+        cid.strip()
+        for cid in [
+            settings.GOOGLE_CLIENT_ID,
+            "161378154091-a5q3ifr8k9j5a8u4v81namd2v6ff4ocv.apps.googleusercontent.com",
+        ]
+        if cid and cid.strip()
+    }
+    if expected_cids:
+        token_aud = id_info.get("aud")
+        token_azp = id_info.get("azp")
+        aud_list = [token_aud] if isinstance(token_aud, str) else (token_aud if isinstance(token_aud, list) else [])
+        matches = any(a in expected_cids for a in aud_list) or (token_azp in expected_cids)
+        if not matches:
+            logger.warning("Google token audience mismatch: aud=%s azp=%s expected=%s", token_aud, token_azp, expected_cids)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Google token was not issued for this application.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
     google_sub = id_info.get("sub")
     if not google_sub or not str(google_sub).strip():

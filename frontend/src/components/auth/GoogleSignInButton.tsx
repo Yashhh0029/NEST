@@ -48,9 +48,9 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
           itp_support: true,
           error_callback: (err: any) => {
             console.warn("Google Identity Services error:", err);
-            if (err?.type === "popup_closed" || err?.type === "popup_failed_to_open") {
+            if (err?.type === "popup_failed_to_open") {
               toast(
-                "Sign-in popup was blocked or closed. If using Brave or an adblocker, please disable Shields or allow popups for this site.",
+                "Sign-in popup was blocked by browser. Please allow popups for this site.",
                 "warning",
                 "Popup Blocked"
               );

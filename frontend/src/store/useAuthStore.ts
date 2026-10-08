@@ -97,14 +97,28 @@ export const useAuthStore = create<AuthState>((set) => ({
         isAuthenticated: true,
         loading: false,
       });
-    } catch {
-      authService.logout();
-      set({
-        user: null,
-        accessToken: null,
-        isAuthenticated: false,
-        loading: false,
-      });
+    } catch (err: unknown) {
+      const status =
+        err && typeof err === "object" && "response" in err
+          ? (err as { response?: { status?: number } }).response?.status
+          : null;
+
+      // Only wipe session and logout on definitive 401 Unauthorized or deactivated 403
+      if (status === 401 || status === 403) {
+        authService.logout();
+        set({
+          user: null,
+          accessToken: null,
+          isAuthenticated: false,
+          loading: false,
+        });
+      } else {
+        // Network timeout / cold start: retain token so user stays logged in
+        set({
+          loading: false,
+          isAuthenticated: true,
+        });
+      }
     }
   },
 }));
