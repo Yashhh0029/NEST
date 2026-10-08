@@ -22,7 +22,6 @@ export const useAuthStore = create<AuthState>((set) => ({
   loading: true,
 
   login: async (payload: LoginPayload) => {
-    set({ loading: true });
     try {
       const tokenData = await authService.login(payload);
       const user = tokenData.user || (await authService.getMe());
@@ -33,13 +32,12 @@ export const useAuthStore = create<AuthState>((set) => ({
         loading: false,
       });
     } catch (error) {
-      set({ loading: false, isAuthenticated: false, user: null, accessToken: null });
+      set({ isAuthenticated: false, user: null, accessToken: null });
       throw error;
     }
   },
 
   googleLogin: async (credential: string) => {
-    set({ loading: true });
     try {
       const tokenData = await authService.googleLogin(credential);
       const user = tokenData.user || (await authService.getMe());
@@ -50,7 +48,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         loading: false,
       });
     } catch (error) {
-      set({ loading: false, isAuthenticated: false, user: null, accessToken: null });
+      set({ isAuthenticated: false, user: null, accessToken: null });
       throw error;
     }
   },

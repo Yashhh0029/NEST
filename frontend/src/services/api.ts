@@ -38,14 +38,24 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    const detailStr = String(error.response?.data?.detail || "").toLowerCase();
-    const isDeactivated =
-      error.response?.status === 403 &&
-      (detailStr.includes("deactivated") || detailStr.includes("inactive user"));
+    const url = error.config?.url || "";
+    const isPublicAuthRoute =
+      url.includes("/api/auth/register") ||
+      url.includes("/api/auth/login") ||
+      url.includes("/api/auth/google") ||
+      url.includes("/api/auth/verify-email") ||
+      url.includes("/api/auth/resend-verification");
 
-    if (error.response?.status === 401 || isDeactivated) {
-      sessionStorage.removeItem(TOKEN_STORAGE_KEY);
-      window.dispatchEvent(new CustomEvent("nest:unauthorized"));
+    if (!isPublicAuthRoute) {
+      const detailStr = String(error.response?.data?.detail || "").toLowerCase();
+      const isDeactivated =
+        error.response?.status === 403 &&
+        (detailStr.includes("deactivated") || detailStr.includes("inactive user"));
+
+      if (error.response?.status === 401 || isDeactivated) {
+        sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+        window.dispatchEvent(new CustomEvent("nest:unauthorized"));
+      }
     }
     return Promise.reject(error);
   }
