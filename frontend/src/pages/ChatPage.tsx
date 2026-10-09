@@ -147,6 +147,8 @@ export function ChatPage() {
   const handleTranslateMessage = async (msg: MessageItem, customLang?: string) => {
     const selectedTarget = customLang || targetLangRef.current || targetLang;
     const current = translations[msg.id];
+    // Prevent concurrent in-flight requests for the same message
+    if (current?.loading) return;
 
     // If already translated for this exact target language without error:
     if (
@@ -192,7 +194,14 @@ export function ChatPage() {
       }));
     } catch (err: any) {
       if (requestSeqRef.current[msg.id] !== seq) return;
-      const detail = err?.response?.data?.detail || "Translation failed. Please retry.";
+      let detail = "Translation service is temporarily unavailable. Please retry.";
+      if (err?.response?.data?.detail) {
+        detail = err.response.data.detail;
+      } else if (err?.message === "Network Error") {
+        detail = "Unable to reach translation service. Please check your network.";
+      } else if (err?.code === "ECONNABORTED") {
+        detail = "Translation request timed out. Please retry.";
+      }
       setTranslations((prev) => ({
         ...prev,
         [msg.id]: {
