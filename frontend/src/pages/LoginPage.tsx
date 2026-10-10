@@ -117,11 +117,11 @@ export function LoginPage() {
             msg = detailStr || "Account access restricted.";
           }
         } else if (status === 502 || status === 503 || status === 504) {
-          msg = "Server is waking up. Please try again in a moment.";
+          msg = "Server is waking up (cold start). Please click Retry in a moment.";
         } else if (detailStr) {
           msg = detailStr;
         } else {
-          msg = "Server is waking up. Please try again in a moment.";
+          msg = "Server is waking up (cold start). Please click Retry in a moment.";
         }
       } else if (
         err &&
@@ -129,14 +129,14 @@ export function LoginPage() {
         "code" in err &&
         (err as { code?: string }).code === "ECONNABORTED"
       ) {
-        msg = "Server is waking up. Please try again in a moment.";
+        msg = "Server took too long to respond (cold start). Please click Retry.";
       } else if (
         err &&
         typeof err === "object" &&
         "message" in err &&
         String((err as { message?: string }).message).toLowerCase().includes("network")
       ) {
-        msg = "Unable to reach NEST. Please try again.";
+        msg = "Unable to reach NEST servers. Please check your connection and click Retry.";
       }
 
       if (isUnverified) {
@@ -205,12 +205,25 @@ export function LoginPage() {
         )}
 
         {apiError && (
-          <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 text-xs text-brand-danger font-medium">
-            {apiError}
+          <div className="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 text-xs text-brand-danger flex items-start justify-between gap-3 animate-in fade-in duration-150">
+            <span className="font-medium leading-relaxed">{apiError}</span>
+            <button
+              type="button"
+              onClick={() => {
+                setApiError(null);
+                api.get("/health").catch(() => {});
+              }}
+              className="text-[11px] font-semibold underline hover:no-underline text-teal-700 dark:text-teal-400 shrink-0 mt-0.5 cursor-pointer"
+            >
+              Retry
+            </button>
           </div>
         )}
 
-        <GoogleSignInButton text="signin_with" />
+        <GoogleSignInButton
+          text="signin_with"
+          onError={(err) => setApiError(err)}
+        />
 
         <div className="relative flex py-2 items-center">
           <div className="flex-grow border-t border-slate-200 dark:border-slate-800"></div>
