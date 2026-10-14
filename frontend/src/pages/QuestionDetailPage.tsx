@@ -84,9 +84,11 @@ export const QuestionDetailPage: React.FC = () => {
       setAnswerBody("");
       setQuestion((prev) => {
         if (!prev) return prev;
+        const currentCount = prev.answer_count ?? prev.answers_count ?? 0;
         return {
           ...prev,
-          answer_count: prev.answer_count + 1,
+          answer_count: currentCount + 1,
+          answers_count: currentCount + 1,
           answers: [...prev.answers, createdAnswer],
         };
       });
@@ -147,9 +149,12 @@ export const QuestionDetailPage: React.FC = () => {
       await communityService.deleteAnswer(questionId, answerId);
       setQuestion((prev) => {
         if (!prev) return prev;
+        const currentCount = prev.answer_count ?? prev.answers_count ?? 1;
+        const newCount = Math.max(0, currentCount - 1);
         return {
           ...prev,
-          answer_count: Math.max(0, prev.answer_count - 1),
+          answer_count: newCount,
+          answers_count: newCount,
           answers: prev.answers.filter((a) => a.id !== answerId),
         };
       });
@@ -196,12 +201,15 @@ export const QuestionDetailPage: React.FC = () => {
 
   const isQuestionAuthor = user?.id === question.author_id;
   const trust = question.author_trust_signals;
+  const authorName = question.author_name || question.author?.name || "Community Member";
 
   // Answers sorted: accepted answer first, then highest score/helpful descending
   const sortedAnswers = [...question.answers].sort((a, b) => {
     if (a.is_accepted && !b.is_accepted) return -1;
     if (!a.is_accepted && b.is_accepted) return 1;
-    return b.score - a.score;
+    const aScore = a.score ?? ((a.helpful_count ?? (a as any).helpful_votes ?? 0) - (a.not_helpful_count ?? (a as any).not_helpful_votes ?? 0));
+    const bScore = b.score ?? ((b.helpful_count ?? (b as any).helpful_votes ?? 0) - (b.not_helpful_count ?? (b as any).not_helpful_votes ?? 0));
+    return bScore - aScore;
   });
 
   return (
@@ -222,7 +230,7 @@ export const QuestionDetailPage: React.FC = () => {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[11px] font-bold px-3 py-1 rounded-full bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-900/50 uppercase tracking-wider">
-              {question.category.replace("_", " ")}
+              {(question.category || "OTHER").replace("_", " ")}
             </span>
             {(question.city || question.area) && (
               <span className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-brand-dark px-2.5 py-0.5 rounded-full border border-gray-200/80 dark:border-brand-dark-border">
@@ -255,7 +263,7 @@ export const QuestionDetailPage: React.FC = () => {
                 onClick={() =>
                   setReportTarget({
                     targetUserId: question.author_id,
-                    targetName: question.author_name,
+                    targetName: authorName,
                     questionId: question.id,
                     questionTitle: question.title,
                   })
@@ -282,12 +290,12 @@ export const QuestionDetailPage: React.FC = () => {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-5 border-t border-gray-100 dark:border-brand-dark-border/80">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-full bg-teal-100 dark:bg-teal-900/60 text-teal-800 dark:text-teal-300 flex items-center justify-center font-bold text-sm">
-              {question.author_name.charAt(0).toUpperCase()}
+              {(authorName.trim() || "C").charAt(0).toUpperCase()}
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-sm text-gray-900 dark:text-gray-100">
-                  {question.author_name}
+                  {authorName}
                 </span>
                 {isQuestionAuthor && (
                   <span className="text-[10px] font-semibold text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/60 px-1.5 py-0.5 rounded border border-teal-200 dark:border-teal-900/50">
@@ -351,7 +359,7 @@ export const QuestionDetailPage: React.FC = () => {
                 onReport={(a) =>
                   setReportTarget({
                     targetUserId: a.author_id,
-                    targetName: a.author_name,
+                    targetName: a.author_name || a.author?.name || "Community Member",
                     questionId: question.id,
                     answerId: a.id,
                     messageSnippet: a.body.slice(0, 100),

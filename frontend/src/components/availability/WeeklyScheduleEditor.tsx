@@ -20,31 +20,76 @@ interface LocalSlot {
   is_recurring: boolean;
 }
 
+const deduplicateAndFormatSlots = (rawSlots: HelperAvailabilitySlot[] = []): LocalSlot[] => {
+  const seen = new Set<string>();
+  const result: LocalSlot[] = [];
+  for (const s of rawSlots) {
+    const start = (s.start_time || "09:00").substring(0, 5);
+    const end = (s.end_time || "17:00").substring(0, 5);
+    const key = `${s.day_of_week}_${start}_${end}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.push({
+        id: s.id || `slot_${key}_${Math.random().toString(36).substring(2, 6)}`,
+        day_of_week: s.day_of_week,
+        start_time: start,
+        end_time: end,
+        is_recurring: s.is_recurring ?? true,
+      });
+    }
+  }
+  return result;
+};
+
 export const WeeklyScheduleEditor: React.FC<Props> = ({ initialSlots = [], onSave }) => {
-  const [slots, setSlots] = useState<LocalSlot[]>(() =>
-    initialSlots.map((s) => ({
-      id: s.id,
-      day_of_week: s.day_of_week,
-      start_time: s.start_time.substring(0, 5),
-      end_time: s.end_time.substring(0, 5),
-      is_recurring: s.is_recurring,
-    }))
-  );
+  const [slots, setSlots] = useState<LocalSlot[]>(() => deduplicateAndFormatSlots(initialSlots));
   const [selectedDay, setSelectedDay] = useState<DayOfWeek>(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  React.useEffect(() => {
+    if (initialSlots.length > 0) {
+      setSlots(deduplicateAndFormatSlots(initialSlots));
+    }
+  }, [initialSlots]);
 
   const daySlots = slots.filter((s) => s.day_of_week === selectedDay);
 
   const handleAddSlot = () => {
     setError(null);
     setSuccess(false);
+
+    // Compute smart, non-overlapping default time window
+    let defaultStart = "09:00";
+    let defaultEnd = "17:00";
+
+    if (daySlots.length > 0) {
+      const sorted = [...daySlots].sort((a, b) => a.end_time.localeCompare(b.end_time));
+      const lastSlot = sorted[sorted.length - 1];
+      const lastEndHour = parseInt(lastSlot.end_time.split(":")[0], 10);
+
+      if (lastEndHour < 20) {
+        const nextStartHour = Math.min(20, lastEndHour + 1);
+        defaultStart = `${String(nextStartHour).padStart(2, "0")}:00`;
+        defaultEnd = `${String(Math.min(23, nextStartHour + 2)).padStart(2, "0")}:00`;
+      } else {
+        const firstStartHour = parseInt(sorted[0].start_time.split(":")[0], 10);
+        if (firstStartHour >= 3) {
+          defaultStart = `${String(Math.max(6, firstStartHour - 3)).padStart(2, "0")}:00`;
+          defaultEnd = `${String(firstStartHour - 1).padStart(2, "0")}:00`;
+        } else {
+          setError(`Common hours on ${DAY_NAMES[selectedDay]} already have windows. Please adjust the existing time inputs.`);
+          return;
+        }
+      }
+    }
+
     const newSlot: LocalSlot = {
-      id: `temp_${Date.now()}`,
+      id: `temp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       day_of_week: selectedDay,
-      start_time: "09:00",
-      end_time: "17:00",
+      start_time: defaultStart,
+      end_time: defaultEnd,
       is_recurring: true,
     };
     setSlots((prev) => [...prev, newSlot]);
@@ -67,12 +112,30 @@ export const WeeklyScheduleEditor: React.FC<Props> = ({ initialSlots = [], onSav
   const handleSave = async () => {
     setError(null);
     setSuccess(false);
+
     // Validate each slot start < end
     for (const s of slots) {
       if (s.start_time >= s.end_time) {
-        setError(`On ${DAY_NAMES[s.day_of_week]}, start time must be before end time.`);
+        setError(`On ${DAY_NAMES[s.day_of_week]}, start time must be before end time (${s.start_time} - ${s.end_time}).`);
         return;
       }
+    }
+
+    // Validate duplicates and overlapping windows per day
+    const dayBuckets: Record<number, LocalSlot[]> = {};
+    for (const s of slots) {
+      const existing = dayBuckets[s.day_of_week] || [];
+      for (const ex of existing) {
+        if (s.start_time === ex.start_time && s.end_time === ex.end_time) {
+          setError(`On ${DAY_NAMES[s.day_of_week]}, duplicate time window ${s.start_time} - ${s.end_time} detected. Please remove one.`);
+          return;
+        }
+        if (s.start_time < ex.end_time && s.end_time > ex.start_time) {
+          setError(`On ${DAY_NAMES[s.day_of_week]}, overlapping time windows detected (${s.start_time}-${s.end_time} overlaps with ${ex.start_time}-${ex.end_time}).`);
+          return;
+        }
+      }
+      dayBuckets[s.day_of_week] = [...existing, s];
     }
 
     try {
@@ -85,8 +148,16 @@ export const WeeklyScheduleEditor: React.FC<Props> = ({ initialSlots = [], onSav
       }));
       await onSave(payload);
       setSuccess(true);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to save schedule slots.";
+    } catch (err: any) {
+      let msg = "Failed to save schedule slots.";
+      const rawDetail = err?.response?.data?.detail;
+      if (typeof rawDetail === "string") {
+        msg = rawDetail;
+      } else if (Array.isArray(rawDetail)) {
+        msg = rawDetail.map((d: any) => d.msg || JSON.stringify(d)).join(", ");
+      } else if (err instanceof Error) {
+        msg = err.message;
+      }
       setError(msg);
     } finally {
       setSaving(false);

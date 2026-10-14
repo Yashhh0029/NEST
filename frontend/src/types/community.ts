@@ -25,33 +25,44 @@ export interface CommunityAnswer {
   id: string;
   question_id: string;
   author_id: string;
-  author_name: string;
+  author_name?: string;
+  author?: {
+    id: string;
+    name: string;
+  } | null;
   body: string;
   is_accepted: boolean;
-  helpful_count: number;
-  not_helpful_count: number;
-  score: number;
+  helpful_count?: number;
+  helpful_votes?: number;
+  not_helpful_count?: number;
+  not_helpful_votes?: number;
+  score?: number;
   created_at: string;
   updated_at: string;
   user_vote?: VoteType | null;
-  author_trust_signals: AuthorTrustSignals;
+  author_trust_signals?: AuthorTrustSignals | null;
 }
 
 export interface CommunityQuestion {
   id: string;
   author_id: string;
-  author_name: string;
+  author_name?: string;
+  author?: {
+    id: string;
+    name: string;
+  } | null;
   title: string;
   body: string;
   category: QuestionCategory;
   city?: string | null;
   area?: string | null;
   status: QuestionStatus;
-  answer_count: number;
+  answer_count?: number;
+  answers_count?: number;
   has_accepted_answer: boolean;
   created_at: string;
   updated_at: string;
-  author_trust_signals: AuthorTrustSignals;
+  author_trust_signals?: AuthorTrustSignals | null;
 }
 
 export interface CommunityQuestionDetail extends CommunityQuestion {

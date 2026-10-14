@@ -46,6 +46,7 @@ class QuestionResponse(BaseModel):
     id: uuid.UUID
     author_id: uuid.UUID
     author: Optional[QuestionAuthorSummary] = None
+    author_name: Optional[str] = None
     title: str
     body: str
     category: QuestionCategory
@@ -53,6 +54,7 @@ class QuestionResponse(BaseModel):
     city: Optional[str] = None
     area: Optional[str] = None
     answers_count: int = 0
+    answer_count: int = 0
     has_accepted_answer: bool = False
     created_at: datetime
     updated_at: datetime
@@ -74,12 +76,16 @@ class AnswerResponse(BaseModel):
     question_id: uuid.UUID
     author_id: uuid.UUID
     author: Optional[QuestionAuthorSummary] = None
+    author_name: Optional[str] = None
     author_trust_signals: Optional[AuthorTrustSignals] = None
     body: str
     is_accepted: bool = False
     accepted_at: Optional[datetime] = None
     helpful_votes: int = 0
+    helpful_count: int = 0
     not_helpful_votes: int = 0
+    not_helpful_count: int = 0
+    score: int = 0
     user_vote: Optional[VoteType] = None
     created_at: datetime
     updated_at: datetime

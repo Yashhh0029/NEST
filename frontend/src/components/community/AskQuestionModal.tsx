@@ -67,7 +67,19 @@ export const AskQuestionModal: React.FC<AskQuestionModalProps> = ({
       onSuccess(created);
       onClose();
     } catch (err: any) {
-      const msg = err.response?.data?.detail || "Failed to post question. Please try again.";
+      let msg = "Failed to post question. Please try again.";
+      const rawDetail = err?.response?.data?.detail;
+      if (typeof rawDetail === "string") {
+        msg = rawDetail;
+      } else if (Array.isArray(rawDetail)) {
+        msg = rawDetail
+          .map((d: any) => (typeof d === "object" ? d?.msg || JSON.stringify(d) : String(d)))
+          .join(", ");
+      } else if (rawDetail && typeof rawDetail === "object") {
+        msg = rawDetail.message || JSON.stringify(rawDetail);
+      } else if (err?.message) {
+        msg = err.message;
+      }
       setError(msg);
     } finally {
       setIsSubmitting(false);

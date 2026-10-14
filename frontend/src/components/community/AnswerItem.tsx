@@ -38,6 +38,9 @@ export const AnswerItem: React.FC<AnswerItemProps> = ({
 
   const isAuthor = currentUserId === answer.author_id;
   const trust = answer.author_trust_signals;
+  const authorName = answer.author_name || answer.author?.name || "Community Member";
+  const helpfulCount = answer.helpful_count ?? answer.helpful_votes ?? 0;
+  const notHelpfulCount = answer.not_helpful_count ?? answer.not_helpful_votes ?? 0;
 
   const formattedDate = new Date(answer.created_at).toLocaleDateString(undefined, {
     month: "short",
@@ -100,12 +103,12 @@ export const AnswerItem: React.FC<AnswerItemProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-full bg-teal-100 dark:bg-teal-900/60 text-teal-800 dark:text-teal-300 flex items-center justify-center font-bold text-xs">
-            {answer.author_name.charAt(0).toUpperCase()}
+            {(authorName.trim() || "C").charAt(0).toUpperCase()}
           </div>
           <div>
             <div className="flex items-center gap-2">
               <span className="font-semibold text-sm text-gray-900 dark:text-gray-100">
-                {answer.author_name}
+                {authorName}
               </span>
               {isAuthor && (
                 <span className="text-[10px] font-semibold text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/60 px-1.5 py-0.5 rounded border border-teal-200 dark:border-teal-900/50">
@@ -156,7 +159,7 @@ export const AnswerItem: React.FC<AnswerItemProps> = ({
             } ${isAuthor ? "opacity-60 cursor-not-allowed" : ""}`}
           >
             <ThumbsUp className={`w-3.5 h-3.5 ${answer.user_vote === "HELPFUL" ? "fill-teal-600 text-teal-600" : ""}`} />
-            <span>Helpful ({answer.helpful_count})</span>
+            <span>Helpful ({helpfulCount})</span>
           </button>
 
           {/* Not Helpful Vote */}
@@ -171,7 +174,7 @@ export const AnswerItem: React.FC<AnswerItemProps> = ({
             } ${isAuthor ? "opacity-60 cursor-not-allowed" : ""}`}
           >
             <ThumbsDown className={`w-3.5 h-3.5 ${answer.user_vote === "NOT_HELPFUL" ? "fill-rose-600 text-rose-600" : ""}`} />
-            <span>Not Helpful ({answer.not_helpful_count})</span>
+            <span>Not Helpful ({notHelpfulCount})</span>
           </button>
         </div>
 

@@ -16,18 +16,20 @@ export function AvailabilitySettingsPage() {
   const [capacity, setCapacity] = useState<PublicAvailabilityProfile | null>(null);
   const [slots, setSlots] = useState<HelperAvailabilitySlot[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadData = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const [capData, slotData] = await Promise.all([
         availabilityService.getMyCapacity(),
         availabilityService.getMySlots(),
       ]);
       setCapacity(capData);
       setSlots(slotData);
-    } catch {
-      // Handled by component states
+    } catch (err: any) {
+      setLoadError(err?.response?.data?.detail || err?.message || "Failed to load availability data. Please retry.");
     } finally {
       setLoading(false);
     }
@@ -46,8 +48,12 @@ export function AvailabilitySettingsPage() {
     const updated = await availabilityService.replaceMySlots(newSlots);
     setSlots(updated);
     // Refresh capacity status after slots update
-    const freshCap = await availabilityService.getMyCapacity();
-    setCapacity(freshCap);
+    try {
+      const freshCap = await availabilityService.getMyCapacity();
+      setCapacity(freshCap);
+    } catch {
+      // Non-blocking
+    }
   };
 
   if (loading) {
@@ -81,6 +87,19 @@ export function AvailabilitySettingsPage() {
           </div>
         </div>
       </div>
+
+      {loadError && (
+        <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 flex items-center justify-between gap-3 text-sm text-rose-700 dark:text-rose-300">
+          <span>{loadError}</span>
+          <button
+            type="button"
+            onClick={loadData}
+            className="text-xs font-semibold underline hover:no-underline cursor-pointer"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {capacity && (
         <CapacityControls

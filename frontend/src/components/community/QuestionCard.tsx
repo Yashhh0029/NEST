@@ -21,6 +21,8 @@ const CATEGORY_COLORS: Record<string, string> = {
 export const QuestionCard: React.FC<QuestionCardProps> = ({ question }) => {
   const categoryStyle = CATEGORY_COLORS[question.category] || CATEGORY_COLORS.OTHER;
   const trust = question.author_trust_signals;
+  const authorName = question.author_name || question.author?.name || "Community Member";
+  const answerCount = question.answers_count ?? question.answer_count ?? 0;
 
   const formattedDate = new Date(question.created_at).toLocaleDateString(undefined, {
     month: "short",
@@ -37,7 +39,7 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({ question }) => {
           <span
             className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border uppercase tracking-wider ${categoryStyle}`}
           >
-            {question.category.replace("_", " ")}
+            {(question.category || "OTHER").replace("_", " ")}
           </span>
           {(question.city || question.area) && (
             <span className="flex items-center gap-1 text-[11px] font-medium text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-brand-dark px-2 py-0.5 rounded-full border border-gray-200/60 dark:border-brand-dark-border">
@@ -57,9 +59,9 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({ question }) => {
           <div className="flex items-center gap-1">
             <MessageSquare className="w-3.5 h-3.5" />
             <span className="font-semibold text-gray-700 dark:text-gray-200">
-              {question.answer_count}
+              {answerCount}
             </span>{" "}
-            {question.answer_count === 1 ? "answer" : "answers"}
+            {answerCount === 1 ? "answer" : "answers"}
           </div>
           <span>•</span>
           <span>{formattedDate}</span>
@@ -78,10 +80,10 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({ question }) => {
       <div className="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-brand-dark-border/60 text-xs">
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 rounded-full bg-teal-100 dark:bg-teal-900/50 text-teal-800 dark:text-teal-300 flex items-center justify-center font-bold text-[11px]">
-            {question.author_name.charAt(0).toUpperCase()}
+            {(authorName.trim() || "C").charAt(0).toUpperCase()}
           </div>
           <span className="font-medium text-gray-700 dark:text-gray-300">
-            {question.author_name}
+            {authorName}
           </span>
         </div>
 

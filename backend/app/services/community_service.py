@@ -124,17 +124,22 @@ def _hydrate_answer_response(
     )
     trust_signals = _get_author_trust_signals(db, author_user) if author_user else None
 
+    author_name = author_user.name if author_user else "Community Member"
     return AnswerResponse(
         id=answer.id,
         question_id=answer.question_id,
         author_id=answer.author_id,
         author=author_summary,
+        author_name=author_name,
         author_trust_signals=trust_signals,
         body=answer.body,
         is_accepted=answer.is_accepted,
         accepted_at=answer.accepted_at,
         helpful_votes=helpful_count,
+        helpful_count=helpful_count,
         not_helpful_votes=not_helpful_count,
+        not_helpful_count=not_helpful_count,
+        score=helpful_count - not_helpful_count,
         user_vote=user_vote,
         created_at=answer.created_at,
         updated_at=answer.updated_at,
@@ -148,6 +153,7 @@ def _hydrate_question_response(
     author_summary = (
         QuestionAuthorSummary(id=author.id, name=author.name) if author else None
     )
+    author_name = author.name if author else "Community Member"
 
     answers_count = (
         db.query(func.count(CommunityAnswer.id))
@@ -169,6 +175,7 @@ def _hydrate_question_response(
         id=question.id,
         author_id=question.author_id,
         author=author_summary,
+        author_name=author_name,
         title=question.title,
         body=question.body,
         category=QuestionCategory(question.category),
@@ -176,6 +183,7 @@ def _hydrate_question_response(
         city=question.city,
         area=question.area,
         answers_count=answers_count,
+        answer_count=answers_count,
         has_accepted_answer=has_accepted,
         created_at=question.created_at,
         updated_at=question.updated_at,
