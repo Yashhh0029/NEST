@@ -178,7 +178,11 @@ def _hydrate_question_response(
         author_name=author_name,
         title=question.title,
         body=question.body,
-        category=QuestionCategory(question.category),
+        category=(
+            QuestionCategory.ACCOMMODATION
+            if str(question.category).strip().upper() == "HOUSING"
+            else QuestionCategory(question.category)
+        ),
         status=QuestionStatus(question.status),
         city=question.city,
         area=question.area,

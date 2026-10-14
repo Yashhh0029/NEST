@@ -12,22 +12,16 @@ import { Button } from "@/components/ui/Button";
 import { communityService } from "@/services/community";
 import { QuestionCard } from "@/components/community/QuestionCard";
 import { AskQuestionModal } from "@/components/community/AskQuestionModal";
-import type {
-  CommunityQuestion,
-  QuestionCategory,
-  QuestionSearchParams,
+import {
+  COMMUNITY_CATEGORIES,
+  type CommunityQuestion,
+  type QuestionCategory,
+  type QuestionSearchParams,
 } from "@/types/community";
 
 const CATEGORIES: { value: QuestionCategory | "ALL"; label: string }[] = [
   { value: "ALL", label: "All Topics" },
-  { value: "HOUSING", label: "Housing & PGs" },
-  { value: "FOOD", label: "Food & Mess" },
-  { value: "TRANSPORT", label: "Transport" },
-  { value: "JOBS", label: "Jobs" },
-  { value: "LOCAL_SERVICES", label: "Local Services" },
-  { value: "SAFETY", label: "Safety" },
-  { value: "DAILY_LIFE", label: "Daily Life" },
-  { value: "OTHER", label: "Other" },
+  ...COMMUNITY_CATEGORIES,
 ];
 
 export const CommunityPage: React.FC = () => {

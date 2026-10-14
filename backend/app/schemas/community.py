@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 import uuid
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.models.community import QuestionCategory, QuestionStatus, VoteType
 
 
@@ -32,6 +32,17 @@ class QuestionCreate(BaseModel):
     city: Optional[str] = Field(None, max_length=100)
     area: Optional[str] = Field(None, max_length=100)
 
+    @field_validator("category", mode="before")
+    @classmethod
+    def normalize_category(cls, v):
+        if isinstance(v, str):
+            v_upper = v.strip().upper()
+            if v_upper == "HOUSING":
+                return QuestionCategory.ACCOMMODATION
+            if v_upper in QuestionCategory.__members__:
+                return QuestionCategory[v_upper]
+        return v
+
 
 class QuestionUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=5, max_length=255)
@@ -40,6 +51,19 @@ class QuestionUpdate(BaseModel):
     city: Optional[str] = Field(None, max_length=100)
     area: Optional[str] = Field(None, max_length=100)
     status: Optional[QuestionStatus] = None
+
+    @field_validator("category", mode="before")
+    @classmethod
+    def normalize_category(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, str):
+            v_upper = v.strip().upper()
+            if v_upper == "HOUSING":
+                return QuestionCategory.ACCOMMODATION
+            if v_upper in QuestionCategory.__members__:
+                return QuestionCategory[v_upper]
+        return v
 
 
 class QuestionResponse(BaseModel):

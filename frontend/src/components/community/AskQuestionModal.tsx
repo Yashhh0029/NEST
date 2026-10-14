@@ -1,90 +1,175 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { X, HelpCircle, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { communityService } from "@/services/community";
-import type { QuestionCategory, CommunityQuestion } from "@/types/community";
+import {
+  COMMUNITY_CATEGORIES,
+  type QuestionCategory,
+  type CommunityQuestion,
+} from "@/types/community";
 
 interface AskQuestionModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: (question: CommunityQuestion) => void;
+  initialQuestion?: CommunityQuestion | null;
+  initialCategory?: QuestionCategory;
   initialCity?: string;
   initialArea?: string;
 }
-
-const CATEGORIES: { value: QuestionCategory; label: string }[] = [
-  { value: "HOUSING", label: "Housing & PGs" },
-  { value: "FOOD", label: "Food & Mess" },
-  { value: "TRANSPORT", label: "Commute & Transport" },
-  { value: "JOBS", label: "Jobs & Careers" },
-  { value: "LOCAL_SERVICES", label: "Local Services & Repairs" },
-  { value: "SAFETY", label: "Safety & Community" },
-  { value: "DAILY_LIFE", label: "Daily Life & Essentials" },
-  { value: "OTHER", label: "Other" },
-];
 
 export const AskQuestionModal: React.FC<AskQuestionModalProps> = ({
   isOpen,
   onClose,
   onSuccess,
+  initialQuestion = null,
+  initialCategory,
   initialCity = "",
   initialArea = "",
 }) => {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
-  const [category, setCategory] = useState<QuestionCategory>("HOUSING");
+  const [category, setCategory] = useState<QuestionCategory>("ACCOMMODATION");
   const [city, setCity] = useState(initialCity);
   const [area, setArea] = useState(initialArea);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{
+    title?: string;
+    body?: string;
+    category?: string;
+    city?: string;
+    area?: string;
+  }>({});
+
+  // Sync state whenever modal opens or props change
+  useEffect(() => {
+    if (isOpen) {
+      if (initialQuestion) {
+        setTitle(initialQuestion.title || "");
+        setBody(initialQuestion.body || "");
+        const rawCat = initialQuestion.category as string;
+        const normalizedCat = (rawCat === "HOUSING" ? "ACCOMMODATION" : rawCat) as QuestionCategory;
+        setCategory(normalizedCat || "ACCOMMODATION");
+        setCity(initialQuestion.city || "");
+        setArea(initialQuestion.area || "");
+      } else {
+        setTitle("");
+        setBody("");
+        const defCat = initialCategory === "HOUSING" ? "ACCOMMODATION" : (initialCategory || "ACCOMMODATION");
+        setCategory(defCat);
+        setCity(initialCity);
+        setArea(initialArea);
+      }
+      setError(null);
+      setFieldErrors({});
+    }
+  }, [isOpen, initialQuestion, initialCategory, initialCity, initialArea]);
 
   if (!isOpen) return null;
 
+  const handleFieldChange = (field: "title" | "body" | "category" | "city" | "area", value: string) => {
+    if (field === "title") setTitle(value);
+    else if (field === "body") setBody(value);
+    else if (field === "category") setCategory(value as QuestionCategory);
+    else if (field === "city") setCity(value);
+    else if (field === "area") setArea(value);
+
+    // Clear field-level error and general banner when user makes adjustments
+    if (fieldErrors[field]) {
+      setFieldErrors((prev) => ({ ...prev, [field]: undefined }));
+    }
+    if (error) setError(null);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const newErrors: typeof fieldErrors = {};
+
     if (title.trim().length < 10) {
-      setError("Title must be at least 10 characters long.");
-      return;
+      newErrors.title = "Title must be at least 10 characters long.";
     }
     if (body.trim().length < 20) {
-      setError("Details must be at least 20 characters long.");
+      newErrors.body = "Details must be at least 20 characters long.";
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setFieldErrors(newErrors);
       return;
     }
 
     setIsSubmitting(true);
     setError(null);
+    setFieldErrors({});
 
     try {
-      const created = await communityService.createQuestion({
-        title: title.trim(),
-        body: body.trim(),
-        category,
-        city: city.trim() || undefined,
-        area: area.trim() || undefined,
-      });
+      let result: CommunityQuestion;
+      if (initialQuestion) {
+        result = await communityService.updateQuestion(initialQuestion.id, {
+          title: title.trim(),
+          body: body.trim(),
+          category,
+          city: city.trim() || undefined,
+          area: area.trim() || undefined,
+        });
+      } else {
+        result = await communityService.createQuestion({
+          title: title.trim(),
+          body: body.trim(),
+          category,
+          city: city.trim() || undefined,
+          area: area.trim() || undefined,
+        });
+      }
+
       setTitle("");
       setBody("");
-      onSuccess(created);
+      onSuccess(result);
       onClose();
     } catch (err: any) {
-      let msg = "Failed to post question. Please try again.";
       const rawDetail = err?.response?.data?.detail;
-      if (typeof rawDetail === "string") {
-        msg = rawDetail;
-      } else if (Array.isArray(rawDetail)) {
-        msg = rawDetail
-          .map((d: any) => (typeof d === "object" ? d?.msg || JSON.stringify(d) : String(d)))
-          .join(", ");
+      const apiFieldErrors: typeof fieldErrors = {};
+      let generalMsg = "";
+
+      if (Array.isArray(rawDetail)) {
+        for (const item of rawDetail) {
+          const loc = item.loc || [];
+          const field = loc[loc.length - 1];
+          if (field === "category") {
+            apiFieldErrors.category = "Please select a valid community category.";
+          } else if (field === "title") {
+            apiFieldErrors.title = item.msg || "Title must be between 5 and 255 characters.";
+          } else if (field === "body") {
+            apiFieldErrors.body = item.msg || "Details must be at least 20 characters long.";
+          } else if (field === "city") {
+            apiFieldErrors.city = item.msg || "City name is too long.";
+          } else if (field === "area") {
+            apiFieldErrors.area = item.msg || "Area name is too long.";
+          } else {
+            const strMsg = item.msg || JSON.stringify(item);
+            generalMsg = generalMsg ? `${generalMsg}, ${strMsg}` : strMsg;
+          }
+        }
+      } else if (typeof rawDetail === "string") {
+        generalMsg = rawDetail;
       } else if (rawDetail && typeof rawDetail === "object") {
-        msg = rawDetail.message || JSON.stringify(rawDetail);
+        generalMsg = rawDetail.message || JSON.stringify(rawDetail);
       } else if (err?.message) {
-        msg = err.message;
+        generalMsg = err.message;
       }
-      setError(msg);
+
+      setFieldErrors(apiFieldErrors);
+      if (generalMsg) {
+        setError(generalMsg);
+      } else if (Object.keys(apiFieldErrors).length === 0) {
+        setError("Failed to post question. Please try again.");
+      }
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  const isEditMode = Boolean(initialQuestion);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
@@ -96,7 +181,7 @@ export const AskQuestionModal: React.FC<AskQuestionModalProps> = ({
             </div>
             <div>
               <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 font-heading">
-                Ask the Community
+                {isEditMode ? "Edit Community Question" : "Ask the Community"}
               </h3>
               <p className="text-xs text-gray-500 dark:text-gray-400">
                 Get advice and local knowledge from verified NEST members
@@ -126,13 +211,21 @@ export const AskQuestionModal: React.FC<AskQuestionModalProps> = ({
             <input
               type="text"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => handleFieldChange("title", e.target.value)}
               placeholder="e.g. Which broadband is most reliable near Balewadi High Street?"
-              className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-brand-dark-border bg-gray-50 dark:bg-brand-dark text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+              className={`w-full px-3.5 py-2.5 rounded-xl border bg-gray-50 dark:bg-brand-dark text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-primary ${
+                fieldErrors.title
+                  ? "border-rose-500 dark:border-rose-500"
+                  : "border-gray-200 dark:border-brand-dark-border"
+              }`}
               disabled={isSubmitting}
               required
             />
-            <p className="text-[11px] text-gray-400 mt-1">Be specific and descriptive (min 10 characters)</p>
+            {fieldErrors.title ? (
+              <p className="text-[11px] text-rose-500 font-medium mt-1">{fieldErrors.title}</p>
+            ) : (
+              <p className="text-[11px] text-gray-400 mt-1">Be specific and descriptive (min 10 characters)</p>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -142,16 +235,23 @@ export const AskQuestionModal: React.FC<AskQuestionModalProps> = ({
               </label>
               <select
                 value={category}
-                onChange={(e) => setCategory(e.target.value as QuestionCategory)}
-                className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-brand-dark-border bg-gray-50 dark:bg-brand-dark text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                onChange={(e) => handleFieldChange("category", e.target.value)}
+                className={`w-full px-3 py-2 rounded-xl border bg-gray-50 dark:bg-brand-dark text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-primary ${
+                  fieldErrors.category
+                    ? "border-rose-500 dark:border-rose-500"
+                    : "border-gray-200 dark:border-brand-dark-border"
+                }`}
                 disabled={isSubmitting}
               >
-                {CATEGORIES.map((c) => (
+                {COMMUNITY_CATEGORIES.map((c) => (
                   <option key={c.value} value={c.value}>
                     {c.label}
                   </option>
                 ))}
               </select>
+              {fieldErrors.category && (
+                <p className="text-[11px] text-rose-500 font-medium mt-1">{fieldErrors.category}</p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
@@ -160,11 +260,18 @@ export const AskQuestionModal: React.FC<AskQuestionModalProps> = ({
               <input
                 type="text"
                 value={city}
-                onChange={(e) => setCity(e.target.value)}
+                onChange={(e) => handleFieldChange("city", e.target.value)}
                 placeholder="e.g. Pune"
-                className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-brand-dark-border bg-gray-50 dark:bg-brand-dark text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                className={`w-full px-3 py-2 rounded-xl border bg-gray-50 dark:bg-brand-dark text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-primary ${
+                  fieldErrors.city
+                    ? "border-rose-500 dark:border-rose-500"
+                    : "border-gray-200 dark:border-brand-dark-border"
+                }`}
                 disabled={isSubmitting}
               />
+              {fieldErrors.city && (
+                <p className="text-[11px] text-rose-500 font-medium mt-1">{fieldErrors.city}</p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
@@ -173,11 +280,18 @@ export const AskQuestionModal: React.FC<AskQuestionModalProps> = ({
               <input
                 type="text"
                 value={area}
-                onChange={(e) => setArea(e.target.value)}
+                onChange={(e) => handleFieldChange("area", e.target.value)}
                 placeholder="e.g. Baner"
-                className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-brand-dark-border bg-gray-50 dark:bg-brand-dark text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                className={`w-full px-3 py-2 rounded-xl border bg-gray-50 dark:bg-brand-dark text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-primary ${
+                  fieldErrors.area
+                    ? "border-rose-500 dark:border-rose-500"
+                    : "border-gray-200 dark:border-brand-dark-border"
+                }`}
                 disabled={isSubmitting}
               />
+              {fieldErrors.area && (
+                <p className="text-[11px] text-rose-500 font-medium mt-1">{fieldErrors.area}</p>
+              )}
             </div>
           </div>
 
@@ -188,13 +302,21 @@ export const AskQuestionModal: React.FC<AskQuestionModalProps> = ({
             <textarea
               rows={4}
               value={body}
-              onChange={(e) => setBody(e.target.value)}
+              onChange={(e) => handleFieldChange("body", e.target.value)}
               placeholder="Provide enough details for neighbors to give helpful answers..."
-              className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-brand-dark-border bg-gray-50 dark:bg-brand-dark text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-primary resize-none"
+              className={`w-full px-3.5 py-2.5 rounded-xl border bg-gray-50 dark:bg-brand-dark text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-primary resize-none ${
+                fieldErrors.body
+                  ? "border-rose-500 dark:border-rose-500"
+                  : "border-gray-200 dark:border-brand-dark-border"
+              }`}
               disabled={isSubmitting}
               required
             />
-            <p className="text-[11px] text-gray-400 mt-1">Minimum 20 characters</p>
+            {fieldErrors.body ? (
+              <p className="text-[11px] text-rose-500 font-medium mt-1">{fieldErrors.body}</p>
+            ) : (
+              <p className="text-[11px] text-gray-400 mt-1">Minimum 20 characters</p>
+            )}
           </div>
 
           <div className="flex flex-col-reverse sm:flex-row items-center justify-end gap-2.5 pt-3 border-t border-gray-100 dark:border-brand-dark-border">
@@ -215,8 +337,10 @@ export const AskQuestionModal: React.FC<AskQuestionModalProps> = ({
               {isSubmitting ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  Posting...
+                  {isEditMode ? "Saving..." : "Posting..."}
                 </>
+              ) : isEditMode ? (
+                "Save Changes"
               ) : (
                 "Post Question"
               )}

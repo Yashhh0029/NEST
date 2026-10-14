@@ -1,12 +1,55 @@
 export type QuestionCategory =
-  | "HOUSING"
-  | "FOOD"
+  | "ACCOMMODATION"
+  | "HOUSING" // Legacy alias mapped to ACCOMMODATION
   | "TRANSPORT"
-  | "JOBS"
-  | "LOCAL_SERVICES"
+  | "FOOD"
   | "SAFETY"
+  | "JOBS"
+  | "EDUCATION"
+  | "HEALTHCARE"
+  | "LOCAL_SERVICES"
+  | "COST_OF_LIVING"
   | "DAILY_LIFE"
   | "OTHER";
+
+export interface CategoryOption {
+  value: QuestionCategory;
+  label: string;
+}
+
+export const COMMUNITY_CATEGORIES: CategoryOption[] = [
+  { value: "ACCOMMODATION", label: "Housing & PGs" },
+  { value: "FOOD", label: "Food & Mess" },
+  { value: "TRANSPORT", label: "Commute & Transport" },
+  { value: "JOBS", label: "Jobs & Careers" },
+  { value: "EDUCATION", label: "Education & Learning" },
+  { value: "HEALTHCARE", label: "Healthcare & Medical" },
+  { value: "LOCAL_SERVICES", label: "Local Services & Repairs" },
+  { value: "COST_OF_LIVING", label: "Cost of Living & Finance" },
+  { value: "SAFETY", label: "Safety & Community" },
+  { value: "DAILY_LIFE", label: "Daily Life & Essentials" },
+  { value: "OTHER", label: "Other" },
+];
+
+export const CATEGORY_LABELS: Record<string, string> = {
+  ACCOMMODATION: "Housing & PGs",
+  HOUSING: "Housing & PGs",
+  FOOD: "Food & Mess",
+  TRANSPORT: "Commute & Transport",
+  JOBS: "Jobs & Careers",
+  EDUCATION: "Education & Learning",
+  HEALTHCARE: "Healthcare & Medical",
+  LOCAL_SERVICES: "Local Services & Repairs",
+  COST_OF_LIVING: "Cost of Living & Finance",
+  SAFETY: "Safety & Community",
+  DAILY_LIFE: "Daily Life & Essentials",
+  OTHER: "Other",
+};
+
+export const getCategoryLabel = (category?: string | null): string => {
+  if (!category) return "Other";
+  return CATEGORY_LABELS[category] || category.replace(/_/g, " ");
+};
 
 export type QuestionStatus = "OPEN" | "RESOLVED" | "CLOSED";
 

@@ -1,6 +1,6 @@
 from typing import Optional
 import uuid
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import (
@@ -53,6 +53,23 @@ def create_question_endpoint(
     return community_service.create_question(db, current_user, payload)
 
 
+def _resolve_category_filter(category_raw: Optional[str]) -> Optional[QuestionCategory]:
+    if not category_raw or category_raw.strip().upper() == "ALL":
+        return None
+    val = category_raw.strip().upper()
+    if val == "HOUSING":
+        return QuestionCategory.ACCOMMODATION
+    if val in QuestionCategory.__members__:
+        return QuestionCategory[val]
+    try:
+        return QuestionCategory(val)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid category filter. Allowed: {', '.join(QuestionCategory.__members__.keys())}",
+        )
+
+
 @router.get(
     "/questions",
     response_model=QuestionListResponse,
@@ -60,7 +77,7 @@ def create_question_endpoint(
 )
 def list_questions_endpoint(
     q: Optional[str] = Query(None, description="Search keyword in title or body"),
-    category: Optional[QuestionCategory] = Query(None, description="Filter by category"),
+    category: Optional[str] = Query(None, description="Filter by category"),
     city: Optional[str] = Query(None, description="Filter by city"),
     area: Optional[str] = Query(None, description="Filter by area / locality"),
     status: Optional[QuestionStatus] = Query(None, description="Filter by status (OPEN, RESOLVED, CLOSED)"),
@@ -74,11 +91,12 @@ def list_questions_endpoint(
     List community questions with filters and pagination.
     Excludes questions from users blocked by or who blocked the current user.
     """
+    cat_filter = _resolve_category_filter(category)
     return community_service.list_questions(
         db=db,
         current_user=current_user,
         q=q,
-        category=category,
+        category=cat_filter,
         city=city,
         area=area,
         status_filter=status,
@@ -300,7 +318,7 @@ def remove_vote_endpoint(
 )
 def search_community_endpoint(
     q: str = Query(..., min_length=2, description="Search query string"),
-    category: Optional[QuestionCategory] = Query(None, description="Optional category filter"),
+    category: Optional[str] = Query(None, description="Optional category filter"),
     city: Optional[str] = Query(None, description="Optional city filter"),
     area: Optional[str] = Query(None, description="Optional area filter"),
     limit: int = Query(15, ge=1, le=50),
@@ -313,11 +331,12 @@ def search_community_endpoint(
     Filters by optional category, city, area, and excludes content by blocked users.
     Returns ranked questions with similarity scores and top answers.
     """
+    cat_filter = _resolve_category_filter(category)
     return community_service.search_community(
         db=db,
         query_text=q,
         current_user=current_user,
-        category=category,
+        category=cat_filter,
         city=city,
         area=area,
         limit=limit,

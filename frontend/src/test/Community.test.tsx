@@ -117,6 +117,236 @@ describe("Phase 12: Community Intelligence", () => {
 
       expect(submitBtn).not.toBeDisabled();
     });
+
+    it("renders all canonical category options with friendly display labels and ACCOMMODATION for Housing & PGs", () => {
+      render(
+        <AskQuestionModal
+          isOpen={true}
+          onClose={vi.fn()}
+          onSuccess={vi.fn()}
+        />
+      );
+
+      const categorySelect = screen.getByRole("combobox") as HTMLSelectElement;
+      expect(categorySelect).toBeInTheDocument();
+
+      const options = Array.from(categorySelect.options);
+      expect(options.length).toBe(11);
+
+      const housingOption = options.find((o) => o.text.includes("Housing & PGs"));
+      expect(housingOption).toBeDefined();
+      expect(housingOption?.value).toBe("ACCOMMODATION");
+
+      const expectedCategories = [
+        { value: "ACCOMMODATION", label: "Housing & PGs" },
+        { value: "FOOD", label: "Food & Mess" },
+        { value: "TRANSPORT", label: "Commute & Transport" },
+        { value: "JOBS", label: "Jobs & Careers" },
+        { value: "EDUCATION", label: "Education & Learning" },
+        { value: "HEALTHCARE", label: "Healthcare & Medical" },
+        { value: "LOCAL_SERVICES", label: "Local Services & Repairs" },
+        { value: "COST_OF_LIVING", label: "Cost of Living & Finance" },
+        { value: "SAFETY", label: "Safety & Community" },
+        { value: "DAILY_LIFE", label: "Daily Life & Essentials" },
+        { value: "OTHER", label: "Other" },
+      ];
+
+      for (const expected of expectedCategories) {
+        const found = options.find((o) => o.value === expected.value);
+        expect(found, `Expected option with value ${expected.value}`).toBeDefined();
+        expect(found?.text).toBe(expected.label);
+      }
+    });
+
+    it("submits the exact scenario from screenshot: Housing & PGs in Kochi, Kakkanad submitting canonical ACCOMMODATION", async () => {
+      const onSuccess = vi.fn();
+      const mockCreatedQuestion: CommunityQuestion = {
+        ...mockQuestion,
+        id: "q-kochi-pg",
+        title: "Finding reliable PG accommodation near new workplace",
+        body: "Looking for recommendations for safe PG accommodation near Infopark Kakkanad with Wi-Fi and food.",
+        category: "ACCOMMODATION",
+        city: "Kochi",
+        area: "Kakkanad",
+      };
+
+      const createSpy = vi.spyOn(communityService, "createQuestion").mockResolvedValueOnce(mockCreatedQuestion);
+
+      render(
+        <AskQuestionModal
+          isOpen={true}
+          onClose={vi.fn()}
+          onSuccess={onSuccess}
+          initialCity="Kochi"
+          initialArea="Kakkanad"
+        />
+      );
+
+      const titleInput = screen.getByPlaceholderText(/Which broadband is most reliable/i);
+      const detailsInput = screen.getByPlaceholderText(/Provide enough details/i);
+      const categorySelect = screen.getByRole("combobox");
+
+      // Verify category defaults to ACCOMMODATION / Housing & PGs
+      expect((categorySelect as HTMLSelectElement).value).toBe("ACCOMMODATION");
+
+      fireEvent.change(titleInput, { target: { value: "Finding reliable PG accommodation near new workplace" } });
+      fireEvent.change(detailsInput, {
+        target: { value: "Looking for recommendations for safe PG accommodation near Infopark Kakkanad with Wi-Fi and food." },
+      });
+
+      const submitBtn = screen.getByRole("button", { name: /post question/i });
+      fireEvent.click(submitBtn);
+
+      await waitFor(() => {
+        expect(createSpy).toHaveBeenCalledTimes(1);
+      });
+
+      expect(createSpy).toHaveBeenCalledWith({
+        title: "Finding reliable PG accommodation near new workplace",
+        category: "ACCOMMODATION",
+        city: "Kochi",
+        area: "Kakkanad",
+        body: "Looking for recommendations for safe PG accommodation near Infopark Kakkanad with Wi-Fi and food.",
+      });
+
+      expect(onSuccess).toHaveBeenCalledWith(mockCreatedQuestion);
+    });
+
+    it("submits the exact canonical enum value for every category option", async () => {
+      const canonicalValues = [
+        "ACCOMMODATION",
+        "FOOD",
+        "TRANSPORT",
+        "JOBS",
+        "EDUCATION",
+        "HEALTHCARE",
+        "LOCAL_SERVICES",
+        "COST_OF_LIVING",
+        "SAFETY",
+        "DAILY_LIFE",
+        "OTHER",
+      ];
+
+      for (const catValue of canonicalValues) {
+        const createSpy = vi.spyOn(communityService, "createQuestion").mockResolvedValueOnce({
+          ...mockQuestion,
+          category: catValue as any,
+        });
+
+        const { unmount } = render(
+          <AskQuestionModal
+            isOpen={true}
+            onClose={vi.fn()}
+            onSuccess={vi.fn()}
+          />
+        );
+
+        const titleInput = screen.getByPlaceholderText(/Which broadband is most reliable/i);
+        const detailsInput = screen.getByPlaceholderText(/Provide enough details/i);
+        const categorySelect = screen.getByRole("combobox");
+
+        fireEvent.change(titleInput, { target: { value: `Valid question title for category ${catValue}` } });
+        fireEvent.change(detailsInput, {
+          target: { value: `This is a detailed description of the community requirement for ${catValue}.` },
+        });
+        fireEvent.change(categorySelect, { target: { value: catValue } });
+
+        const submitBtn = screen.getByRole("button", { name: /post question/i });
+        fireEvent.click(submitBtn);
+
+        await waitFor(() => {
+          expect(createSpy).toHaveBeenCalledWith(
+            expect.objectContaining({
+              category: catValue,
+            })
+          );
+        });
+
+        unmount();
+      }
+    });
+
+    it("displays field-level validation errors cleanly when backend returns 422 errors", async () => {
+      vi.spyOn(communityService, "createQuestion").mockRejectedValueOnce({
+        response: {
+          status: 422,
+          data: {
+            detail: [
+              {
+                loc: ["body", "category"],
+                msg: "Input should be 'ACCOMMODATION', 'TRANSPORT'...",
+                type: "enum",
+              },
+            ],
+          },
+        },
+      });
+
+      render(
+        <AskQuestionModal
+          isOpen={true}
+          onClose={vi.fn()}
+          onSuccess={vi.fn()}
+        />
+      );
+
+      const titleInput = screen.getByPlaceholderText(/Which broadband is most reliable/i);
+      const detailsInput = screen.getByPlaceholderText(/Provide enough details/i);
+
+      fireEvent.change(titleInput, { target: { value: "Valid question title for community" } });
+      fireEvent.change(detailsInput, { target: { value: "This is a detailed description of the community requirement." } });
+
+      const submitBtn = screen.getByRole("button", { name: /post question/i });
+      fireEvent.click(submitBtn);
+
+      await waitFor(() => {
+        expect(screen.getByText("Please select a valid community category.")).toBeInTheDocument();
+      });
+
+      // Verify it didn't dump raw backend enum message in alert
+      expect(screen.queryByText(/Input should be 'ACCOMMODATION'/i)).not.toBeInTheDocument();
+    });
+
+    it("preserves category and values in edit mode", async () => {
+      const onSuccess = vi.fn();
+      const updateSpy = vi.spyOn(communityService, "updateQuestion").mockResolvedValueOnce({
+        ...mockQuestion,
+        title: "Updated PG accommodation title",
+        category: "ACCOMMODATION",
+      });
+
+      render(
+        <AskQuestionModal
+          isOpen={true}
+          onClose={vi.fn()}
+          onSuccess={onSuccess}
+          initialQuestion={{
+            ...mockQuestion,
+            category: "ACCOMMODATION",
+          }}
+        />
+      );
+
+      expect(screen.getByText("Edit Community Question")).toBeInTheDocument();
+      const categorySelect = screen.getByRole("combobox") as HTMLSelectElement;
+      expect(categorySelect.value).toBe("ACCOMMODATION");
+
+      const titleInput = screen.getByPlaceholderText(/Which broadband is most reliable/i);
+      fireEvent.change(titleInput, { target: { value: "Updated PG accommodation title" } });
+
+      const submitBtn = screen.getByRole("button", { name: /save changes/i });
+      fireEvent.click(submitBtn);
+
+      await waitFor(() => {
+        expect(updateSpy).toHaveBeenCalledWith(
+          mockQuestion.id,
+          expect.objectContaining({
+            title: "Updated PG accommodation title",
+            category: "ACCOMMODATION",
+          })
+        );
+      });
+    });
   });
 
   describe("QuestionCard", () => {

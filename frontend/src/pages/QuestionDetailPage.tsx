@@ -230,7 +230,9 @@ export const QuestionDetailPage: React.FC = () => {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[11px] font-bold px-3 py-1 rounded-full bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-900/50 uppercase tracking-wider">
-              {(question.category || "OTHER").replace("_", " ")}
+              {question.category === "ACCOMMODATION" || question.category === "HOUSING"
+                ? "Housing & PGs"
+                : (question.category || "OTHER").replace(/_/g, " ")}
             </span>
             {(question.city || question.area) && (
               <span className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-brand-dark px-2.5 py-0.5 rounded-full border border-gray-200/80 dark:border-brand-dark-border">
