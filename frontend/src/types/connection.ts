@@ -35,7 +35,7 @@ export interface ConnectionItem {
 
 export interface ConnectionCreatePayload {
   request_id: string;
-  helper_id: string;
+  helper_id?: string;
   initial_message?: string;
 }
 

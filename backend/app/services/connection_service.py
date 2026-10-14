@@ -159,38 +159,51 @@ def create_connection_request(
     payload: ConnectionCreate,
 ) -> ConnectionResponse:
     """
-    Initiate a real connection request from a newcomer to a candidate helper.
+    Create a connection between a newcomer (requester) and a helper.
+    Supports both:
+    1. Newcomer requesting help from a candidate helper (Mode A).
+    2. Enrolled helper offering help on an open newcomer request (Mode B).
     """
-    # 1. Requester cannot connect to themselves
-    if payload.helper_id == current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="You cannot send a connection request to yourself.",
-        )
-
-    # 2. Verify request exists and belongs to current user
+    # 1. Verify request exists
     req = db.query(Request).filter(Request.id == payload.request_id).first()
     if not req:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Request not found.",
         )
-    if req.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only connect with helpers for your own requests.",
-        )
 
-    # 3. Verify helper exists and is active
-    helper = db.query(User).filter(User.id == payload.helper_id, User.is_active == True).first()
-    if not helper:
+    # 2. Determine requester and helper IDs
+    if current_user.id == req.user_id:
+        # Mode A: Newcomer connecting to a candidate helper
+        if not payload.helper_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Please specify a helper to connect with.",
+            )
+        if payload.helper_id == current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="You cannot send a connection request to yourself.",
+            )
+        requester_id = current_user.id
+        helper_id = payload.helper_id
+    else:
+        # Mode B: Helper offering help on an open newcomer request
+        requester_id = req.user_id
+        helper_id = current_user.id
+
+    # 3. Verify both users exist and are active
+    requester = db.query(User).filter(User.id == requester_id, User.is_active == True).first()
+    helper = db.query(User).filter(User.id == helper_id, User.is_active == True).first()
+
+    if not requester or not helper:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Helper user not found or account is inactive.",
+            detail="User account not found or is inactive.",
         )
 
     # 4. Check block relationship
-    if is_blocked_bidirectional(db, current_user.id, payload.helper_id):
+    if is_blocked_bidirectional(db, requester_id, helper_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Action not permitted due to safety restrictions.",
@@ -200,9 +213,9 @@ def create_connection_request(
     existing_conn = (
         db.query(Connection)
         .filter(
-            Connection.request_id == payload.request_id,
-            Connection.requester_id == current_user.id,
-            Connection.helper_id == payload.helper_id,
+            Connection.request_id == req.id,
+            Connection.requester_id == requester_id,
+            Connection.helper_id == helper_id,
         )
         .first()
     )
@@ -223,14 +236,16 @@ def create_connection_request(
         existing_conn.declined_at = None
         db.commit()
         db.refresh(existing_conn)
-        _maybe_send_connection_request_email(current_user, helper, existing_conn)
+        target_notify = helper if current_user.id == requester_id else requester
+        _maybe_send_connection_request_email(current_user, target_notify, existing_conn)
         return _hydrate_connection_response(db, existing_conn)
 
-    # 5. Create new Connection
+    # 6. Create new Connection
     new_conn = Connection(
-        request_id=payload.request_id,
-        requester_id=current_user.id,
-        helper_id=payload.helper_id,
+        id=uuid.uuid4(),
+        request_id=req.id,
+        requester_id=requester_id,
+        helper_id=helper_id,
         status=ConnectionStatus.PENDING.value,
         initial_message=payload.initial_message,
         created_at=now,
@@ -239,7 +254,8 @@ def create_connection_request(
     db.add(new_conn)
     db.commit()
     db.refresh(new_conn)
-    _maybe_send_connection_request_email(current_user, helper, new_conn)
+    target_notify = helper if current_user.id == requester_id else requester
+    _maybe_send_connection_request_email(current_user, target_notify, new_conn)
 
     return _hydrate_connection_response(db, new_conn)
 

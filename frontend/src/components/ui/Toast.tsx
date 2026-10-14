@@ -40,9 +40,13 @@ export function ToastContainer() {
             {icons[toast.type]}
             <div className="flex-1 text-sm">
               {toast.title && (
-                <p className="font-semibold text-gray-900 dark:text-gray-100">{toast.title}</p>
+                <p className="font-semibold text-gray-900 dark:text-gray-100">
+                  {typeof toast.title === "string" ? toast.title : String(toast.title)}
+                </p>
               )}
-              <p className="text-gray-600 dark:text-gray-300">{toast.message}</p>
+              <p className="text-gray-600 dark:text-gray-300">
+                {typeof toast.message === "string" ? toast.message : String(toast.message ?? "")}
+              </p>
             </div>
             <button
               onClick={() => removeToast(toast.id)}

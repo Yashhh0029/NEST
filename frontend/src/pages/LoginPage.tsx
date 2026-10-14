@@ -37,8 +37,17 @@ export function LoginPage() {
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname || "/home";
 
   // Pre-warm backend while user is filling the login form to eliminate cold-start delay
+  const lastPrewarmRef = useRef(0);
+  const prewarmBackend = () => {
+    const now = Date.now();
+    if (now - lastPrewarmRef.current > 30000) {
+      lastPrewarmRef.current = now;
+      api.get("/health").catch(() => {});
+    }
+  };
+
   useEffect(() => {
-    api.get("/health").catch(() => {});
+    prewarmBackend();
   }, []);
 
   const {
@@ -237,6 +246,7 @@ export function LoginPage() {
             type="email"
             placeholder="you@example.com"
             error={errors.email?.message}
+            onFocus={prewarmBackend}
             {...register("email", {
               onChange: () => {
                 if (apiError) setApiError(null);
@@ -249,6 +259,7 @@ export function LoginPage() {
             type={showPassword ? "text" : "password"}
             placeholder="Your password"
             error={errors.password?.message}
+            onFocus={prewarmBackend}
             rightIcon={
               <button
                 type="button"

@@ -60,17 +60,30 @@ export function NearbyRequestsFeed() {
     try {
       await createConnection({
         request_id: offerReq.id,
-        helper_id: "", // Current helper is inferred by backend
         initial_message: initialMessage.trim() || undefined,
       });
-      success(`You offered to help ${offerReq.requester_name}. They have been notified.`, "Offer Sent!");
+      const requesterLabel = offerReq.requester_name || "the requester";
+      success(`You offered to help ${requesterLabel}. They have been notified.`, "Offer Sent!");
       setOfferReq(null);
       setInitialMessage("");
       // Scoped instant invalidation
       refreshCoordinator.invalidate(["connections", "nearby_requests", "notifications"]);
       await refreshNow();
     } catch (err: any) {
-      error(err.response?.data?.detail || "Please try again.", "Could not send offer");
+      let detailMsg = "Please try again.";
+      const rawDetail = err?.response?.data?.detail;
+      if (typeof rawDetail === "string") {
+        detailMsg = rawDetail;
+      } else if (Array.isArray(rawDetail)) {
+        detailMsg = rawDetail
+          .map((item: any) => (typeof item === "object" ? item?.msg || JSON.stringify(item) : String(item)))
+          .join(", ");
+      } else if (rawDetail && typeof rawDetail === "object") {
+        detailMsg = rawDetail.message || JSON.stringify(rawDetail);
+      } else if (err?.message && typeof err.message === "string") {
+        detailMsg = err.message;
+      }
+      error(detailMsg, "Could not send offer");
     } finally {
       setIsSubmitting(false);
     }
@@ -418,11 +431,11 @@ export function NearbyRequestsFeed() {
         <Modal
           isOpen={!!offerReq}
           onClose={() => setOfferReq(null)}
-          title={`Offer Help to ${offerReq.requester_name}`}
+          title={`Offer Help to ${offerReq.requester_name || "Neighbor"}`}
         >
           <div className="space-y-4">
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Introduce yourself and let {offerReq.requester_name} know how you can help them navigate their request in{" "}
+              Introduce yourself and let {offerReq.requester_name || "the requester"} know how you can help them navigate their request in{" "}
               {offerReq.city || "your city"}.
             </p>
 

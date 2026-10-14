@@ -15,7 +15,7 @@ class ConnectionStatusEnum(str, Enum):
 
 class ConnectionCreate(BaseModel):
     request_id: uuid.UUID
-    helper_id: uuid.UUID
+    helper_id: Optional[uuid.UUID] = None
     initial_message: Optional[str] = Field(None, max_length=1000)
 
 
