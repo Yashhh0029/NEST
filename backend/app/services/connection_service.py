@@ -89,9 +89,9 @@ def _maybe_send_connection_request_email(current_user: User, helper: User, conn:
 
         requester_name = current_user.name or (current_user.email.split("@")[0].capitalize() if current_user.email else "A NEST member")
         helper_name = helper.name or (helper.email.split("@")[0].capitalize() if helper.email else "Neighbor")
-        action_url = f"{settings.FRONTEND_URL}/dashboard"
+        action_url = f"{settings.FRONTEND_URL.rstrip('/')}/connections"
         event_title = "New Connection Request"
-        event_message = f"{requester_name} sent you a connection request on NEST regarding their request. Visit your dashboard to view the message and respond."
+        event_message = f"{requester_name} sent you a connection request on NEST regarding their request. Visit your connections to view the message and respond."
         html_body, text_body = render_connection_event_email(
             recipient_name=helper_name,
             event_title=event_title,
@@ -127,7 +127,7 @@ def _maybe_send_connection_accepted_email(helper_user: User, requester: User, co
 
         helper_name = helper_user.name or (helper_user.email.split("@")[0].capitalize() if helper_user.email else "A helper")
         requester_name = requester.name or (requester.email.split("@")[0].capitalize() if requester.email else "Neighbor")
-        action_url = f"{settings.FRONTEND_URL}/chat"
+        action_url = f"{settings.FRONTEND_URL.rstrip('/')}/chat/{conn.id}"
         event_title = "Connection Request Accepted"
         event_message = f"{helper_name} accepted your connection request on NEST! You can now chat and coordinate directly."
         html_body, text_body = render_connection_event_email(

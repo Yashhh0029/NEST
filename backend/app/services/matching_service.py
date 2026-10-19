@@ -11,7 +11,7 @@ from app.models.profile import Profile
 from app.models.request import Request
 from app.models.request_location import RequestLocation
 from app.models.skill import Skill, UserSkill
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.matching import (
     DimensionStatusEnum,
     DimensionStatuses,
@@ -527,13 +527,14 @@ def find_candidate_matches(
     else:
         effective_weights = {k: 0.0 for k in raw_weights}
 
-    # 4. Ensure all active candidate users have an embedding in pgvector
+    # 4. Ensure all active helper candidate users have an embedding in pgvector
     active_candidates_without_embedding = (
         db.query(User)
         .filter(
             User.id != requesting_user.id,
             User.is_active == True,
             User.email_verified == True,
+            User.role.in_([UserRole.HELPER, UserRole.BOTH]),
             ~User.id.in_(
                 db.query(Embedding.owner_id).filter(Embedding.owner_type == "profile")
             ),
@@ -557,6 +558,7 @@ def find_candidate_matches(
             Embedding.owner_id != requesting_user.id,
             User.is_active == True,
             User.email_verified == True,
+            User.role.in_([UserRole.HELPER, UserRole.BOTH]),
         )
     )
     if blocked_user_ids:
@@ -578,7 +580,7 @@ def find_candidate_matches(
 
         # Retrieve candidate user, profile, location, skills
         user = db.query(User).filter(User.id == cand_user_id).first()
-        if not user:
+        if not user or user.role not in (UserRole.HELPER, UserRole.BOTH):
             continue
 
         cand_profile = db.query(Profile).filter(Profile.user_id == cand_user_id).first()
@@ -589,6 +591,11 @@ def find_candidate_matches(
         )
         if not cand_loc:
             cand_loc = db.query(Location).filter(Location.user_id == cand_user_id).first()
+
+        # Candidates who have not configured any location cannot be recommended as local helpers
+        if cand_loc is None:
+            continue
+
         skills_raw = (
             db.query(Skill.name, UserSkill.proficiency, UserSkill.years_experience)
             .join(UserSkill, UserSkill.skill_id == Skill.id)
@@ -605,6 +612,10 @@ def find_candidate_matches(
         cand_city = cand_loc.city if cand_loc else None
         cand_area = cand_loc.area if cand_loc else None
 
+        # Exclude candidates without any valid coordinate or city
+        if cand_lat is None and cand_city is None:
+            continue
+
         location_score, distance_km = calculate_location_score(
             req_lat=req_lat,
             req_lon=req_lon,
@@ -617,12 +628,18 @@ def find_candidate_matches(
         )
 
         # Helper ↔ Request Matching Radius
-        # When matching around a target place, eligible helpers must be within the matching radius
-        if effective_max_distance_km is not None:
+        # When request specifies a target location, candidate must be verified within the radius/city
+        req_has_location = (req_lat is not None and req_lon is not None) or bool(req_city)
+        if req_has_location:
+            match_radius = effective_max_distance_km if effective_max_distance_km is not None else 25.0
             if distance_km is not None:
-                if distance_km > effective_max_distance_km:
+                if distance_km > match_radius:
                     continue
-            elif cand_city and req_city and cand_city.strip().lower() != req_city.strip().lower():
+            elif cand_city and req_city:
+                if cand_city.strip().lower() != req_city.strip().lower():
+                    continue
+            else:
+                # Target place exists, but helper location does not match distance or city
                 continue
 
         # Experience compatibility
@@ -674,7 +691,8 @@ def find_candidate_matches(
         else:
             final_score = 0.0
 
-        if final_score < min_score:
+        effective_min_score = max(min_score or 0.0, 0.15)
+        if final_score < effective_min_score:
             continue
 
         # Generate reasons

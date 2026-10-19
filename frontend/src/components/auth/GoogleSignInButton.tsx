@@ -118,18 +118,26 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
 
   const handleGisError = useCallback((err: any) => {
     console.warn("Google Identity Services error event:", err);
+    const wasActive = isLoadingRef.current;
     isLoadingRef.current = false;
     setLoading(false);
 
-    if (err?.type === "popup_failed_to_open") {
+    const errType = String(err?.type || err?.error || "");
+    if (errType === "idpiframe_initialization_failed" || errType === "origin_mismatch") {
+      setIsConfigured(false);
+    }
+
+    // Never surface errors to the page alert banner on mount or if user didn't initiate sign-in
+    if (!wasActive) {
+      return;
+    }
+
+    if (errType === "popup_failed_to_open") {
       const msg = "Sign-in popup was blocked by browser. Please allow popups for this site and try again.";
       callbacksRef.current.onError?.(msg);
       callbacksRef.current.toast(msg, "warning", "Popup Blocked");
-    } else if (err?.type === "popup_closed") {
+    } else if (errType === "popup_closed") {
       const msg = "Google sign-in was cancelled before completion. Click to try again.";
-      callbacksRef.current.onError?.(msg);
-    } else if (err?.type === "idpiframe_initialization_failed" || err?.type === "origin_mismatch") {
-      const msg = "Google Sign-In configuration error. Please verify authorized JavaScript origins.";
       callbacksRef.current.onError?.(msg);
     }
   }, []);

@@ -211,6 +211,14 @@ export function AppRoutes() {
           }
         />
         <Route
+          path="/chat"
+          element={
+            <ProtectedRoute>
+              <Navigate to="/connections" replace />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/chat/:connectionId"
           element={
             <ProtectedRoute>

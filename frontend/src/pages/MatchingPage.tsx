@@ -14,8 +14,7 @@ import { RadarPanel } from "@/components/match/RadarPanel";
 import { HelperCard } from "@/components/match/HelperCard";
 import { GoogleMap } from "@/components/location/GoogleMap";
 import { Card } from "@/components/ui/Card";
-import { EmptyState } from "@/components/ui/EmptyState";
-import { ArrowLeft, Sparkles, Loader2, Users, Sliders, Compass } from "lucide-react";
+import { ArrowLeft, Sparkles, Loader2, Users, Compass } from "lucide-react";
 
 const DEFAULT_WEIGHTS: MatchScoreWeights = {
   semantic: 0.40,
@@ -86,6 +85,7 @@ export function MatchingPage() {
           weights: weightsToUse,
           limit: 10,
           max_distance_km: 25.0,
+          min_score: 0.10,
         });
         setData(res);
         if (res.matches.length > 0) {
@@ -257,11 +257,36 @@ export function MatchingPage() {
             </div>
 
             {data?.matches.length === 0 ? (
-              <EmptyState
-                icon={<Sliders className="w-8 h-8 text-gray-400" />}
-                title="No Community Helpers Found Yet"
-                description="Currently no other users in the database match your criteria. When community helpers in your area register with matching skills, they will appear here automatically."
-              />
+              <div className="text-center py-12 px-6 rounded-3xl bg-white dark:bg-brand-dark-card border border-gray-200 dark:border-brand-dark-border shadow-xs space-y-4 animate-in fade-in duration-200">
+                <div className="w-16 h-16 rounded-3xl bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 mx-auto flex items-center justify-center text-3xl">
+                  👀
+                </div>
+                <div className="space-y-1.5 max-w-md mx-auto">
+                  <h4 className="text-lg font-bold font-heading text-gray-900 dark:text-gray-100">
+                    We're getting closer. 👀
+                  </h4>
+                  <p className="text-sm font-semibold text-teal-700 dark:text-teal-400">
+                    NEST Helper hasn't landed in this area yet...!
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed pt-1">
+                    We evaluated community members, but no verified helpers have set their location in this area yet. You can ask our community network for advice or check nearby resources in the meantime!
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                  <Link
+                    to="/community"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-primary text-white text-xs font-semibold hover:bg-brand-primary/90 transition-all shadow-xs"
+                  >
+                    Ask the Community
+                  </Link>
+                  <Link
+                    to="/resources"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 dark:border-brand-dark-border text-gray-700 dark:text-gray-200 text-xs font-semibold hover:bg-gray-50 dark:hover:bg-brand-dark transition-all"
+                  >
+                    Explore Resources
+                  </Link>
+                </div>
+              </div>
             ) : (
               <div className="grid grid-cols-1 gap-4">
                 {data?.matches.map((helper) => {

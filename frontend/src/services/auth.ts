@@ -8,6 +8,31 @@ import type {
   VerifyEmailResponse,
 } from "@/types/auth";
 
+async function withColdStartRetry<T>(fn: () => Promise<T>, retries = 2, delayMs = 1500): Promise<T> {
+  let lastError: any;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      lastError = err;
+      const status = err?.response?.status;
+      const isColdStart =
+        status === 502 ||
+        status === 503 ||
+        status === 504 ||
+        err?.code === "ECONNABORTED" ||
+        (err?.message && String(err.message).toLowerCase().includes("timeout"));
+
+      if (attempt < retries && isColdStart) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError;
+}
+
 export const authService = {
   async register(payload: RegisterPayload): Promise<User> {
     const res = await api.post<User>("/api/auth/register", payload);
@@ -15,12 +40,14 @@ export const authService = {
   },
 
   async login(payload: LoginPayload): Promise<TokenResponse> {
-    const res = await api.post<TokenResponse>("/api/auth/login", payload);
-    const tokenData = res.data;
-    if (tokenData?.access_token) {
-      sessionStorage.setItem(TOKEN_STORAGE_KEY, tokenData.access_token);
-    }
-    return tokenData;
+    return withColdStartRetry(async () => {
+      const res = await api.post<TokenResponse>("/api/auth/login", payload);
+      const tokenData = res.data;
+      if (tokenData?.access_token) {
+        sessionStorage.setItem(TOKEN_STORAGE_KEY, tokenData.access_token);
+      }
+      return tokenData;
+    });
   },
 
   async verifyEmail(token: string): Promise<VerifyEmailResponse> {
@@ -34,15 +61,17 @@ export const authService = {
   },
 
   async googleLogin(credential: string): Promise<TokenResponse> {
-    const res = await api.post<TokenResponse>("/api/auth/google", {
-      id_token: credential,
-      credential,
+    return withColdStartRetry(async () => {
+      const res = await api.post<TokenResponse>("/api/auth/google", {
+        id_token: credential,
+        credential,
+      });
+      const tokenData = res.data;
+      if (tokenData?.access_token) {
+        sessionStorage.setItem(TOKEN_STORAGE_KEY, tokenData.access_token);
+      }
+      return tokenData;
     });
-    const tokenData = res.data;
-    if (tokenData?.access_token) {
-      sessionStorage.setItem(TOKEN_STORAGE_KEY, tokenData.access_token);
-    }
-    return tokenData;
   },
 
   async getMe(): Promise<User> {

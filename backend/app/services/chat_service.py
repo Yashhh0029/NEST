@@ -375,7 +375,7 @@ def send_message(
             if not is_user_actively_online(recipient_id, conversation.id):
                 from app.services.email_service import dispatch_email_async, render_new_message_email
                 frontend_base = settings.FRONTEND_URL.rstrip("/")
-                conv_url = f"{frontend_base}/connections"
+                conv_url = f"{frontend_base}/chat/{connection.id}"
                 safe_preview = payload.content[:100] + ("..." if len(payload.content) > 100 else "")
                 sender_user = db.query(User).filter(User.id == user_id).first()
                 sender_name = sender_user.name if sender_user else "A community member"

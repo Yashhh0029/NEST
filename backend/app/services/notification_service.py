@@ -92,25 +92,46 @@ def is_user_actively_online(user_id: uuid.UUID, conversation_id: Optional[uuid.U
     if user_id in _test_online_overrides:
         return _test_online_overrides[user_id]
 
+    # Clean up and prune dead sockets in notification_manager
+    if user_id in notification_manager.active_connections:
+        alive_notif_sockets = [
+            ws for ws in notification_manager.active_connections[user_id]
+            if getattr(ws, "client_state", None) is None or getattr(ws.client_state, "name", "") == "CONNECTED"
+        ]
+        notification_manager.active_connections[user_id] = alive_notif_sockets
+        if not alive_notif_sockets:
+            notification_manager.active_connections.pop(user_id, None)
+
     from app.services.presence_service import presence_service
-    if conversation_id and presence_service.is_user_in_conversation(user_id, conversation_id):
-        return True
-    if presence_service.is_user_online(user_id):
-        return True
 
-    if user_id in notification_manager.active_connections and notification_manager.active_connections[user_id]:
-        return True
+    if conversation_id:
+        # A conversation message requires the user to be ACTIVELY INSIDE THIS SPECIFIC CONVERSATION
+        # to skip email dispatch. If they are in another tab, another page, or offline, they need an email alert!
+        try:
+            from app.api.ws_chat import manager as ws_chat_manager
+            if ws_chat_manager.is_user_in_conversation(user_id, conversation_id):
+                return True
+        except Exception:
+            pass
 
+        if presence_service.is_user_in_conversation(user_id, conversation_id):
+            return True
+
+        return False
+
+    # For general presence (e.g. connection requests):
+    # User is online only if they have an active heartbeat within TTL AND an active connected socket
+    has_active_heartbeat = presence_service.is_user_online(user_id)
+    has_active_notif_ws = bool(notification_manager.active_connections.get(user_id))
+
+    has_active_chat_ws = False
     try:
         from app.api.ws_chat import manager as ws_chat_manager
-        if conversation_id and ws_chat_manager.is_user_in_conversation(user_id, conversation_id):
-            return True
-        if ws_chat_manager.is_user_connected(user_id):
-            return True
+        has_active_chat_ws = ws_chat_manager.is_user_connected(user_id)
     except Exception:
         pass
 
-    return False
+    return has_active_heartbeat and (has_active_notif_ws or has_active_chat_ws)
 
 
 
