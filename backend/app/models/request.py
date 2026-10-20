@@ -78,12 +78,32 @@ class Request(Base):
         back_populates="request",
         uselist=False,
         cascade="all, delete-orphan",
+        passive_deletes=True,
     )
     saved_resources = relationship(
         "RequestSavedResource",
         back_populates="request",
         cascade="all, delete-orphan",
+        passive_deletes=True,
         order_by="desc(RequestSavedResource.created_at)",
+    )
+    connections = relationship(
+        "Connection",
+        back_populates="request",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    sessions = relationship(
+        "AssistanceSession",
+        back_populates="request",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    notifications = relationship(
+        "Notification",
+        back_populates="request",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
 
     def __repr__(self) -> str:

@@ -270,8 +270,17 @@ def update_user_request(
 def delete_user_request(
     db: Session, user: User, request_id: uuid.UUID
 ) -> bool:
-    """Delete a user's request, enforcing strict ownership."""
+    """Delete a user's request, enforcing strict ownership and cascading cleanup."""
+    from app.models.embedding import Embedding
+
     req = get_user_request_by_id(db, user, request_id)
+
+    # Clean up associated vector embeddings (generic owner_id has no FK cascade)
+    db.query(Embedding).filter(
+        Embedding.owner_type == "request",
+        Embedding.owner_id == request_id,
+    ).delete(synchronize_session=False)
+
     db.delete(req)
     db.commit()
     return True

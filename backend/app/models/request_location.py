@@ -48,7 +48,7 @@ class RequestLocation(Base):
         nullable=False,
     )
 
-    request = relationship("Request", back_populates="target_location")
+    request = relationship("Request", back_populates="target_location", passive_deletes=True)
 
     def __repr__(self) -> str:
         return f"<RequestLocation request_id={self.request_id} city={self.city} area={self.area}>"

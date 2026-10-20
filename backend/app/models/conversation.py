@@ -41,7 +41,13 @@ class Conversation(Base):
 
     connection = relationship(
         "Connection",
-        backref=backref("conversation", uselist=False, cascade="all, delete-orphan"),
+        backref=backref(
+            "conversation",
+            uselist=False,
+            cascade="all, delete-orphan",
+            passive_deletes=True,
+        ),
+        passive_deletes=True,
     )
     messages = relationship(
         "Message",

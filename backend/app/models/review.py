@@ -53,6 +53,6 @@ class Review(Base):
         UniqueConstraint("connection_id", "reviewer_id", name="uq_connection_reviewer"),
     )
 
-    connection = relationship("Connection", backref="reviews")
+    connection = relationship("Connection", back_populates="reviews", passive_deletes=True)
     reviewer = relationship("User", foreign_keys=[reviewer_id], backref="reviews_given")
     reviewee = relationship("User", foreign_keys=[reviewee_id], backref="reviews_received")

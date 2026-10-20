@@ -121,8 +121,8 @@ class AssistanceSession(Base):
         CheckConstraint("duration_minutes BETWEEN 15 AND 480", name="chk_duration_range"),
     )
 
-    connection = relationship("Connection", backref="sessions")
-    request = relationship("Request", backref="sessions")
+    connection = relationship("Connection", back_populates="sessions", passive_deletes=True)
+    request = relationship("Request", back_populates="sessions", passive_deletes=True)
     proposer = relationship("User", foreign_keys=[proposer_id])
     recipient = relationship("User", foreign_keys=[recipient_id])
     cancelled_by = relationship("User", foreign_keys=[cancelled_by_id])

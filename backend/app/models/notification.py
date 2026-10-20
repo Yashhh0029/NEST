@@ -60,7 +60,7 @@ class Notification(Base):
     )
 
     user = relationship("User", backref="notifications")
-    request = relationship("Request")
+    request = relationship("Request", back_populates="notifications", passive_deletes=True)
 
     def __repr__(self) -> str:
         return f"<Notification id={self.id} user_id={self.user_id} title='{self.title}' is_read={self.is_read}>"

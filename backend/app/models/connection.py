@@ -68,6 +68,18 @@ class Connection(Base):
         ),
     )
 
-    request = relationship("Request", backref="connections")
+    request = relationship("Request", back_populates="connections", passive_deletes=True)
     requester = relationship("User", foreign_keys=[requester_id], backref="requested_connections")
     helper = relationship("User", foreign_keys=[helper_id], backref="received_connections")
+    sessions = relationship(
+        "AssistanceSession",
+        back_populates="connection",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    reviews = relationship(
+        "Review",
+        back_populates="connection",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )

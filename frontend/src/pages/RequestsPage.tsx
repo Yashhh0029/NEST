@@ -48,8 +48,9 @@ export function RequestsPage() {
       setDeleteTargetId(null);
       // Invalidate requests & nearby feeds immediately
       refreshCoordinator.invalidate(["requests", "nearby_requests"]);
-    } catch {
-      toastError("Failed to delete request.");
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || "Failed to delete request.";
+      toastError(msg);
     } finally {
       setIsDeleting(false);
     }

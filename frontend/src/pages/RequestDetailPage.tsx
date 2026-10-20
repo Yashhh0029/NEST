@@ -143,8 +143,9 @@ export function RequestDetailPage() {
       refreshCoordinator.invalidate(["requests", "nearby_requests"]);
       toastSuccess("Request deleted.");
       navigate("/requests");
-    } catch {
-      toastError("Failed to delete request.");
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || "Failed to delete request.";
+      toastError(msg);
     }
   };
 
